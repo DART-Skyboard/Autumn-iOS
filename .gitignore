@@ -1,0 +1,14 @@
+.DS_Store
+.build/
+*.o
+*.d
+*.swp
+DerivedData/
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+Packages/
+.swiftpm/xcode/
+# Never commit secrets
+*.env
+secrets.json
