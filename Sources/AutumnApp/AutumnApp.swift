@@ -1,4 +1,5 @@
 import SwiftUI
+import LEATRCore
 
 // MARK: — Identity is derived from LEATR constants, never hardcoded
 // See LEATRIdentity.swift

@@ -1,5 +1,6 @@
 import SwiftUI
 import AuthenticationServices
+import LEATRCore
 
 public struct WelcomeView: View {
     @EnvironmentObject var authVM: AuthViewModel

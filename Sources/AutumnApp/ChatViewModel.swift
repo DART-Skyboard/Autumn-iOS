@@ -1,6 +1,8 @@
 import SwiftUI
 import AVFoundation
 import Speech
+import LEATRCore
+import AutumnServices
 
 @MainActor
 public final class ChatViewModel: ObservableObject {

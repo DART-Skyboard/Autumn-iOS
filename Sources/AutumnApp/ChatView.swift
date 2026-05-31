@@ -1,5 +1,6 @@
 import SwiftUI
 import MarkdownUI
+import LEATRCore
 
 public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel

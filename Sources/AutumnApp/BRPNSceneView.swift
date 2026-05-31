@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import LEATRCore
 
 // MARK: — BRPN Scene View
 public struct BRPNSceneView: View {

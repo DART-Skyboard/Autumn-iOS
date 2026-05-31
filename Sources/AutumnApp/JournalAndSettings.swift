@@ -1,4 +1,6 @@
 import SwiftUI
+import LEATRCore
+import AutumnServices
 
 // MARK: — Journal View
 public struct JournalView: View {

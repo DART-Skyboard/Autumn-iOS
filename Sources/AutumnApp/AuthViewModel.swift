@@ -1,5 +1,6 @@
 import SwiftUI
 import AuthenticationServices
+import AutumnServices
 
 // MARK: — Auth ViewModel
 @MainActor

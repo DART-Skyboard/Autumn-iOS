@@ -1,4 +1,5 @@
 import SwiftUI
+import LEATRCore
 
 // MARK: — Tools View
 public struct ToolsView: View {
