@@ -10,14 +10,17 @@ platform :ios do
     )
 
     build_app(
+      project: "Package.swift",
       scheme: "AutumnApp",
+      destination: "generic/platform=iOS",
       export_method: "app-store",
       export_options: {
         signingStyle: "automatic",
-        teamID: "L7AHWS9Q6V"
+        teamID: "L7AHWS9Q6V",
+        bundleID: "DART-Meadow-LLC.Autumn"
       },
-      xcargs: "CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=L7AHWS9Q6V PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn",
-      xcodebuild_formatter: "xcbeautify"
+      xcargs: "CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=L7AHWS9Q6V PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn INFOPLIST_FILE=Sources/AutumnApp/Info.plist",
+      allow_provisioning_updates: true
     )
 
     upload_to_testflight(
