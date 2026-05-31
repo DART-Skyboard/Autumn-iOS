@@ -15,6 +15,9 @@ let project = Project(
                 "Sources/AutumnServices/**",
                 "Sources/LEATRCore/**"
             ],
+            dependencies: [
+                .external(name: "MarkdownUI")
+            ],
             settings: .settings(base: [
                 "DEVELOPMENT_TEAM": "L7AHWS9Q6V",
                 "CODE_SIGN_STYLE": "Automatic",
