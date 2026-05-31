@@ -40,41 +40,7 @@ jobs:
       - name: Generate Xcode project with xcodegen
         run: |
           brew install xcodegen
-          cat > project.yml << 'XCODEGEN'
-          name: Autumn
-          options:
-            bundleIdPrefix: DART-Meadow-LLC
-            deploymentTarget:
-              iOS: "16.0"
-          targets:
-            AutumnApp:
-              type: application
-              platform: iOS
-              deploymentTarget: "16.0"
-              sources:
-                - Sources/AutumnApp
-                - Sources/AutumnServices
-                - Sources/LEATRCore
-              info:
-                path: Sources/AutumnApp/Info.plist
-              settings:
-                base:
-                  PRODUCT_BUNDLE_IDENTIFIER: DART-Meadow-LLC.Autumn
-                  DEVELOPMENT_TEAM: L7AHWS9Q6V
-                  CODE_SIGN_STYLE: Automatic
-                  SWIFT_VERSION: "5.9"
-                  CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
-              entitlements:
-                path: Sources/AutumnApp/AutumnApp.entitlements
-              packages:
-            swift-markdown-ui:
-              url: https://github.com/gonzalezreal/swift-markdown-ui
-              from: "2.4.0"
-          dependencies:
-            - package: swift-markdown-ui
-              product: MarkdownUI
-          XCODEGEN
-          xcodegen generate
+          xcodegen generate --spec project.yml
 
       - name: Resolve SPM dependencies
         run: |
