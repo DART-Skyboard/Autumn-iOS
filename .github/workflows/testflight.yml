@@ -37,23 +37,43 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "keychainpass" "$KEYCHAIN_PATH" 2>/dev/null || true
 
-      - name: Generate Xcode project with xcodegen
+      - name: Install pinned xcodegen
         run: |
-          brew install xcodegen
+          # Pin to 2.42.0 — generates project format 76 compatible with Xcode 15.4
+          # xcodegen 2.43+ generates format 77 which Xcode 15.4 cannot open
+          brew install xcodegen@2.42 2>/dev/null || \
+          brew install xcodegen 2>/dev/null && \
+          brew pin xcodegen || true
+          # Try pinned version first, fall back to gem install
+          if ! command -v xcodegen &>/dev/null; then
+            gem install xcodegen -v 2.42.0 --no-document
+          fi
+          xcodegen version || true
+
+      - name: Generate Xcode project
+        run: |
           xcodegen generate --spec project.yml
-          echo "=== Generated files ==="
-          ls -la *.xcworkspace *.xcodeproj 2>/dev/null || true
-          find . -name "*.xcworkspace" -not -path "*/\.*" 2>/dev/null || true
+          echo "=== Generated project ==="
+          ls -la *.xcodeproj 2>/dev/null || true
+          # Verify project format version
+          grep -m1 "objectVersion" Autumn.xcodeproj/project.pbxproj || true
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Autumn.xcodeproj \
+            -scheme AutumnApp \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+            -authenticationKeyID "P6Z72KS63T" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
 
       - name: Build and archive
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          WORKSPACE=$(find . -name "*.xcworkspace" -not -path "*/\.*" | head -1)
-          echo "Using workspace: $WORKSPACE"
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild archive \
-            -workspace "$WORKSPACE" \
+            -project Autumn.xcodeproj \
             -scheme AutumnApp \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
@@ -63,7 +83,10 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
+            | xcpretty || true
+          # Verify archive was created
+          ls -la "$RUNNER_TEMP/Autumn.xcarchive" || (echo "Archive not found!" && exit 1)
 
       - name: Export IPA
         env:
@@ -78,8 +101,10 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "=== Exported IPA ==="
+          find $RUNNER_TEMP/export -name '*.ipa' | head -3
 
-      - name: Upload to TestFlight
+      - name: Upload to TestFlight via altool
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |

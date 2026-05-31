@@ -3,6 +3,9 @@ options:
   bundleIdPrefix: DART-Meadow-LLC
   deploymentTarget:
     iOS: "16.0"
+  xcodeVersion: "15.4"
+  xcodeCompatibilityVersion: "Xcode 14.0"
+  generateEmptyDirectories: true
 packages:
   swift-markdown-ui:
     url: https://github.com/gonzalezreal/swift-markdown-ui
