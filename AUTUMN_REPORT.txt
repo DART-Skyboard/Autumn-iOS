@@ -1,0 +1,29 @@
+# AUTUMN DEPLOYMENT SURGICAL REPORT
+
+This file serves as a persistent diagnostic log for the Autumn iOS deployment pipeline.
+Other agents (like Claude) should append findings and fix recommendations here when CI builds fail.
+
+## CORE CONFIGURATION
+- **Project Name:** Autumn
+- **Bundle Identifier:** DART-Meadow-LLC.Autumn
+- **Team ID:** L7AHWS9Q6V
+- **Project Type:** Swift Package (.swiftpm) converted to Xcode via Tuist
+
+---
+
+## [2025-05-22 14:30:00] - INITIAL ANALYSIS & BASELINE FIXES
+**Status:** Pipeline Debugging (Phase 1)
+
+### IDENTIFIED ISSUES:
+1. **Bundle ID Mismatch:** Previous logs suggested a reference to `com.autumn.webapp`. This identifier is NOT in the current codebase. Any mismatch in App Store Connect must be resolved to `DART-Meadow-LLC.Autumn`.
+2. **Ephemeral Keychain:** The CI runner creates a keychain but doesn't explicitly link it to Fastlane's `build_app` exports, leading to signing errors.
+3. **Tuist Generation:** Generating `Project.swift` on-the-fly in the YAML is brittle.
+
+### FIXES IMPLEMENTED:
+1. **Permanent Project.swift:** Created a stable Tuist manifest to ensure consistent target naming (`AutumnApp`) and bundle ID.
+2. **Fastlane Appfile:** Explicitly set `app_identifier` and `team_id` to prevent Fastlane from guessing from the environment.
+3. **Workflow Optimization:** Simplified `.github/workflows/testflight.yml` to use the permanent manifest.
+
+### RECOMMENDATIONS FOR NEXT AGENT:
+- If a build fails with "No signing certificate found", check if the App Store Connect API Key has "Access to Certificates" enabled.
+- If "Bundle ID not found", ensure the App is created in App Store Connect with ID `DART-Meadow-LLC.Autumn`.

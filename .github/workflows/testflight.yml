@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-deploy:
     name: Build Autumn iOS to TestFlight
@@ -33,34 +36,7 @@ jobs:
           curl -Ls https://install.tuist.io | bash
 
       - name: Generate Xcode project with Tuist
-        run: |
-          cat > Project.swift << 'TUIST'
-          import ProjectDescription
-
-          let project = Project(
-            name: "Autumn",
-            targets: [
-              .target(
-                name: "AutumnApp",
-                destinations: .iOS,
-                product: .app,
-                bundleId: "DART-Meadow-LLC.Autumn",
-                deploymentTargets: .iOS("16.0"),
-                infoPlist: .file(path: "Sources/AutumnApp/Info.plist"),
-                sources: [
-                  "Sources/AutumnApp/**",
-                  "Sources/AutumnServices/**",
-                  "Sources/LEATRCore/**"
-                ],
-                settings: .settings(base: [
-                  "DEVELOPMENT_TEAM": "L7AHWS9Q6V",
-                  "CODE_SIGN_STYLE": "Automatic"
-                ])
-              )
-            ]
-          )
-          TUIST
-          tuist generate --no-open
+        run: tuist generate --no-open
 
       - name: Setup signing keychain
         run: |
@@ -70,6 +46,7 @@ jobs:
           security unlock-keychain -p "keychainpass" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "keychainpass" "$KEYCHAIN_PATH" 2>/dev/null || true
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
 
       - name: Install Fastlane
         run: gem install fastlane --no-document
@@ -77,4 +54,16 @@ jobs:
       - name: Run Fastlane beta lane
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: fastlane beta
+          KEYCHAIN_PASSWORD: "keychainpass"
+        run: bundle exec fastlane beta
+
+      - name: Report failure
+        if: failure()
+        run: |
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+          echo -e "\n---\n## [$TIMESTAMP] - BUILD FAILED\nCheck GitHub Actions logs for details. This entry was automated by the CI workflow." >> AUTUMN_REPORT.txt
+          git config --global user.name "Autumn CI"
+          git config --global user.email "ci@leatr.xyz"
+          git add AUTUMN_REPORT.txt
+          git commit -m "chore: log build failure to surgical report [skip ci]" || true
+          git push origin main || true

@@ -1,0 +1,5 @@
+app_identifier("DART-Meadow-LLC.Autumn") # The bundle identifier of your app
+team_id("L7AHWS9Q6V") # Developer Portal Team ID
+
+# Note: apple_id and itc_team_id are omitted as we are using the App Store Connect API Key,
+# which bypasses the need for these session-based credentials.
