@@ -63,6 +63,9 @@ jobs:
                   DEVELOPMENT_TEAM: L7AHWS9Q6V
                   CODE_SIGN_STYLE: Automatic
                   SWIFT_VERSION: "5.9"
+                  CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
+              entitlements:
+                path: Sources/AutumnApp/AutumnApp.entitlements
               packages:
             swift-markdown-ui:
               url: https://github.com/gonzalezreal/swift-markdown-ui
