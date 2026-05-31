@@ -101,7 +101,7 @@ public final class ChatViewModel: ObservableObject {
 
         // 6. Journal entry (background)
         Task.detached(priority: .background) {
-            let entry = JournalEntry(content: text, result: lexResult)
+            let entry = CloudJournalEntry(thought: text, emotion: lexResult.emotion.rawValue)
             try? await GitHubClient.shared.syncJournalEntry(entry, username: "")
         }
     }
