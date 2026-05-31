@@ -14,17 +14,17 @@ This file is the persistent source of truth for CI build failures and diagnostic
 
 ---
 
-## [2025-05-22 15:15:00] - SYSTEM INITIALIZED
-**Status:** Diagnostic Baseline Established.
+## [2025-05-22 15:30:00] - SYSTEM UPDATED
+**Status:** Multi-Secret Authentication Enabled.
 
 ### SETUP INSTRUCTIONS FOR USER:
-1. **GitHub PAT:** Please add the Personal Access Token (PAT) you provided as a GitHub Secret named `GH_PAT`. This ensures that when the build fails, the CI has permission to write the diagnostic info back to this file.
-2. **App Store Connect:** Verify the App ID matches `DART-Meadow-LLC.Autumn` in the portal.
+1. **GitHub PAT:** The workflow is now configured to use either `GH_PAT` or `Report-Diag` from your GitHub Secrets.
+2. **App Store Connect:** Ensure the App ID matches `DART-Meadow-LLC.Autumn`.
 
 ### RECENT DIAGNOSTIC FINDINGS:
-- **Baseline Fix:** Jules has moved the report to `reports/DIAGNOSTIC_REPORT.txt` and updated the workflow to capture log tails.
-- **Dependency Mapping:** Claude must ensure that `Tuist/Package.swift` is configured to resolve `MarkdownUI`, as the standard `tuist generate` will fail without it.
+- **Baseline Fix:** The workflow now installs both Tuist and Ruby dependencies (via Bundler) to ensure a clean build environment.
+- **Reporting:** Automatic log capture (last 20 lines) is active.
 
 ### POLICY:
-- Every build failure will now append the **last 20 lines of the build log** directly below this section.
-- Claude should review the "LOG SUMMARY" in the latest failure entry to determine the required fix.
+- Build failures will be logged below.
+- Claude: Use the "LOG SUMMARY" in the latest failure entry to implement fixes.

@@ -18,7 +18,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_PAT || github.token }}
+          # Supports both GH_PAT and Report-Diag as fallback
+          token: ${{ secrets.GH_PAT || secrets['Report-Diag'] || github.token }}
 
       - name: Select Xcode 15.4
         run: |
