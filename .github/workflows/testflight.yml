@@ -9,7 +9,7 @@ jobs:
   build-and-deploy:
     name: Build Autumn iOS to TestFlight
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
@@ -19,6 +19,14 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.app
           xcodebuild -version
+          # List available SDKs
+          xcodebuild -showsdks
+
+      - name: Download iOS SDK
+        run: |
+          # Install iOS 18 platform if not present
+          xcodebuild -downloadPlatform iOS || true
+          xcodebuild -showsdks | grep -i ios
 
       - name: Install App Store Connect API key
         env:
@@ -27,11 +35,6 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-          wc -c ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-
-      - name: List available schemes
-        run: |
-          xcodebuild -list 2>/dev/null || swift package describe || echo "listing schemes..."
 
       - name: Resolve SPM dependencies
         run: swift package resolve
