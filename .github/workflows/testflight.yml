@@ -15,16 +15,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16
-        run: |
-          sudo xcode-select -switch /Applications/Xcode_16.app
-          xcodebuild -version
-          xcodebuild -showsdks | grep iphoneos
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
 
-      - name: Install iOS platform
+      - name: Show SDKs
         run: |
-          xcodebuild -downloadPlatform iOS 2>&1 | tail -3 || true
-          xcodebuild -showsdks | grep iphoneos
+          xcodebuild -version
+          xcodebuild -showsdks
 
       - name: Install App Store Connect API key
         env:
