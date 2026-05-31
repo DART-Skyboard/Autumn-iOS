@@ -19,7 +19,13 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.app
           xcodebuild -version
-          xcodebuild -showsdks
+
+      - name: Install iOS platform support
+        run: |
+          # Register iOS platform so generic/platform=iOS destination works
+          sudo xcodebuild -runFirstLaunch || true
+          xcodebuild -downloadPlatform iOS 2>&1 | tail -5 || true
+          xcodebuild -showsdks | grep -i ios
 
       - name: Install App Store Connect API key
         env:
@@ -38,6 +44,7 @@ jobs:
         run: |
           xcodebuild archive \
             -scheme AutumnApp \
+            -destination "generic/platform=iOS" \
             -sdk iphoneos \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
