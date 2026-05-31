@@ -20,11 +20,6 @@ jobs:
         with:
           xcode-version: '16.0'
 
-      - name: Show SDKs
-        run: |
-          xcodebuild -version
-          xcodebuild -showsdks
-
       - name: Install App Store Connect API key
         env:
           ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
@@ -63,41 +58,14 @@ jobs:
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
             PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
 
-      - name: Export IPA
+      - name: Upload archive directly to TestFlight
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          cat > /tmp/ExportOptions.plist << 'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>teamID</key><string>L7AHWS9Q6V</string>
-            <key>signingStyle</key><string>automatic</string>
-            <key>uploadBitcode</key><false/>
-            <key>uploadSymbols</key><true/>
-          </dict>
-          </plist>
-          PLIST
-          security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-            -exportOptionsPlist /tmp/ExportOptions.plist \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
-            -authenticationKeyID "P6Z72KS63T" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-
-      - name: Upload to TestFlight
-        env:
-          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
+          # Upload the .xcarchive directly — no IPA export needed
           xcrun altool --upload-app \
             --type ios \
-            --file "$IPA" \
+            --file "$RUNNER_TEMP/Autumn.xcarchive" \
             --apiKey "P6Z72KS63T" \
             --apiIssuer "$ASC_ISSUER_ID" \
             --verbose
