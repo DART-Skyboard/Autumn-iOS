@@ -57,6 +57,7 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
             PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
+            INFOPLIST_FILE="$GITHUB_WORKSPACE/Sources/AutumnApp/Info.plist" \
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
 
       - name: Upload to TestFlight
