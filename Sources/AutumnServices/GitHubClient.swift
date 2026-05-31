@@ -123,17 +123,17 @@ public actor GitHubClient {
     }
 
     // MARK: — leatr-ash Journal Sync
-    public func syncJournalEntry(_ entry: JournalEntry, username: String) async throws {
+    public func syncJournalEntry(_ entry: CloudJournalEntry, username: String) async throws {
         let owner = "DART-Skyboard"
         let repo = "leatr-ash"
         let path = "ashtree/sentient/journal.json"
 
         // Read existing journal
-        var entries: [JournalEntry] = []
+        var entries: [CloudJournalEntry] = []
         if let file = try? await readFile(owner: owner, repo: repo, path: path),
            let decoded = file.decodedContent,
            let data = decoded.data(using: .utf8) {
-            entries = (try? JSONDecoder().decode([JournalEntry].self, from: data)) ?? []
+            entries = (try? JSONDecoder().decode([CloudJournalEntry].self, from: data)) ?? []
         }
 
         entries.append(entry)
@@ -230,6 +230,4 @@ public struct DeviceFlowStart: Decodable, Sendable {
         case expiresIn = "expires_in"
         case interval
     }
-}
-
 }
