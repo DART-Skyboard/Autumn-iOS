@@ -67,19 +67,17 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          cat > /tmp/ExportOptions.plist << PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>app-store</string>
-            <key>teamID</key><string>L7AHWS9Q6V</string>
-            <key>signingStyle</key><string>automatic</string>
-            <key>uploadBitcode</key><false/>
-            <key>uploadSymbols</key><true/>
-          </dict>
-          </plist>
-          PLIST
+          python3 -c "
+import plistlib, pathlib
+d = {
+  'method': 'app-store',
+  'teamID': 'L7AHWS9Q6V',
+  'signingStyle': 'automatic',
+  'uploadBitcode': False,
+  'uploadSymbols': True,
+}
+pathlib.Path('/tmp/ExportOptions.plist').write_bytes(plistlib.dumps(d))
+"
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
