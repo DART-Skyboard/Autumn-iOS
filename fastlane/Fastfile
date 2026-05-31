@@ -9,10 +9,6 @@ platform :ios do
       key_filepath: "#{ENV["HOME"]}/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8"
     )
 
-    increment_build_number(
-      build_number: Time.now.strftime("%Y%m%d%H%M")
-    )
-
     build_app(
       scheme: "AutumnApp",
       export_method: "app-store",
