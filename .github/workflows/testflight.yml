@@ -29,28 +29,15 @@ jobs:
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
-      - name: Generate certificate via ASC API
-        env:
-          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          pip3 install PyJWT --user -q || pip install PyJWT --user -q || brew install pyjwt 2>/dev/null || true
-          openssl genrsa -out /tmp/dist_key.pem 2048
-          openssl req -new -key /tmp/dist_key.pem -out /tmp/dist_csr.pem -subj "/C=US/O=DART Meadow LLC/CN=Autumn Distribution"
-          python3 scripts/create_cert.py
-          openssl x509 -inform DER -in /tmp/dist_cert.der -out /tmp/dist_cert.pem
-          openssl pkcs12 -export -in /tmp/dist_cert.pem -inkey /tmp/dist_key.pem -out /tmp/dist.p12 -passout pass:temppass -legacy
-          echo "p12 size: $(wc -c < /tmp/dist.p12) bytes"
-
-      - name: Import certificate to keychain
+      - name: Setup signing keychain
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
           security create-keychain -p "keychainpass" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "keychainpass" "$KEYCHAIN_PATH"
-          security import /tmp/dist.p12 -k "$KEYCHAIN_PATH" -P temppass -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -k "keychainpass" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+          # Allow codesign to access keychain without password prompt
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "keychainpass" "$KEYCHAIN_PATH" 2>/dev/null || true
 
       - name: Resolve SPM dependencies
         run: swift package resolve
@@ -69,10 +56,11 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
+            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
+            KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
 
       - name: Export IPA
         env:
@@ -106,4 +94,10 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
-          xcrun altool --upload-app --type ios --file "$IPA" --apiKey "P6Z72KS63T" --apiIssuer "$ASC_ISSUER_ID" --verbose
+          echo "Uploading: $IPA"
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA" \
+            --apiKey "P6Z72KS63T" \
+            --apiIssuer "$ASC_ISSUER_ID" \
+            --verbose
