@@ -47,10 +47,7 @@ let package = Package(
                 "AutumnServices",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui")
             ],
-            path: "Sources/AutumnApp",
-            resources: [
-                .process("Info.plist")
-            ]
+            path: "Sources/AutumnApp"
         )
     ]
 )
