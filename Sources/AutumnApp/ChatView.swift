@@ -31,7 +31,7 @@ public struct ChatView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                     }
-                    .onChange(of: chatVM.messages.count) { _, _ in
+                    .onChange(of: chatVM.messages.count) { newValue in
                         withAnimation { proxy.scrollTo(bottomID) }
                     }
                 }
