@@ -18,7 +18,7 @@ public actor AutumnTTS {
             let status = await AVSpeechSynthesizer.requestPersonalVoiceAuthorization()
             if status == .authorized {
                 personalVoice = AVSpeechSynthesisVoice.speechVoices()
-                    .first(where: { $0.voiceTraits.contains(.isPersonalVoice) })
+        if #available(iOS 17.0, *) {                     .first(where: { $0.voiceTraits.contains(.isPersonalVoice) }) }
             }
         }
     }
@@ -51,9 +51,9 @@ public actor AutumnTTS {
             let voices = AVSpeechSynthesisVoice.speechVoices()
                 .filter { $0.language.hasPrefix("en") }
                 .sorted { lhs, rhs in
-                    let lScore = lhs.voiceTraits.contains(.isNoveltyVoice) ? 0 :
+        if #available(iOS 17.0, *) {                     let lScore = lhs.voiceTraits.contains(.isNoveltyVoice) ? 0 : }
                                  (lhs.quality == .enhanced || lhs.quality == .premium) ? 2 : 1
-                    let rScore = rhs.voiceTraits.contains(.isNoveltyVoice) ? 0 :
+        if #available(iOS 17.0, *) {                     let rScore = rhs.voiceTraits.contains(.isNoveltyVoice) ? 0 : }
                                  (rhs.quality == .enhanced || rhs.quality == .premium) ? 2 : 1
                     return lScore > rScore
                 }
