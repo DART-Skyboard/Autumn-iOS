@@ -18,7 +18,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.0'
+          xcode-version: '16.2'
 
       - name: Install App Store Connect API key
         env:
@@ -26,7 +26,6 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-          head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
       - name: Setup keychain
         run: |
@@ -36,36 +35,15 @@ jobs:
           security unlock-keychain -p "temppass" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
+      - name: Install fastlane
+        run: gem install fastlane --no-document
+
       - name: Resolve SPM dependencies
         run: swift package resolve
 
-      - name: Build and archive
+      - name: Run fastlane beta
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
-          xcodebuild archive \
-            -scheme AutumnApp \
-            -destination "generic/platform=iOS" \
-            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-            -allowProvisioningUpdates \
-            -allowProvisioningDeviceRegistration \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
-            -authenticationKeyID "P6Z72KS63T" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
-
-      - name: Upload archive directly to TestFlight
-        env:
-          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          # Upload the .xcarchive directly — no IPA export needed
-          xcrun altool --upload-app \
-            --type ios \
-            --file "$RUNNER_TEMP/Autumn.xcarchive" \
-            --apiKey "P6Z72KS63T" \
-            --apiIssuer "$ASC_ISSUER_ID" \
-            --verbose
+          fastlane beta
