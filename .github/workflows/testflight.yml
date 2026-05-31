@@ -37,36 +37,12 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "keychainpass" "$KEYCHAIN_PATH" 2>/dev/null || true
 
-      - name: Resolve SPM dependencies
-        run: swift package resolve
+      - name: Install Fastlane
+        run: gem install fastlane --no-document
 
-      - name: Build and archive
+      - name: Run Fastlane beta lane
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          xcodebuild archive \
-            -scheme AutumnApp \
-            -destination "generic/platform=iOS" \
-            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-            -allowProvisioningUpdates \
-            -allowProvisioningDeviceRegistration \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
-            -authenticationKeyID "P6Z72KS63T" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
-            INFOPLIST_FILE="$GITHUB_WORKSPACE/Sources/AutumnApp/Info.plist" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
-
-      - name: Upload to TestFlight
-        env:
-          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          xcrun altool --upload-app \
-            --type ios \
-            --file "$RUNNER_TEMP/Autumn.xcarchive" \
-            --apiKey "P6Z72KS63T" \
-            --apiIssuer "$ASC_ISSUER_ID" \
-            --verbose
+          KEYCHAIN_PATH: ${{ runner.temp }}/signing.keychain-db
+          KEYCHAIN_PASSWORD: keychainpass
+        run: fastlane beta
