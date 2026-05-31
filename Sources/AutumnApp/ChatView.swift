@@ -1,6 +1,7 @@
 import SwiftUI
 import MarkdownUI
 import LEATRCore
+import AutumnServices
 
 public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
