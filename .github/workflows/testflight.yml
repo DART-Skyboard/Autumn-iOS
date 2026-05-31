@@ -28,6 +28,40 @@ jobs:
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
+      - name: Install Tuist
+        run: |
+          curl -Ls https://install.tuist.io | bash
+
+      - name: Generate Xcode project with Tuist
+        run: |
+          cat > Project.swift << 'TUIST'
+          import ProjectDescription
+
+          let project = Project(
+            name: "Autumn",
+            targets: [
+              .target(
+                name: "AutumnApp",
+                destinations: .iOS,
+                product: .app,
+                bundleId: "DART-Meadow-LLC.Autumn",
+                deploymentTargets: .iOS("16.0"),
+                infoPlist: .file(path: "Sources/AutumnApp/Info.plist"),
+                sources: [
+                  "Sources/AutumnApp/**",
+                  "Sources/AutumnServices/**",
+                  "Sources/LEATRCore/**"
+                ],
+                settings: .settings(base: [
+                  "DEVELOPMENT_TEAM": "L7AHWS9Q6V",
+                  "CODE_SIGN_STYLE": "Automatic"
+                ])
+              )
+            ]
+          )
+          TUIST
+          tuist generate --no-open
+
       - name: Setup signing keychain
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
@@ -43,6 +77,4 @@ jobs:
       - name: Run Fastlane beta lane
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          KEYCHAIN_PATH: ${{ runner.temp }}/signing.keychain-db
-          KEYCHAIN_PASSWORD: keychainpass
         run: fastlane beta
