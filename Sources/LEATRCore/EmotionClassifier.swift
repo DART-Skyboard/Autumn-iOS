@@ -87,7 +87,7 @@ public enum EmotionClassifier {
         text: String
     ) -> EmotionType {
         let lower = text.lowercased()
-        let words = Set(lower.components(separatedBy: .whitespacesAndNewlines + .punctuationCharacters))
+        let words = Set(lower.components(separatedBy: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)))
 
         let posScore = words.intersection(positiveKeywords).count
         let negScore = words.intersection(negativeKeywords).count
