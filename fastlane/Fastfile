@@ -10,15 +10,14 @@ platform :ios do
     )
 
     build_app(
-      workspace: ".swiftpm/xcode/package.xcworkspace",
+      workspace: "Autumn.xcworkspace",
       scheme: "AutumnApp",
-      destination: "generic/platform=iOS",
       export_method: "app-store",
       export_options: {
         signingStyle: "automatic",
         teamID: "L7AHWS9Q6V"
       },
-      xcargs: "-allowProvisioningUpdates CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=L7AHWS9Q6V PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn INFOPLIST_FILE=Sources/AutumnApp/Info.plist"
+      xcargs: "-allowProvisioningUpdates -authenticationKeyPath #{ENV["HOME"]}/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8 -authenticationKeyID P6Z72KS63T -authenticationKeyIssuerID #{ENV["ASC_ISSUER_ID"]}"
     )
 
     upload_to_testflight(
