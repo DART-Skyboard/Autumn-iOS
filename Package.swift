@@ -38,9 +38,7 @@ let package = Package(
                 .product(name: "MarkdownUI", package: "swift-markdown-ui")
             ],
             path: "Sources/AutumnApp",
-            resources: [
-                .process("Resources")
-            ]
+            // resources removed — no Resources folder
         )
     ]
 )

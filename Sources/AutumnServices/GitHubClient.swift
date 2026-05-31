@@ -1,4 +1,5 @@
 import Foundation
+import LEATRCore
 
 // MARK: — GitHub Client
 // Handles all GitHub REST API calls using the 5-step git data API for files >1MB

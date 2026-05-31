@@ -1,4 +1,5 @@
 import Foundation
+import LEATRCore
 
 // MARK: — ReasoningProvider Protocol
 // Swappable: on-device Foundation Models (primary) or remote Claude (fallback)

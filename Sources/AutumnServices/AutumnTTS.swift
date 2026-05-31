@@ -1,4 +1,5 @@
 import AVFoundation
+import LEATRCore
 
 // MARK: — Autumn TTS
 // Uses AVSpeechSynthesizer with Personal Voice when available
