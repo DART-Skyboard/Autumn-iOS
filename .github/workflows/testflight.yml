@@ -28,40 +28,6 @@ jobs:
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
-      - name: Install Tuist
-        run: |
-          curl -Ls https://install.tuist.io | bash
-
-      - name: Generate Xcode project with Tuist
-        run: |
-          cat > Project.swift << 'TUIST'
-          import ProjectDescription
-
-          let project = Project(
-            name: "Autumn",
-            targets: [
-              .target(
-                name: "AutumnApp",
-                destinations: .iOS,
-                product: .app,
-                bundleId: "DART-Meadow-LLC.Autumn",
-                deploymentTargets: .iOS("16.0"),
-                infoPlist: .file(path: "Sources/AutumnApp/Info.plist"),
-                sources: [
-                  "Sources/AutumnApp/**",
-                  "Sources/AutumnServices/**",
-                  "Sources/LEATRCore/**"
-                ],
-                settings: .settings(base: [
-                  "DEVELOPMENT_TEAM": "L7AHWS9Q6V",
-                  "CODE_SIGN_STYLE": "Automatic"
-                ])
-              )
-            ]
-          )
-          TUIST
-          tuist generate --no-open
-
       - name: Setup signing keychain
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
@@ -71,10 +37,88 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "keychainpass" "$KEYCHAIN_PATH" 2>/dev/null || true
 
-      - name: Install Fastlane
-        run: gem install fastlane --no-document
+      - name: Generate Xcode project with xcodegen
+        run: |
+          brew install xcodegen
+          cat > project.yml << 'XCODEGEN'
+          name: Autumn
+          options:
+            bundleIdPrefix: DART-Meadow-LLC
+            deploymentTarget:
+              iOS: "16.0"
+          targets:
+            AutumnApp:
+              type: application
+              platform: iOS
+              deploymentTarget: "16.0"
+              sources:
+                - Sources/AutumnApp
+                - Sources/AutumnServices
+                - Sources/LEATRCore
+              info:
+                path: Sources/AutumnApp/Info.plist
+              settings:
+                base:
+                  PRODUCT_BUNDLE_IDENTIFIER: DART-Meadow-LLC.Autumn
+                  DEVELOPMENT_TEAM: L7AHWS9Q6V
+                  CODE_SIGN_STYLE: Automatic
+                  SWIFT_VERSION: "5.9"
+              dependencies:
+                - package: MarkdownUI
+          packages:
+            swift-markdown-ui:
+              url: https://github.com/gonzalezreal/swift-markdown-ui
+              from: "2.4.0"
+          XCODEGEN
+          xcodegen generate
 
-      - name: Run Fastlane beta lane
+      - name: Resolve SPM dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -workspace Autumn.xcworkspace \
+            -scheme AutumnApp
+
+      - name: Build and archive
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: fastlane beta
+        run: |
+          security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
+          xcodebuild archive \
+            -workspace Autumn.xcworkspace \
+            -scheme AutumnApp \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+            -authenticationKeyID "P6Z72KS63T" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=L7AHWS9Q6V \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
+
+      - name: Export IPA
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
+            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+            -authenticationKeyID "P6Z72KS63T" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
+          echo "Uploading: $IPA"
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA" \
+            --apiKey "P6Z72KS63T" \
+            --apiIssuer "$ASC_ISSUER_ID" \
+            --verbose
