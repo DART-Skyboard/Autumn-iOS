@@ -8,17 +8,18 @@ on:
 jobs:
   build-and-deploy:
     name: Build Autumn iOS to TestFlight
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 90
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Xcode 16.2
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '16.2'
+      - name: Select Xcode 15.4
+        run: |
+          sudo xcode-select -switch /Applications/Xcode_15.4.app
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos
 
       - name: Install App Store Connect API key
         env:
@@ -42,13 +43,10 @@ jobs:
       - name: Build and archive
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          SDK_ROOT: /Applications/Xcode_16.2.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk
         run: |
           security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
-
           xcodebuild archive \
             -scheme AutumnApp \
-            -sdk iphoneos18.2 \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
@@ -59,17 +57,43 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
-            SDKROOT=$SDK_ROOT \
-            ONLY_ACTIVE_ARCH=NO
+            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
+
+      - name: Export IPA
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          cat > /tmp/ExportOptions.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>L7AHWS9Q6V</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadBitcode</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
+            -exportOptionsPlist /tmp/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+            -authenticationKeyID "P6Z72KS63T" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       - name: Upload to TestFlight
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
           xcrun altool --upload-app \
             --type ios \
-            --file "$RUNNER_TEMP/Autumn.xcarchive" \
+            --file "$IPA" \
             --apiKey "P6Z72KS63T" \
             --apiIssuer "$ASC_ISSUER_ID" \
             --verbose
