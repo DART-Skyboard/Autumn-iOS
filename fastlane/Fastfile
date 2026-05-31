@@ -15,7 +15,9 @@ platform :ios do
       export_options: {
         signingStyle: "automatic",
         teamID: "L7AHWS9Q6V"
-      }
+      },
+      xcargs: "CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=L7AHWS9Q6V PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn",
+      xcodebuild_formatter: "xcbeautify"
     )
 
     upload_to_testflight(
