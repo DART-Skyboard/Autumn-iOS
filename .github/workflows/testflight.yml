@@ -26,9 +26,9 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-          # Strip any line breaks from base64 before decoding
-          echo "$ASC_KEY_CONTENT" | tr -d '\n\r ' | base64 --decode > "$KEY_PATH"
-          # Verify the file looks like a valid PEM key
+          # Write the PEM content directly (no base64 decode needed)
+          printf '%s' "$ASC_KEY_CONTENT" > "$KEY_PATH"
+          # Verify it looks correct
           head -1 "$KEY_PATH"
           wc -c "$KEY_PATH"
 
