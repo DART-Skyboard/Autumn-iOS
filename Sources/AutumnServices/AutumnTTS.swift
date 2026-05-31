@@ -1,69 +1,101 @@
 import AVFoundation
 import LEATRCore
 
-// MARK: — Autumn TTS
-// Uses AVSpeechSynthesizer with Personal Voice when available
-// Emotion-keyed rate/pitch matching the Kokoro-82M web behavior
-
-public actor AutumnTTS {
-
+/// AutumnTTS — Text-to-speech for Autumn iOS
+/// Uses Apple's neural AVSpeechSynthesizer with best available voice
+/// Falls back gracefully across iOS versions
+public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
     public static let shared = AutumnTTS()
+    private let synthesizer  = AVSpeechSynthesizer()
+    public var onSpeakingStart:  (() -> Void)?
+    public var onSpeakingFinish: (() -> Void)?
+    public var isSpeaking: Bool { synthesizer.isSpeaking }
 
-    private let synthesizer = AVSpeechSynthesizer()
-    private var personalVoice: AVSpeechSynthesisVoice?
-
-    public func prepare() async {
-        // Request Personal Voice authorization (iOS 17+)
-        if #available(iOS 17.0, *) {
-            let status = await AVSpeechSynthesizer.requestPersonalVoiceAuthorization()
-            if status == .authorized {
-                personalVoice = AVSpeechSynthesisVoice.speechVoices()
-        if #available(iOS 17.0, *) {                     .first(where: { $0.voiceTraits.contains(.isPersonalVoice) }) }
-            }
-        }
+    public override init() {
+        super.init()
+        synthesizer.delegate = self
+        setupAudioSession()
     }
 
-    public func speak(_ text: String, emotion: EmotionType) async {
+    // MARK: - Audio Session
+    private func setupAudioSession() {
+        try? AVAudioSession.sharedInstance().setCategory(
+            .playback, mode: .spokenAudio, options: .duckOthers)
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
+
+    // MARK: - Speak
+    public func speak(_ text: String, emotion: EmotionType) {
+        guard !text.isEmpty else { return }
         synthesizer.stopSpeaking(at: .immediate)
-
-        let utterance = AVSpeechUtterance(string: text)
-
-        // Emotion-keyed prosody
-        switch emotion {
-        case .excited, .happy:
-            utterance.rate = 0.55; utterance.pitchMultiplier = 1.15
-        case .angry, .determined:
-            utterance.rate = 0.52; utterance.pitchMultiplier = 0.92
-        case .sad, .worried, .concerned:
-            utterance.rate = 0.44; utterance.pitchMultiplier = 0.88
-        case .inspiring, .guiding:
-            utterance.rate = 0.50; utterance.pitchMultiplier = 1.05
-        default:
-            utterance.rate = 0.50; utterance.pitchMultiplier = 1.0
-        }
-
-        utterance.volume = 0.9
-
-        // Prefer Personal Voice → Enhanced → Premium → any English
-        if let personal = personalVoice {
-            utterance.voice = personal
-        } else {
-            let voices = AVSpeechSynthesisVoice.speechVoices()
-                .filter { $0.language.hasPrefix("en") }
-                .sorted { lhs, rhs in
-        if #available(iOS 17.0, *) {                     let lScore = lhs.voiceTraits.contains(.isNoveltyVoice) ? 0 : }
-                                 (lhs.quality == .enhanced || lhs.quality == .premium) ? 2 : 1
-        if #available(iOS 17.0, *) {                     let rScore = rhs.voiceTraits.contains(.isNoveltyVoice) ? 0 : }
-                                 (rhs.quality == .enhanced || rhs.quality == .premium) ? 2 : 1
-                    return lScore > rScore
-                }
-            utterance.voice = voices.first
-        }
-
+        let utterance        = AVSpeechUtterance(string: text)
+        utterance.voice      = bestVoice(for: emotion)
+        utterance.rate       = rateFor(emotion: emotion)
+        utterance.pitchMultiplier = pitchFor(emotion: emotion)
+        utterance.volume     = 1.0
+        utterance.postUtteranceDelay = 0.1
         synthesizer.speak(utterance)
     }
 
     public func stop() {
         synthesizer.stopSpeaking(at: .word)
     }
+
+    // MARK: - Voice Selection
+    /// Selects the best available neural voice for the given emotion
+    private func bestVoice(for emotion: EmotionType) -> AVSpeechSynthesisVoice? {
+        // Preferred neural voices — Autumn uses Allison/Samantha style
+        let preferredIDs = [
+            "com.apple.voice.premium.en-US.Zoe",      // iOS 17+ premium
+            "com.apple.voice.enhanced.en-US.Zoe",     // iOS 16 enhanced
+            "com.apple.voice.premium.en-US.Nicky",
+            "com.apple.voice.enhanced.en-US.Nicky",
+            "com.apple.voice.enhanced.en-US.Samantha",
+            "com.apple.voice.enhanced.en-US.Allison",
+        ]
+        for id in preferredIDs {
+            if let voice = AVSpeechSynthesisVoice(identifier: id) {
+                return voice
+            }
+        }
+        // Fallback to any enhanced English voice
+        if #available(iOS 17.0, *) {
+            let voices = AVSpeechSynthesisVoice.speechVoices()
+                .filter { $0.language.hasPrefix("en") }
+            let premium = voices.first { voice in
+                let traits: AVSpeechSynthesisVoiceTraits = voice.voiceTraits
+                return traits.contains(.isPersonalVoice)
+            }
+            if let premium { return premium }
+            let enhanced = voices.first { voice in
+                let traits: AVSpeechSynthesisVoiceTraits = voice.voiceTraits
+                return !traits.contains(.isNoveltyVoice)
+            }
+            if let enhanced { return enhanced }
+        }
+        return AVSpeechSynthesisVoice(language: "en-US")
+    }
+
+    private func rateFor(emotion: EmotionType) -> Float {
+        switch emotion {
+        case .excited, .inspired:  return 0.52
+        case .calm, .thoughtful:   return 0.44
+        case .concerned, .worried: return 0.46
+        default:                   return 0.48
+        }
+    }
+
+    private func pitchFor(emotion: EmotionType) -> Float {
+        switch emotion {
+        case .excited, .inspired:  return 1.08
+        case .calm, .thoughtful:   return 0.95
+        default:                   return 1.0
+        }
+    }
+
+    // MARK: - Delegate
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+        didStart utterance: AVSpeechUtterance) { onSpeakingStart?() }
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+        didFinish utterance: AVSpeechUtterance) { onSpeakingFinish?() }
 }

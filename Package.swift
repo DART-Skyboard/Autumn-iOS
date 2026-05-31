@@ -26,7 +26,19 @@ let package = Package(
         .target(
             name: "AutumnServices",
             dependencies: ["LEATRCore"],
-            path: "Sources/AutumnServices"
+            path: "Sources/AutumnServices",
+            linkerSettings: [
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("CloudKit"),
+                .linkedFramework("UserNotifications"),
+                .linkedFramework("MusicKit"),
+                .linkedFramework("ShazamKit"),
+                .linkedFramework("WeatherKit"),
+                .linkedFramework("CoreNFC"),
+                .linkedFramework("MapKit"),
+                .linkedFramework("CoreLocation"),
+                .linkedFramework("Intents")
+            ]
         ),
         .executableTarget(
             name: "AutumnApp",
