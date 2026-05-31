@@ -8,24 +8,18 @@ on:
 jobs:
   build-and-deploy:
     name: Build Autumn iOS to TestFlight
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 90
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16
+      - name: Show Xcode and SDKs
         run: |
-          sudo xcode-select -switch /Applications/Xcode_16.app
           xcodebuild -version
-
-      - name: Install iOS platform support
-        run: |
-          # Register iOS platform so generic/platform=iOS destination works
-          sudo xcodebuild -runFirstLaunch || true
-          xcodebuild -downloadPlatform iOS 2>&1 | tail -5 || true
           xcodebuild -showsdks | grep -i ios
+          xcodebuild -showdestinations -scheme AutumnApp 2>/dev/null | head -20 || true
 
       - name: Install App Store Connect API key
         env:
@@ -45,7 +39,6 @@ jobs:
           xcodebuild archive \
             -scheme AutumnApp \
             -destination "generic/platform=iOS" \
-            -sdk iphoneos \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
