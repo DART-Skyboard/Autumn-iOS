@@ -25,8 +25,12 @@ jobs:
           ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$ASC_KEY_CONTENT" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-          ls -la ~/.appstoreconnect/private_keys/
+          KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
+          # Strip any line breaks from base64 before decoding
+          echo "$ASC_KEY_CONTENT" | tr -d '\n\r ' | base64 --decode > "$KEY_PATH"
+          # Verify the file looks like a valid PEM key
+          head -1 "$KEY_PATH"
+          wc -c "$KEY_PATH"
 
       - name: Resolve SPM dependencies
         run: swift package resolve
