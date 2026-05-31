@@ -27,7 +27,6 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-          head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
       - name: Setup signing keychain
         run: |
@@ -58,32 +57,15 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
             PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
-            KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
-
-      - name: Export IPA
-        env:
-          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
-            -authenticationKeyID "P6Z72KS63T" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
 
       - name: Upload to TestFlight
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
-          echo "Uploading: $IPA"
           xcrun altool --upload-app \
             --type ios \
-            --file "$IPA" \
+            --file "$RUNNER_TEMP/Autumn.xcarchive" \
             --apiKey "P6Z72KS63T" \
             --apiIssuer "$ASC_ISSUER_ID" \
             --verbose
