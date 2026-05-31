@@ -48,6 +48,7 @@ public struct LexicalMetadata: Sendable, Codable {
 // Requires iOS 26+ / Foundation Models framework
 // Falls back gracefully when unavailable
 public actor AppleIntelligenceProvider: ReasoningProvider {
+    private let apiKey: String
     public init(apiKey: String = "") { self.apiKey = apiKey }
 
     public var isAvailable: Bool {
