@@ -27,14 +27,100 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-          head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
-      - name: Unlock default keychain
+      - name: Create signing certificate via ASC API
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          # Use the default login keychain — no need to create a new one
-          security unlock-keychain -p "" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
-          security set-keychain-settings ~/Library/Keychains/login.keychain-db 2>/dev/null || true
-          security default-keychain
+          # Generate a fresh private key and CSR on this runner
+          openssl genrsa -out /tmp/dist_key.pem 2048
+          openssl req -new -key /tmp/dist_key.pem \
+            -out /tmp/dist_csr.pem \
+            -subj "/C=US/O=DART Meadow LLC/CN=Autumn Distribution"
+
+          # Create JWT for ASC API
+          pip3 install PyJWT cryptography --break-system-packages -q
+          python3 << 'PYEOF'
+import jwt, time, json, urllib.request, base64, ssl
+
+key_id = "P6Z72KS63T"
+issuer_id = "$ASC_ISSUER_ID"
+
+with open("/Users/runner/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8") as f:
+    private_key = f.read()
+
+payload = {
+    "iss": issuer_id,
+    "iat": int(time.time()),
+    "exp": int(time.time()) + 1200,
+    "aud": "appstoreconnect-v1"
+}
+token = jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": key_id})
+
+# Read the CSR
+with open("/tmp/dist_csr.pem") as f:
+    csr_content = f.read()
+csr_b64 = base64.b64encode(csr_content.encode()).decode()
+
+# Create distribution certificate via ASC API
+ctx = ssl.create_default_context()
+body = json.dumps({
+    "data": {
+        "type": "certificates",
+        "attributes": {
+            "certificateType": "IOS_DISTRIBUTION",
+            "csrContent": csr_content
+        }
+    }
+}).encode()
+
+req = urllib.request.Request(
+    "https://api.appstoreconnect.apple.com/v1/certificates",
+    body,
+    {"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    method="POST"
+)
+with urllib.request.urlopen(req, context=ctx) as r:
+    result = json.loads(r.read())
+
+cert_content = result["data"]["attributes"]["certificateContent"]
+cert_bytes = base64.b64decode(cert_content)
+with open("/tmp/dist_cert.der", "wb") as f:
+    f.write(cert_bytes)
+print("Certificate created successfully")
+print(f"Serial: {result['data']['attributes'].get('serialNumber','')}")
+PYEOF
+
+          # Convert cert to PEM
+          openssl x509 -inform DER -in /tmp/dist_cert.der -out /tmp/dist_cert.pem
+          openssl x509 -in /tmp/dist_cert.pem -noout -subject
+
+          # Create p12 from cert + private key (password: temppass)
+          openssl pkcs12 -export \
+            -in /tmp/dist_cert.pem \
+            -inkey /tmp/dist_key.pem \
+            -out /tmp/dist.p12 \
+            -passout pass:temppass \
+            -legacy
+          echo "p12 created: $(wc -c < /tmp/dist.p12) bytes"
+
+      - name: Import certificate to keychain
+        run: |
+          # Create keychain and import the p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+          security create-keychain -p "keychainpass" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "keychainpass" "$KEYCHAIN_PATH"
+          security import /tmp/dist.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P temppass \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "keychainpass" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
       - name: Resolve SPM dependencies
         run: swift package resolve
@@ -43,6 +129,7 @@ jobs:
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild archive \
             -scheme AutumnApp \
             -destination "generic/platform=iOS" \
@@ -52,13 +139,10 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
-            | xcpretty --simple 2>/dev/null || true
-          
-          # Check archive was created
-          ls "$RUNNER_TEMP/Autumn.xcarchive" && echo "Archive created successfully"
+            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
 
       - name: Export IPA
         env:
@@ -77,6 +161,7 @@ jobs:
           </dict>
           </plist>
           PLIST
+          security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
@@ -91,7 +176,6 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
-          echo "Uploading: $IPA"
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA" \
