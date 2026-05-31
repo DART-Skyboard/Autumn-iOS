@@ -8,19 +8,22 @@ on:
 jobs:
   build-and-deploy:
     name: Build Autumn iOS to TestFlight
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 15
+      - name: Select Xcode 16
         run: |
-          sudo xcode-select -switch /Applications/Xcode_15.4.app 2>/dev/null || \
-          sudo xcode-select -switch /Applications/Xcode_15.2.app 2>/dev/null || \
-          sudo xcode-select -switch $(ls -d /Applications/Xcode*.app | head -1)
+          sudo xcode-select -switch /Applications/Xcode_16.app
           xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos
+
+      - name: Install iOS platform
+        run: |
+          xcodebuild -downloadPlatform iOS 2>&1 | tail -3 || true
           xcodebuild -showsdks | grep iphoneos
 
       - name: Install App Store Connect API key
@@ -31,22 +34,13 @@ jobs:
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
-      - name: Setup keychain and import distribution certificate
-        env:
-          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      - name: Setup keychain
         run: |
-          # Create a temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
-          KEYCHAIN_PASS="temppass123"
-          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security create-keychain -p "temppass" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security unlock-keychain -p "temppass" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-
-          # Use xcodebuild to register the key and fetch/create signing cert automatically
-          # This triggers automatic cert creation via ASC API
-          echo "Keychain created and set as default for signing"
-          security list-keychains
 
       - name: Resolve SPM dependencies
         run: swift package resolve
@@ -55,9 +49,7 @@ jobs:
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
-          security unlock-keychain -p "temppass123" "$KEYCHAIN_PATH"
-
+          security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild archive \
             -scheme AutumnApp \
             -destination "generic/platform=iOS" \
@@ -67,7 +59,7 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
             PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
@@ -81,7 +73,7 @@ jobs:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>method</key><string>app-store</string>
+            <key>method</key><string>app-store-connect</string>
             <key>teamID</key><string>L7AHWS9Q6V</string>
             <key>signingStyle</key><string>automatic</string>
             <key>uploadBitcode</key><false/>
@@ -89,6 +81,7 @@ jobs:
           </dict>
           </plist>
           PLIST
+          security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
