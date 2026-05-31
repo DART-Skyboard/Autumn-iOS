@@ -20,12 +20,6 @@ jobs:
         with:
           xcode-version: '16.2'
 
-      - name: Show environment
-        run: |
-          xcodebuild -version
-          xcodebuild -showsdks
-          ls /Applications/ | grep Xcode
-
       - name: Install App Store Connect API key
         env:
           ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
@@ -45,20 +39,16 @@ jobs:
       - name: Resolve SPM dependencies
         run: swift package resolve
 
-      - name: Find iOS SDK and build
+      - name: Build and archive
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          SDK_ROOT: /Applications/Xcode_16.2.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk
         run: |
-          # Get the actual iphoneos SDK path
-          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
-          echo "iOS SDK: $SDK_PATH (version $SDK_VERSION)"
-
           security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
 
           xcodebuild archive \
             -scheme AutumnApp \
-            -sdk iphoneos \
+            -sdk iphoneos18.2 \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
@@ -70,7 +60,8 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
             PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
-            SDKROOT=iphoneos
+            SDKROOT=$SDK_ROOT \
+            ONLY_ACTIVE_ARCH=NO
 
       - name: Upload to TestFlight
         env:
