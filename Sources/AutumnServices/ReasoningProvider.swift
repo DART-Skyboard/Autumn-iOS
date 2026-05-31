@@ -48,6 +48,7 @@ public struct LexicalMetadata: Sendable, Codable {
 // Requires iOS 26+ / Foundation Models framework
 // Falls back gracefully when unavailable
 public actor AppleIntelligenceProvider: ReasoningProvider {
+    public init(apiKey: String = "") { self.apiKey = apiKey }
 
     public var isAvailable: Bool {
         get async {
@@ -162,6 +163,7 @@ public actor AnthropicClaudeProvider: ReasoningProvider {
 
 // MARK: — LEATR-only Provider (fully offline, no cloud)
 public actor LEATROnlyProvider: ReasoningProvider {
+    public init() {}
     public var isAvailable: Bool { true }
 
     public func respond(
