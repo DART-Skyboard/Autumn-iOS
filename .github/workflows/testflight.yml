@@ -25,12 +25,13 @@ jobs:
           ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
-          # Write the PEM content directly (no base64 decode needed)
-          printf '%s' "$ASC_KEY_CONTENT" > "$KEY_PATH"
-          # Verify it looks correct
-          head -1 "$KEY_PATH"
-          wc -c "$KEY_PATH"
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
+          head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
+          wc -c ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
+
+      - name: List available schemes
+        run: |
+          xcodebuild -list 2>/dev/null || swift package describe || echo "listing schemes..."
 
       - name: Resolve SPM dependencies
         run: swift package resolve
@@ -40,7 +41,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild archive \
-            -scheme Autumn \
+            -scheme AutumnApp \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
@@ -49,7 +50,7 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            PRODUCT_BUNDLE_IDENTIFIER=leartr.xyz.autumn
+            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
 
       - name: Export IPA
         env:
