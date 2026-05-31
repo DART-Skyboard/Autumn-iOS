@@ -20,22 +20,22 @@ public actor AutumnCloud {
     }
 
     // MARK: - Journal Sync
-    public func saveJournalEntry(_ entry: JournalEntry) async throws {
-        let record          = CKRecord(recordType: "JournalEntry")
+    public func saveCloudJournalEntry(_ entry: CloudJournalEntry) async throws {
+        let record          = CKRecord(recordType: "CloudJournalEntry")
         record["thought"]   = entry.thought as CKRecordValue
         record["timestamp"] = entry.timestamp as CKRecordValue
         record["emotion"]   = entry.emotion as CKRecordValue
         try await db.save(record)
     }
 
-    public func fetchJournalEntries(limit: Int = 50) async throws -> [JournalEntry] {
+    public func fetchJournalEntries(limit: Int = 50) async throws -> [CloudJournalEntry] {
         let pred  = NSPredicate(value: true)
-        let query = CKQuery(recordType: "JournalEntry", predicate: pred)
+        let query = CKQuery(recordType: "CloudJournalEntry", predicate: pred)
         query.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
         let (results, _) = try await db.records(matching: query, resultsLimit: limit)
         return results.compactMap { _, result in
             guard let record = try? result.get() else { return nil }
-            return JournalEntry(
+            return CloudJournalEntry(
                 thought:   record["thought"]   as? String ?? "",
                 timestamp: record["timestamp"] as? Date   ?? Date(),
                 emotion:   record["emotion"]   as? String ?? "neutral"
@@ -74,7 +74,7 @@ public actor AutumnCloud {
     }
 }
 
-public struct JournalEntry: Codable, Sendable {
+public struct CloudJournalEntry: Codable, Sendable {
     public let thought:   String
     public let timestamp: Date
     public let emotion:   String

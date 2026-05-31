@@ -63,12 +63,12 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
             let voices = AVSpeechSynthesisVoice.speechVoices()
                 .filter { $0.language.hasPrefix("en") }
             let premium = voices.first { voice in
-                let traits: AVSpeechSynthesisVoiceTraits = voice.voiceTraits
+                let traits = voice.voiceTraits
                 return traits.contains(.isPersonalVoice)
             }
             if let premium { return premium }
             let enhanced = voices.first { voice in
-                let traits: AVSpeechSynthesisVoiceTraits = voice.voiceTraits
+                let traits = voice.voiceTraits
                 return !traits.contains(.isNoveltyVoice)
             }
             if let enhanced { return enhanced }
@@ -78,18 +78,16 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
 
     private func rateFor(emotion: EmotionType) -> Float {
         switch emotion {
-        case .excited, .inspired:  return 0.52
-        case .calm, .thoughtful:   return 0.44
-        case .concerned, .worried: return 0.46
-        default:                   return 0.48
+        case .excited:   return 0.52
+        case .concerned: return 0.44
+        default:         return 0.48
         }
     }
 
     private func pitchFor(emotion: EmotionType) -> Float {
         switch emotion {
-        case .excited, .inspired:  return 1.08
-        case .calm, .thoughtful:   return 0.95
-        default:                   return 1.0
+        case .excited: return 1.08
+        default:       return 1.0
         }
     }
 

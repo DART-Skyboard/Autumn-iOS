@@ -232,22 +232,4 @@ public struct DeviceFlowStart: Decodable, Sendable {
     }
 }
 
-public struct JournalEntry: Codable, Sendable {
-    public let id: String
-    public let timestamp: String
-    public let content: String
-    public let emotion: String
-    public let toolRoute: String
-    public let buoyancy: Double
-    public let isInternal: Bool
-
-    public init(content: String, result: LexicalResult, isInternal: Bool = false) {
-        self.id = UUID().uuidString
-        self.timestamp = ISO8601DateFormatter().string(from: Date())
-        self.content = content
-        self.emotion = result.emotion.rawValue
-        self.toolRoute = result.toolRoute.displayName
-        self.buoyancy = result.buoyancy
-        self.isInternal = isInternal
-    }
 }

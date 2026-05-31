@@ -15,8 +15,8 @@ public actor AutumnWeather {
         let weather  = try await service.weather(for: location, including: .current)
         return WeatherSummary(
             condition:   weather.condition.description,
-            temperature: weather.temperature.value,
             unit:        weather.temperature.unit.symbol,
+            temperature: weather.temperature.value,
             humidity:    weather.humidity,
             windSpeed:   weather.wind.speed.value,
             feelsLike:   weather.apparentTemperature.value,
