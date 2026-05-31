@@ -11,10 +11,6 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
 
-    env:
-      BUNDLE_ID: leartr.xyz.autumn
-      TEAM_ID:   L7AHWS9Q6V
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,18 +23,16 @@ jobs:
       - name: Install App Store Connect API key
         env:
           ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
-          ASC_KEY_ID:      ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          printf '%s' "$ASC_KEY_CONTENT" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
-          echo "ASC_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" >> $GITHUB_ENV
+          echo "$ASC_KEY_CONTENT" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
+          ls -la ~/.appstoreconnect/private_keys/
 
       - name: Resolve SPM dependencies
         run: swift package resolve
 
       - name: Build and archive
         env:
-          ASC_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild archive \
@@ -46,16 +40,15 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+            -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM=${{ env.TEAM_ID }} \
-            PRODUCT_BUNDLE_IDENTIFIER=${{ env.BUNDLE_ID }}
+            DEVELOPMENT_TEAM=L7AHWS9Q6V \
+            PRODUCT_BUNDLE_IDENTIFIER=leartr.xyz.autumn
 
       - name: Export IPA
         env:
-          ASC_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           cat > /tmp/ExportOptions.plist << 'PLIST'
@@ -76,19 +69,18 @@ jobs:
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+            -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       - name: Upload to TestFlight
         env:
-          ASC_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA" \
-            --apiKey "$ASC_KEY_ID" \
+            --apiKey "P6Z72KS63T" \
             --apiIssuer "$ASC_ISSUER_ID" \
             --verbose
