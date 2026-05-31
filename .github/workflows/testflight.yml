@@ -41,20 +41,19 @@ jobs:
         run: |
           brew install xcodegen
           xcodegen generate --spec project.yml
-
-      - name: Resolve SPM dependencies
-        run: |
-          xcodebuild -resolvePackageDependencies \
-            -workspace Autumn.xcworkspace \
-            -scheme AutumnApp
+          echo "=== Generated files ==="
+          ls -la *.xcworkspace *.xcodeproj 2>/dev/null || true
+          find . -name "*.xcworkspace" -not -path "*/\.*" 2>/dev/null || true
 
       - name: Build and archive
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          WORKSPACE=$(find . -name "*.xcworkspace" -not -path "*/\.*" | head -1)
+          echo "Using workspace: $WORKSPACE"
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild archive \
-            -workspace Autumn.xcworkspace \
+            -workspace "$WORKSPACE" \
             -scheme AutumnApp \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
