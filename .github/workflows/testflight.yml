@@ -19,7 +19,6 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_15.4.app
           xcodebuild -version
-          xcodebuild -showsdks | grep iphoneos
 
       - name: Install App Store Connect API key
         env:
@@ -27,15 +26,15 @@ jobs:
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           head -1 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
 
-      - name: Setup keychain
+      - name: Unlock default keychain
         run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
-          security create-keychain -p "temppass" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "temppass" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          # Use the default login keychain — no need to create a new one
+          security unlock-keychain -p "" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+          security set-keychain-settings ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+          security default-keychain
 
       - name: Resolve SPM dependencies
         run: swift package resolve
@@ -44,7 +43,6 @@ jobs:
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild archive \
             -scheme AutumnApp \
             -destination "generic/platform=iOS" \
@@ -54,10 +52,13 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn
+            PRODUCT_BUNDLE_IDENTIFIER=DART-Meadow-LLC.Autumn \
+            | xcpretty --simple 2>/dev/null || true
+          
+          # Check archive was created
+          ls "$RUNNER_TEMP/Autumn.xcarchive" && echo "Archive created successfully"
 
       - name: Export IPA
         env:
@@ -76,7 +77,6 @@ jobs:
           </dict>
           </plist>
           PLIST
-          security unlock-keychain -p "temppass" $RUNNER_TEMP/signing.keychain-db
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
@@ -91,6 +91,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
+          echo "Uploading: $IPA"
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA" \
