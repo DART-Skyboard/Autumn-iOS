@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Select Xcode 15.4
         run: |
@@ -35,6 +37,9 @@ jobs:
         run: |
           curl -Ls https://install.tuist.io | bash
 
+      - name: Resolve Tuist dependencies
+        run: tuist install
+
       - name: Generate Xcode project with Tuist
         run: tuist generate --no-open
 
@@ -48,22 +53,29 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "keychainpass" "$KEYCHAIN_PATH" 2>/dev/null || true
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
 
-      - name: Install Fastlane
-        run: gem install fastlane --no-document
+      - name: Install Bundler and Gems
+        run: |
+          gem install bundler
+          bundle install
 
       - name: Run Fastlane beta lane
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           KEYCHAIN_PASSWORD: "keychainpass"
-        run: bundle exec fastlane beta
+        run: bundle exec fastlane beta | tee build_log.txt
 
       - name: Report failure
         if: failure()
         run: |
+          mkdir -p reports
           TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-          echo -e "\n---\n## [$TIMESTAMP] - BUILD FAILED\nCheck GitHub Actions logs for details. This entry was automated by the CI workflow." >> AUTUMN_REPORT.txt
+          echo -e "\n---\n## [$TIMESTAMP] - BUILD FAILED" >> reports/DIAGNOSTIC_REPORT.txt
+          echo -e "### LOG SUMMARY (LAST 20 LINES):" >> reports/DIAGNOSTIC_REPORT.txt
+          tail -n 20 build_log.txt >> reports/DIAGNOSTIC_REPORT.txt || echo "No log captured." >> reports/DIAGNOSTIC_REPORT.txt
+          echo -e "\nDetailed logs are available in the GitHub Actions run summary." >> reports/DIAGNOSTIC_REPORT.txt
+
           git config --global user.name "Autumn CI"
           git config --global user.email "ci@leatr.xyz"
-          git add AUTUMN_REPORT.txt
-          git commit -m "chore: log build failure to surgical report [skip ci]" || true
+          git add reports/DIAGNOSTIC_REPORT.txt
+          git commit -m "chore: log build failure to diagnostic report [skip ci]" || true
           git push origin main || true
