@@ -1,6 +1,4 @@
 // swift-tools-version: 5.9
-// Standard SPM Package.swift — used by GitHub Actions / Xcode on Mac
-// For Swift Playgrounds on iPhone/iPad, use Package.swiftpm (see .swiftpm/ folder)
 import PackageDescription
 
 let package = Package(
@@ -37,8 +35,7 @@ let package = Package(
                 "AutumnServices",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui")
             ],
-            path: "Sources/AutumnApp",
-            // resources removed — no Resources folder
+            path: "Sources/AutumnApp"
         )
     ]
 )
