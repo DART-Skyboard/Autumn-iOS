@@ -30,6 +30,9 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("CloudKit"),
+                .linkedFramework("CoreData"),
+                .linkedFramework("GameKit"),
+                .linkedFramework("BackgroundTasks"),
                 .linkedFramework("UserNotifications"),
                 .linkedFramework("MusicKit"),
                 .linkedFramework("ShazamKit"),
@@ -37,7 +40,8 @@ let package = Package(
                 .linkedFramework("CoreNFC"),
                 .linkedFramework("MapKit"),
                 .linkedFramework("CoreLocation"),
-                .linkedFramework("Intents")
+                .linkedFramework("Intents"),
+                .linkedFramework("AuthenticationServices")
             ]
         ),
         .executableTarget(
