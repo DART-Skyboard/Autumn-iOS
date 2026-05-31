@@ -13,13 +13,15 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.0.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>MinimumOSVersion</key>
+    <string>16.0</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UISupportedInterfaceOrientations</key>
@@ -28,9 +30,35 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Voice input for AI conversation with Autumn</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Transcribe voice messages for the LEATR pipeline</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Used for contextual awareness in BRPN mapping</string>
+    <key>NSContactsUsageDescription</key>
+    <string>Optional — connect with MIST session peers</string>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>DART-Meadow-LLC.Autumn.reflex</string>
+        <string>DART-Meadow-LLC.Autumn.journal</string>
+        <string>DART-Meadow-LLC.Autumn.memory</string>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
 </dict>
 </plist>
