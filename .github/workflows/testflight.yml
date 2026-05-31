@@ -33,7 +33,7 @@ jobs:
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          pip3 install PyJWT cryptography --break-system-packages -q
+          pip3 install PyJWT --user -q || pip install PyJWT --user -q || brew install pyjwt 2>/dev/null || true
           openssl genrsa -out /tmp/dist_key.pem 2048
           openssl req -new -key /tmp/dist_key.pem -out /tmp/dist_csr.pem -subj "/C=US/O=DART Meadow LLC/CN=Autumn Distribution"
           python3 scripts/create_cert.py

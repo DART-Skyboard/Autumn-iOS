@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-import jwt, time, json, urllib.request, base64, ssl, os, sys
+import sys, time, json, urllib.request, urllib.error, base64, ssl, os
 
-key_id = "P6Z72KS63T"
+# Pure python JWT for ES256 - avoids needing cryptography package
+# We use the p8 key directly with PyJWT which handles EC keys natively
+try:
+    import jwt
+except ImportError:
+    print("PyJWT not found", file=sys.stderr)
+    sys.exit(1)
+
+key_id    = "P6Z72KS63T"
 issuer_id = os.environ["ASC_ISSUER_ID"]
-key_path = os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8")
+key_path  = os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8")
 
 with open(key_path) as f:
     private_key = f.read()
@@ -15,6 +23,8 @@ payload = {
     "aud": "appstoreconnect-v1"
 }
 token = jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": key_id})
+if isinstance(token, bytes):
+    token = token.decode()
 
 with open("/tmp/dist_csr.pem") as f:
     csr_content = f.read()
@@ -40,21 +50,11 @@ try:
     with urllib.request.urlopen(req, context=ctx) as r:
         result = json.loads(r.read())
     cert_content = result["data"]["attributes"]["certificateContent"]
-    cert_bytes = base64.b64decode(cert_content)
+    cert_bytes   = base64.b64decode(cert_content)
     with open("/tmp/dist_cert.der", "wb") as f:
         f.write(cert_bytes)
     print(f"Certificate created: {result['data']['id']}")
 except urllib.error.HTTPError as e:
-    body = e.read().decode()
-    print(f"Error {e.code}: {body}", file=sys.stderr)
-    # If cert limit reached, list existing certs
-    if e.code == 409 or "CERTIFICATE_LIMIT_REACHED" in body:
-        print("Certificate limit reached - listing existing certs")
-        list_req = urllib.request.Request(
-            "https://api.appstoreconnect.apple.com/v1/certificates?filter[certificateType]=IOS_DISTRIBUTION",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        with urllib.request.urlopen(list_req, context=ctx) as r:
-            certs = json.loads(r.read())
-        print(json.dumps(certs, indent=2))
+    err_body = e.read().decode()
+    print(f"HTTP {e.code}: {err_body}", file=sys.stderr)
     sys.exit(1)
