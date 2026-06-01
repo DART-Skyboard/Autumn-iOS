@@ -2,6 +2,7 @@ import Foundation
 import GameKit
 import BackgroundTasks
 import LEATRCore
+import AutumnServices
 
 // MARK: — Phase 4: GameKit MIST Multiplayer + BGTaskScheduler Autonomy
 

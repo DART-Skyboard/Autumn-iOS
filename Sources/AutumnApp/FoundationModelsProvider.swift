@@ -60,6 +60,7 @@ public actor FoundationModelsSession {
 // Adds buoyancy node animation, plasma spline connections, emotion-driven shell pulse
 
 import SceneKit
+import AutumnServices
 
 @MainActor
 public extension BRPNSceneViewModel {

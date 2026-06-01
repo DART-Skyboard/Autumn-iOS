@@ -1,6 +1,7 @@
 import SwiftUI
 import SceneKit
 import LEATRCore
+import AutumnServices
 
 // MARK: — BRPN Scene View
 public struct BRPNSceneView: View {

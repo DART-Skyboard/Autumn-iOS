@@ -1,6 +1,7 @@
 import SwiftUI
 import LEATRCore
 import BackgroundTasks
+import AutumnServices
 
 // MARK: — Identity is derived from LEATR constants, never hardcoded
 // See LEATRIdentity.swift
