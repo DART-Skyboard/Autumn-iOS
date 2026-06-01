@@ -13,11 +13,13 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>MinimumOSVersion</key>
@@ -39,6 +41,8 @@
     </array>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+    <key>UIRequiresFullScreen</key>
+    <false/>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>NSMicrophoneUsageDescription</key>
