@@ -97,9 +97,9 @@ public extension BRPNSceneViewModel {
 
     private func emotionColor(_ emotion: EmotionType) -> UIColor {
         switch emotion {
-        case .excited, .joyful:    return UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.9)
-        case .concerned, .anxious: return UIColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 0.9)
-        case .sad, .melancholic:   return UIColor(red: 0.4, green: 0.4, blue: 1.0, alpha: 0.9)
+        case .excited, .happy:    return UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.9)
+        case .concerned, .worried: return UIColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 0.9)
+        case .sad, .confused:   return UIColor(red: 0.4, green: 0.4, blue: 1.0, alpha: 0.9)
         case .angry:               return UIColor(red: 1.0, green: 0.2, blue: 0.2, alpha: 0.9)
         default:                   return UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.9)
         }

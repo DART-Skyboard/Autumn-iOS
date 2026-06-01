@@ -93,7 +93,7 @@ public final class MISTSession: NSObject, ObservableObject {
         let event = MISTEvent(
             type: .brpnNode,
             senderID: GKLocalPlayer.local.gamePlayerID,
-            payload: ["sessionID": sessionID, "shell": shell.rawValue,
+            payload: ["sessionID": sessionID, "shell": String(shell.rawValue),
                       "buoyancy": String(buoyancy)]
         )
         await sendMISTEvent(event)
@@ -124,7 +124,8 @@ extension MISTSession: GKMatchDelegate {
         case .brpnNode:
             if let sid = event.payload["sessionID"],
                let shellRaw = event.payload["shell"],
-               let shell = BRPNShell(rawValue: shellRaw) {
+               let shellInt = Int(shellRaw),
+               let shell = BRPNShell(rawValue: shellInt) {
                 _ = shell // shell routing for future node coloring
                 BRPNSceneViewModel.shared?.addRemoteNode(uid: sid, color: .cyan)
             }

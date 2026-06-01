@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 import LEATRCore
 import AutumnServices
 
