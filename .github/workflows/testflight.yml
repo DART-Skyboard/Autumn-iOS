@@ -26,9 +26,9 @@ jobs:
           ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_GWJKR7OGPBA1.p8
-          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_GWJKR7OGPBA1.p8
-          KEY_SIZE=$(wc -c < ~/.appstoreconnect/private_keys/AuthKey_GWJKR7OGPBA1.p8)
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          KEY_SIZE=$(wc -c < ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8)
           echo "API key: $KEY_SIZE bytes"
           [ "$KEY_SIZE" -lt 100 ] && echo "ERROR: secret empty" && exit 1 || true
 
@@ -100,8 +100,8 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_GWJKR7OGPBA1.p8" \
-            -authenticationKeyID "GWJKR7OGPBA1" \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8" \
+            -authenticationKeyID "NQXQ595W59" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       - name: Archive
@@ -121,8 +121,8 @@ jobs:
               -destination "generic/platform=iOS" \
               -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
               -allowProvisioningUpdates \
-              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_GWJKR7OGPBA1.p8" \
-              -authenticationKeyID "GWJKR7OGPBA1" \
+              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8" \
+              -authenticationKeyID "NQXQ595W59" \
               -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
               CODE_SIGN_STYLE=Manual \
               PROVISIONING_PROFILE="$PROFILE_UUID" \
@@ -137,8 +137,8 @@ jobs:
               -destination "generic/platform=iOS" \
               -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
               -allowProvisioningUpdates \
-              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_GWJKR7OGPBA1.p8" \
-              -authenticationKeyID "GWJKR7OGPBA1" \
+              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8" \
+              -authenticationKeyID "NQXQ595W59" \
               -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
               CODE_SIGN_STYLE=Automatic \
               DEVELOPMENT_TEAM=L7AHWS9Q6V \
@@ -158,8 +158,8 @@ jobs:
             -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_GWJKR7OGPBA1.p8" \
-            -authenticationKeyID "GWJKR7OGPBA1" \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8" \
+            -authenticationKeyID "NQXQ595W59" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
           find $RUNNER_TEMP/export -name '*.ipa'
 
@@ -172,6 +172,6 @@ jobs:
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA" \
-            --apiKey "GWJKR7OGPBA1" \
+            --apiKey "NQXQ595W59" \
             --apiIssuer "$ASC_ISSUER_ID" \
             --verbose
