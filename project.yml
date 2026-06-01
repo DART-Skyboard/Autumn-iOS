@@ -61,6 +61,19 @@ targets:
       - Sources/AutumnApp/Assets.xcassets
     info:
       path: Sources/AutumnApp/Info.plist
+      properties:
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UILaunchScreen:
+          UIColorName: ""
     entitlements:
       path: Sources/AutumnApp/AutumnApp.entitlements
     dependencies:
