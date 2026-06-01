@@ -27,7 +27,7 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGN_IDENTITY: ""
         GENERATE_INFOPLIST_FILE: YES
-        CURRENT_PROJECT_VERSION: "7"
+        CURRENT_PROJECT_VERSION: "8"
         MARKETING_VERSION: "1.0.0"
 
   # ── AutumnServices — framework (no signing needed) ────────
@@ -48,7 +48,7 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGN_IDENTITY: ""
         GENERATE_INFOPLIST_FILE: YES
-        CURRENT_PROJECT_VERSION: "7"
+        CURRENT_PROJECT_VERSION: "8"
         MARKETING_VERSION: "1.0.0"
 
   # ── AutumnApp — main application (signed) ─────────────────
@@ -58,8 +58,6 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - Sources/AutumnApp
-      - path: Sources/AutumnApp/AutumnData.xcdatamodeld
-        type: folder
       - path: Sources/AutumnApp/PrivacyInfo.xcprivacy
         type: file
       - Sources/AutumnApp/Assets.xcassets
@@ -117,7 +115,7 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-        CURRENT_PROJECT_VERSION: "7"
+        CURRENT_PROJECT_VERSION: "8"
         MARKETING_VERSION: "1.0.0"
       configs:
         Debug:
