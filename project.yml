@@ -1,6 +1,6 @@
 name: Autumn
 options:
-  bundleIdPrefix: DART-Meadow-LLC
+  bundleIdPrefix: com.dartmeadow
   deploymentTarget:
     iOS: "16.0"
   generateEmptyDirectories: true
@@ -23,7 +23,8 @@ targets:
       path: Sources/AutumnApp/AutumnApp.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: DART-Meadow-LLC.Autumn
+        PRODUCT_NAME: Autumn
+        PRODUCT_BUNDLE_IDENTIFIER: com.dartmeadow.autumn
         DEVELOPMENT_TEAM: L7AHWS9Q6V
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.10"
@@ -31,6 +32,10 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
     dependencies:
       - package: swift-markdown-ui
         product: MarkdownUI
