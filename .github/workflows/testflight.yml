@@ -19,13 +19,8 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
-
-      - name: Install iOS platform SDK
-        run: |
-          # Download iOS 18.2 platform so generic/platform=iOS destination works
-          xcodebuild -downloadPlatform iOS
-          echo "=== Available SDKs ==="
-          xcodebuild -showsdks | grep -i ios
+          echo "=== Available iOS SDKs ==="
+          xcodebuild -showsdks | grep -i iphoneos
 
       - name: Install App Store Connect API key
         env:
