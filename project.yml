@@ -11,24 +11,58 @@ packages:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     from: "2.4.0"
 targets:
+  # ── LEATRCore — standalone framework ──────────────────────
+  LEATRCore:
+    type: framework
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - Sources/LEATRCore
+    settings:
+      base:
+        PRODUCT_NAME: LEATRCore
+        SWIFT_VERSION: "5.9"
+        DEFINES_MODULE: YES
+        SKIP_INSTALL: YES
+
+  # ── AutumnServices — standalone framework ─────────────────
+  AutumnServices:
+    type: framework
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - Sources/AutumnServices
+    dependencies:
+      - target: LEATRCore
+    settings:
+      base:
+        PRODUCT_NAME: AutumnServices
+        SWIFT_VERSION: "5.9"
+        DEFINES_MODULE: YES
+        SKIP_INSTALL: YES
+
+  # ── AutumnApp — main application ──────────────────────────
   AutumnApp:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
     sources:
       - Sources/AutumnApp
-      - Sources/AutumnServices
-      - Sources/LEATRCore
     info:
       path: Sources/AutumnApp/Info.plist
     entitlements:
       path: Sources/AutumnApp/AutumnApp.entitlements
+    dependencies:
+      - target: LEATRCore
+      - target: AutumnServices
+      - package: swift-markdown-ui
+        product: MarkdownUI
     settings:
       base:
         PRODUCT_NAME: Autumn
         PRODUCT_BUNDLE_IDENTIFIER: com.dartmeadow.autumn
         DEVELOPMENT_TEAM: L7AHWS9Q6V
-        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_STYLE: Manual
         SWIFT_VERSION: "5.9"
         CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
         ENABLE_USER_SCRIPT_SANDBOXING: NO
@@ -40,13 +74,12 @@ targets:
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
           DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
-    dependencies:
-      - package: swift-markdown-ui
-        product: MarkdownUI
 schemes:
   AutumnApp:
     build:
       targets:
         AutumnApp: all
+        AutumnServices: all
+        LEATRCore: all
     archive:
       config: Release
