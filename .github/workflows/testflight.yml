@@ -19,8 +19,13 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
-          echo "=== Available SDKs ==="
-          xcodebuild -showsdks | grep -i "iphoneos\|iphonesimulator" || true
+
+      - name: Download iOS platform SDK
+        run: |
+          # Download iOS platform so generic/platform=iOS destination works
+          sudo xcodebuild -downloadPlatform iOS
+          echo "=== Available SDKs after download ==="
+          xcodebuild -showsdks | grep -i iphoneos
 
       - name: Install App Store Connect API key
         env:
@@ -77,14 +82,12 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # Use -sdk iphoneos instead of -destination generic/platform=iOS
-          # The destination specifier requires the iOS platform package installed
-          # -sdk iphoneos uses the SDK directly from Xcode.app bundle
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
             -configuration Release \
             -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
