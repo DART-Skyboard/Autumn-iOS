@@ -19,8 +19,6 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
-          # List available iOS platforms
-          xcodebuild -showsdks | grep -i ios || true
 
       - name: Install App Store Connect API key
         env:
@@ -52,6 +50,9 @@ jobs:
         run: |
           xcodegen generate --spec project.yml
           echo "objectVersion: $(grep -m1 objectVersion Autumn.xcodeproj/project.pbxproj | tr -d ' \t;' | cut -d= -f2)"
+          echo "=== Schemes ==="
+          ls Autumn.xcodeproj/xcshareddata/xcschemes/ 2>/dev/null || echo "no shared schemes"
+          xcodebuild -project Autumn.xcodeproj -list 2>/dev/null || true
 
       - name: Resolve Swift packages
         env:
@@ -69,14 +70,10 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # Use SDK directly — avoids destination platform matching issue
-          # macos-15 runner has iphoneos SDK built into Xcode 16.2
-          SDK=$(xcodebuild -showsdks | grep "iphoneos" | tail -1 | awk '{print $NF}')
-          echo "Using SDK: $SDK"
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
-            -sdk "$SDK" \
+            -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
