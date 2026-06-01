@@ -20,7 +20,6 @@ public actor CloudKitSync {
     public func syncMemoryChunk(messages: [ChatMessage], sessionID: String) async {
         guard !messages.isEmpty else { return }
 
-        // Encode last chunk
         let chunk = messages
             .filter { !$0.isInternal }
             .suffix(chunkSize)
@@ -29,10 +28,7 @@ public actor CloudKitSync {
 
         let key = "memory_\(sessionID)_\(Date().timeIntervalSince1970.rounded())"
 
-        // Write to CloudKit
         try? await cloud.saveMemoryChunk(chunk, key: key)
-
-        // Mirror to leatr-ash GitHub repo
         await syncChunkToGitHub(chunk: chunk, key: key)
     }
 
@@ -51,29 +47,18 @@ public actor CloudKitSync {
     }
 
     // MARK: — Journal Entry Dual-Write
-    // Writes to both CloudKit and leatr-ash simultaneously
     public func saveJournalEntry(thought: String, emotion: EmotionType, username: String) async {
-        let entry = CloudJournalEntry(
-            thought: thought,
-            emotion: emotion.rawValue
-        )
-
-        // CloudKit write
+        let entry = CloudJournalEntry(thought: thought, emotion: emotion.rawValue)
         try? await cloud.saveCloudJournalEntry(entry)
-
-        // GitHub leatr-ash write
         try? await github.syncJournalEntry(entry, username: username)
     }
 
     // MARK: — Session Restore
-    // On app launch — pull latest memory from CloudKit into context
     public func restoreSessionMemory(sessionID: String) async -> [ChatMessage] {
-        // Try CloudKit first
         if let raw = try? await cloud.fetchMemoryChunk(key: "memory_\(sessionID)_latest") {
             return parseChunk(raw)
         }
 
-        // Fall back to leatr-ash GitHub
         let owner = "DART-Skyboard"
         let repo  = "leatr-ash"
         let path  = "ashtree/autumn-ios/memory"
@@ -82,7 +67,6 @@ public actor CloudKitSync {
            let content = file.decodedContent {
             return parseChunk(content)
         }
-
         return []
     }
 
@@ -99,13 +83,11 @@ public actor CloudKitSync {
     }
 
     // MARK: — leatr-ash Journal Parity Check
-    // Compares local CloudKit journal count vs GitHub journal.json
     public func parityCheck() async -> (cloudCount: Int, githubCount: Int, inSync: Bool) {
         async let cloudEntries = (try? await cloud.fetchJournalEntries(limit: 500)) ?? []
         async let githubCount = githubJournalCount()
-
         let (cloud, github) = await (cloudEntries, githubCount)
-        let inSync = abs(cloud.count - github) <= 2  // Allow 2 entry drift
+        let inSync = abs(cloud.count - github) <= 2
         return (cloud.count, github, inSync)
     }
 
@@ -122,25 +104,4 @@ public actor CloudKitSync {
         return entries.count
     }
 }
-
-// MARK: — ChatViewModel extension for Phase 3 autosave
-public extension ChatViewModel {
-    func autosaveIfNeeded() {
-        let nonInternal = messages.filter { !$0.isInternal }
-        guard nonInternal.count % 5 == 0, nonInternal.count > 0 else { return }
-        Task.detached(priority: .background) {
-            await CloudKitSync.shared.syncMemoryChunk(
-                messages: nonInternal,
-                sessionID: await self.sessionID
-            )
-        }
-    }
-
-    // sessionID needs to be added to ChatViewModel — expose here
-    var sessionID: String {
-        // Derived from first message timestamp for stable cross-session ID
-        messages.first.map {
-            String(format: "%08x", Int($0.timestamp.timeIntervalSince1970))
-        } ?? UUID().uuidString.prefix(8).description
-    }
-}
+// NOTE: ChatViewModel.autosaveIfNeeded() extension moved to ChatViewModel.swift (AutumnApp target)

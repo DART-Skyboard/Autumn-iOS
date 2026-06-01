@@ -177,3 +177,23 @@ public enum SentienceState: String {
         }
     }
 }
+
+// MARK: — Phase 3 autosave (CloudKitSync integration)
+extension ChatViewModel {
+    func autosaveIfNeeded() {
+        let nonInternal = messages.filter { !$0.isInternal }
+        guard nonInternal.count % 5 == 0, nonInternal.count > 0 else { return }
+        Task.detached(priority: .background) {
+            await CloudKitSync.shared.syncMemoryChunk(
+                messages: nonInternal,
+                sessionID: await self.sessionID
+            )
+        }
+    }
+
+    var sessionID: String {
+        messages.first.map {
+            String(format: "%08x", Int($0.timestamp.timeIntervalSince1970))
+        } ?? UUID().uuidString.prefix(8).description
+    }
+}

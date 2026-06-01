@@ -285,3 +285,44 @@ extension Text {
 
 // MARK: — BRPN Scene stub ViewModel placeholder (full version in BRPNSceneView.swift)
 // JournalViewModel defined above; BRPNSceneViewModel in BRPNSceneView.swift
+
+// MARK: — Core Data persistence (PersistenceLayer integration)
+extension JournalViewModel {
+    public func loadFromCoreData() async {
+        let ctx = PersistenceController.shared.context
+        let request = NSFetchRequest<NSManagedObject>(entityName: "JournalRecord")
+        request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
+        request.fetchLimit = 500
+        await MainActor.run {
+            let records = (try? ctx.fetch(request)) ?? []
+            self.entries = records.compactMap { obj in
+                guard
+                    let id        = obj.value(forKey: "id") as? String,
+                    let content   = obj.value(forKey: "content") as? String,
+                    let emotion   = obj.value(forKey: "emotion") as? String,
+                    let ts        = obj.value(forKey: "timestamp") as? Date,
+                    let buoyancy  = obj.value(forKey: "buoyancy") as? Double,
+                    let internal_ = obj.value(forKey: "isInternal") as? Bool
+                else { return nil }
+                return JournalEntryLocal(
+                    id: id,
+                    timestamp: ts.formatted(.dateTime.day().month().hour().minute()),
+                    content: content, emotion: emotion,
+                    buoyancy: buoyancy, isInternal: internal_
+                )
+            }
+        }
+    }
+
+    public func saveToCoreData(entry: JournalEntryLocal) {
+        let ctx = PersistenceController.shared.context
+        let obj = NSEntityDescription.insertNewObject(forEntityName: "JournalRecord", into: ctx)
+        obj.setValue(entry.id,         forKey: "id")
+        obj.setValue(entry.content,    forKey: "content")
+        obj.setValue(entry.emotion,    forKey: "emotion")
+        obj.setValue(entry.buoyancy,   forKey: "buoyancy")
+        obj.setValue(entry.isInternal, forKey: "isInternal")
+        obj.setValue(Date(),           forKey: "timestamp")
+        PersistenceController.shared.save()
+    }
+}
