@@ -127,7 +127,7 @@ jobs:
             PROVISIONING_PROFILE="$PP_UUID_FINAL" \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
-            | xcpretty 2>/dev/null || true
+            
           ls -la "$RUNNER_TEMP/Autumn.xcarchive" || (echo "Archive missing!" && exit 1)
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
