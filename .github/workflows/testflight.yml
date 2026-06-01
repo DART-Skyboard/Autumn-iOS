@@ -112,38 +112,23 @@ jobs:
           KP="${KEYCHAIN_PASSWORD:-keychainpass}"
           security unlock-keychain -p "$KP" $RUNNER_TEMP/signing.keychain-db
 
-          if [ -n "$PROFILE_UUID" ]; then
-            echo "Manual signing with profile: $PROFILE_UUID"
-            xcodebuild archive \
-              -project Autumn.xcodeproj \
-              -scheme AutumnApp \
-              -configuration Release \
-              -destination "generic/platform=iOS" \
-              -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-              -allowProvisioningUpdates \
-              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8" \
-              -authenticationKeyID "NQXQ595W59" \
-              -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-              CODE_SIGN_STYLE=Manual \
-              PROVISIONING_PROFILE="$PROFILE_UUID" \
-              DEVELOPMENT_TEAM=L7AHWS9Q6V \
-              OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
-          else
-            echo "Automatic signing (no profile UUID)"
-            xcodebuild archive \
-              -project Autumn.xcodeproj \
-              -scheme AutumnApp \
-              -configuration Release \
-              -destination "generic/platform=iOS" \
-              -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-              -allowProvisioningUpdates \
-              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8" \
-              -authenticationKeyID "NQXQ595W59" \
-              -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-              CODE_SIGN_STYLE=Automatic \
-              DEVELOPMENT_TEAM=L7AHWS9Q6V \
-              OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
-          fi
+          # Always use Manual signing with Distribution cert + known profile UUID
+          # Automatic signing tries to find Development cert first — fails on CI
+          PP_UUID_FINAL="${PROFILE_UUID:-c70dd64b-f215-4399-a4d9-74aee45d132c}"
+          echo "Signing with profile UUID: $PP_UUID_FINAL"
+          xcodebuild archive \
+            -project Autumn.xcodeproj \
+            -scheme AutumnApp \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            PROVISIONING_PROFILE="$PP_UUID_FINAL" \
+            DEVELOPMENT_TEAM=L7AHWS9Q6V \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db" \
+            | xcpretty 2>/dev/null || true
+          ls -la "$RUNNER_TEMP/Autumn.xcarchive" || (echo "Archive missing!" && exit 1)
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
       - name: Export IPA
