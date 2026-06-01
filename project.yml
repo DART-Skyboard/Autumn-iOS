@@ -58,6 +58,7 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - Sources/AutumnApp
+    assets: Sources/AutumnApp/Assets.xcassets
     info:
       path: Sources/AutumnApp/Info.plist
     entitlements:
