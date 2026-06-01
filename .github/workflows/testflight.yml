@@ -19,6 +19,8 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
+          echo "=== Available SDKs ==="
+          xcodebuild -showsdks | grep -i "iphoneos\|iphonesimulator" || true
 
       - name: Install App Store Connect API key
         env:
@@ -30,7 +32,7 @@ jobs:
           KEY_SIZE=$(wc -c < ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8)
           echo "API key size: $KEY_SIZE bytes"
           if [ "$KEY_SIZE" -lt 100 ]; then
-            echo "ERROR: APP_STORE_CONNECT_API_KEY_CONTENT secret is empty or too small"
+            echo "ERROR: APP_STORE_CONNECT_API_KEY_CONTENT secret is empty"
             exit 1
           fi
 
@@ -75,14 +77,14 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # Use Automatic signing + -allowProvisioningUpdates + ASC API key
-          # Do NOT pass CODE_SIGN_IDENTITY — let Apple's portal select
-          # the correct distribution certificate via the API key auth
+          # Use -sdk iphoneos instead of -destination generic/platform=iOS
+          # The destination specifier requires the iOS platform package installed
+          # -sdk iphoneos uses the SDK directly from Xcode.app bundle
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
             -configuration Release \
-            -destination "generic/platform=iOS" \
+            -sdk iphoneos \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
