@@ -3,8 +3,6 @@ options:
   bundleIdPrefix: DART-Meadow-LLC
   deploymentTarget:
     iOS: "16.0"
-  xcodeVersion: "15.4"
-  xcodeCompatibilityVersion: "Xcode 14.0"
   generateEmptyDirectories: true
 packages:
   swift-markdown-ui:
@@ -28,8 +26,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: DART-Meadow-LLC.Autumn
         DEVELOPMENT_TEAM: L7AHWS9Q6V
         CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "5.9"
+        SWIFT_VERSION: "5.10"
         CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
-    dependencies:
-      - package: swift-markdown-ui
-        product: MarkdownUI
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
