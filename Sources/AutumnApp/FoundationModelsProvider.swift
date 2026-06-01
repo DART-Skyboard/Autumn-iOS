@@ -74,16 +74,16 @@ public extension BRPNSceneViewModel {
     private func pulseShells(buoyancy: Double) {
         // Buoyancy drives rotation speed — higher = faster aerospace shell
         let speed = max(0.3, buoyancy * 2.0)
-        if let aerospace = shellNodes[.aerospace] {
+        if let aerospace = shellNodes[BRPNShell.aerospace] {
             aerospace.removeAllActions()
-            aerospace.runAction(.repeatForever(
-                .rotateBy(x: 0.1, y: CGFloat(speed * .pi), z: 0.05, duration: 15.0 / speed)
+            aerospace.runAction(SCNAction.repeatForever(
+                SCNAction.rotateBy(x: 0.1, y: CGFloat(speed * .pi), z: 0.05, duration: 15.0 / speed)
             ))
         }
-        if let maritime = shellNodes[.maritime] {
+        if let maritime = shellNodes[BRPNShell.maritime] {
             maritime.removeAllActions()
-            maritime.runAction(.repeatForever(
-                .rotateBy(x: 0, y: -CGFloat(speed * .pi), z: 0, duration: 20.0 / speed)
+            maritime.runAction(SCNAction.repeatForever(
+                SCNAction.rotateBy(x: 0, y: -CGFloat(speed * .pi), z: 0, duration: 20.0 / speed)
             ))
         }
     }

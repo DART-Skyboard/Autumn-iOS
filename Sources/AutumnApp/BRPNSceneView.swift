@@ -59,16 +59,16 @@ public final class BRPNSceneViewModel: ObservableObject {
     @Published public var sessionId = UUID().uuidString.prefix(8).description
 
     private var cameraNode: SCNNode!
-    private var shellNodes: [BRPNShell: SCNNode] = [:]
+    var shellNodes: [BRPNShell: SCNNode] = [:]
 
     // Shell radii (Geological > Maritime > Aerospace)
-    private let shellRadii: [BRPNShell: CGFloat] = [
+    let shellRadii: [BRPNShell: CGFloat] = [
         .geological: 2.8,
         .maritime:   1.9,
         .aerospace:  1.1
     ]
     // Shell colors matching theme accent
-    private let shellColors: [BRPNShell: UIColor] = [
+    let shellColors: [BRPNShell: UIColor] = [
         .geological: UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.12),
         .maritime:   UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.18),
         .aerospace:  UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.25)
