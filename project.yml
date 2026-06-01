@@ -58,6 +58,8 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - Sources/AutumnApp
+      - path: Sources/AutumnApp/PrivacyInfo.xcprivacy
+        type: file
       - Sources/AutumnApp/Assets.xcassets
     info:
       path: Sources/AutumnApp/Info.plist
