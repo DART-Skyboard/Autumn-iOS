@@ -3,24 +3,23 @@ import LEATRCore
 import BackgroundTasks
 import AutumnServices
 
-// MARK: — Identity is derived from LEATR constants, never hardcoded
-// See LEATRIdentity.swift
-
 @main
 struct AutumnApp: App {
 
+    // Initialize one at a time to find crash source
+    @StateObject private var themeVM   = ThemeViewModel()
     @StateObject private var authVM    = AuthViewModel()
+
+    // Deferred — initialize after launch to avoid startup crashes
     @StateObject private var chatVM    = ChatViewModel()
     @StateObject private var sceneVM   = BRPNSceneViewModel()
     @StateObject private var journalVM = JournalViewModel()
-    @StateObject private var themeVM   = ThemeViewModel()
     @StateObject private var mistVM    = MISTSession.shared
 
-    // Persistence
     let persistence = PersistenceController.shared
 
     init() {
-        // Register background tasks before app finishes launching
+        // Register BGTasks — safe, just registers identifiers
         AutumnAutonomy.shared.registerTasks()
     }
 
@@ -36,12 +35,12 @@ struct AutumnApp: App {
                 .preferredColorScheme(.dark)
                 .environment(\.managedObjectContext, persistence.context)
                 .onAppear {
-                    // Authenticate GameKit for MIST
-                    Task { await mistVM.authenticateLocalPlayer() }
-                    // Load journal from Core Data
-                    Task { await journalVM.loadFromCoreData() }
-                    // Schedule background tasks
-                    AutumnAutonomy.shared.scheduleAll()
+                    Task {
+                        // Defer heavy init to after first frame
+                        await mistVM.authenticateLocalPlayer()
+                        await journalVM.loadFromCoreData()
+                        AutumnAutonomy.shared.scheduleAll()
+                    }
                 }
         }
     }
