@@ -33,12 +33,11 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: "1,2"
       configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
           DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
-          # Force distribution signing for archive/TestFlight
-          CODE_SIGN_IDENTITY: "iPhone Distribution"
-          PROVISIONING_PROFILE_SPECIFIER: ""
     dependencies:
       - package: swift-markdown-ui
         product: MarkdownUI
