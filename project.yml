@@ -64,7 +64,13 @@ targets:
     info:
       path: Sources/AutumnApp/Info.plist
       properties:
-        UIRequiresFullScreen: true
+        CFBundleIconName: AppIcon
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        ITSAppUsesNonExemptEncryption: false
+        UIRequiresFullScreen: false
+        UILaunchScreen:
+          UIColorName: ""
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -74,8 +80,18 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        UILaunchScreen:
-          UIColorName: ""
+        UIApplicationSupportsIndirectInputEvents: true
+        NSMicrophoneUsageDescription: Voice input for AI conversation with Autumn
+        NSSpeechRecognitionUsageDescription: Transcribe voice messages for the LEATR pipeline
+        NSLocationWhenInUseUsageDescription: Used for contextual awareness in BRPN mapping
+        NSContactsUsageDescription: Optional - connect with MIST session peers
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.dartmeadow.autumn.reflex
+          - com.dartmeadow.autumn.journal
+          - com.dartmeadow.autumn.memory
+        UIBackgroundModes:
+          - fetch
+          - processing
     entitlements:
       path: Sources/AutumnApp/AutumnApp.entitlements
     dependencies:
