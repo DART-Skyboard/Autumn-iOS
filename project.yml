@@ -4,6 +4,8 @@ options:
   deploymentTarget:
     iOS: "16.0"
   generateEmptyDirectories: true
+  xcodeVersion: "15.4"
+  xcodeCompatibilityVersion: "Xcode 14.0"
 packages:
   swift-markdown-ui:
     url: https://github.com/gonzalezreal/swift-markdown-ui
@@ -27,7 +29,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.dartmeadow.autumn
         DEVELOPMENT_TEAM: L7AHWS9Q6V
         CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "5.9"
         CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO

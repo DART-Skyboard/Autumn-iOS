@@ -8,18 +8,18 @@ on:
 jobs:
   build-and-deploy:
     name: Build Autumn iOS to TestFlight
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 60
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.2
+      - name: Select Xcode 15.4
         run: |
-          sudo xcode-select -switch /Applications/Xcode_16.2.app
-          sudo xcodebuild -runFirstLaunch
+          sudo xcode-select -switch /Applications/Xcode_15.4.app
           xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos
 
       - name: Install App Store Connect API key
         env:
@@ -32,7 +32,7 @@ jobs:
           echo "API key: $KEY_SIZE bytes"
           [ "$KEY_SIZE" -lt 100 ] && echo "ERROR: empty" && exit 1 || true
 
-      - name: Setup signing keychain and install provisioning profile
+      - name: Setup keychain and install provisioning profile
         env:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
@@ -45,12 +45,10 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KEYCHAIN_PATH" 2>/dev/null || true
 
-          # Install provisioning profile if secret is set
           if [ -n "$PROVISIONING_PROFILE_BASE64" ]; then
             PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
             echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
-            PP_SIZE=$(wc -c < "$PP_PATH")
-            echo "Provisioning profile: $PP_SIZE bytes"
+            echo "Profile size: $(wc -c < $PP_PATH) bytes"
             mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
             PP_UUID=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract UUID raw - 2>/dev/null || true)
             echo "Profile UUID: $PP_UUID"
@@ -89,7 +87,7 @@ jobs:
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-      - name: Archive with provisioning profile
+      - name: Archive
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
@@ -97,28 +95,38 @@ jobs:
           KP="${KEYCHAIN_PASSWORD:-keychainpass}"
           security unlock-keychain -p "$KP" $RUNNER_TEMP/signing.keychain-db
 
-          # Use profile UUID if we extracted it, otherwise use Automatic
           if [ -n "$PROFILE_UUID" ]; then
-            echo "Using Manual signing with profile: $PROFILE_UUID"
-            SIGN_ARGS="CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE=$PROFILE_UUID"
+            echo "Manual signing — profile: $PROFILE_UUID"
+            xcodebuild archive \
+              -project Autumn.xcodeproj \
+              -scheme AutumnApp \
+              -configuration Release \
+              -destination "generic/platform=iOS" \
+              -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+              -authenticationKeyID "P6Z72KS63T" \
+              -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+              CODE_SIGN_STYLE=Manual \
+              PROVISIONING_PROFILE="$PROFILE_UUID" \
+              DEVELOPMENT_TEAM=L7AHWS9Q6V \
+              OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
           else
-            echo "Using Automatic signing with provisioning updates"
-            SIGN_ARGS="CODE_SIGN_STYLE=Automatic"
+            echo "Automatic signing"
+            xcodebuild archive \
+              -project Autumn.xcodeproj \
+              -scheme AutumnApp \
+              -configuration Release \
+              -destination "generic/platform=iOS" \
+              -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
+              -authenticationKeyID "P6Z72KS63T" \
+              -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+              CODE_SIGN_STYLE=Automatic \
+              DEVELOPMENT_TEAM=L7AHWS9Q6V \
+              OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
           fi
-
-          xcodebuild archive \
-            -project Autumn.xcodeproj \
-            -scheme AutumnApp \
-            -configuration Release \
-            -destination "generic/platform=iOS" \
-            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
-            -authenticationKeyID "P6Z72KS63T" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            $SIGN_ARGS \
-            DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
       - name: Export IPA
