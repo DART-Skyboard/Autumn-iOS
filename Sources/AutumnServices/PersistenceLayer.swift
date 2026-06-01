@@ -8,24 +8,30 @@ public final class PersistenceController: @unchecked Sendable {
     public let container: NSPersistentCloudKitContainer
 
     public init(inMemory: Bool = false) {
-        container = NSPersistentCloudKitContainer(name: "AutumnData")
+        // Build model programmatically — no .xcdatamodeld file needed
+        container = NSPersistentCloudKitContainer(
+            name: "AutumnData",
+            managedObjectModel: Self.autumnModel
+        )
 
         if inMemory {
             container.persistentStoreDescriptions.first?.url =
                 URL(fileURLWithPath: "/dev/null")
+        } else {
+            let description = container.persistentStoreDescriptions.first
+            description?.setOption(true as NSNumber,
+                forKey: NSPersistentHistoryTrackingKey)
+            description?.setOption(true as NSNumber,
+                forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            description?.cloudKitContainerOptions =
+                NSPersistentCloudKitContainerOptions(
+                    containerIdentifier: "iCloud.com.dartmeadow.autumn"
+                )
         }
-
-        let description = container.persistentStoreDescriptions.first
-        description?.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-        description?.setOption(true as NSNumber,
-            forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-        description?.cloudKitContainerOptions =
-            NSPersistentCloudKitContainerOptions(
-                containerIdentifier: "iCloud.com.dartmeadow.autumn"
-            )
 
         container.loadPersistentStores { _, error in
             if let error {
+                // Log but don't crash — app can work without persistence
                 print("[Persistence] Store load error: \(error.localizedDescription)")
             }
         }
@@ -41,43 +47,47 @@ public final class PersistenceController: @unchecked Sendable {
         do { try ctx.save() }
         catch { print("[Persistence] Save error: \(error.localizedDescription)") }
     }
-}
 
-public extension NSManagedObjectModel {
-    static var autumnModel: NSManagedObjectModel = {
+    // MARK: — Programmatic Core Data Model
+    static let autumnModel: NSManagedObjectModel = {
         let model = NSManagedObjectModel()
 
+        // JournalRecord entity
         let journal = NSEntityDescription()
         journal.name = "JournalRecord"
         journal.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
+        journal.properties = makeAttrs([
+            ("id",        .stringAttributeType),
+            ("content",   .stringAttributeType),
+            ("emotion",   .stringAttributeType),
+            ("buoyancy",  .doubleAttributeType),
+            ("isInternal",.booleanAttributeType),
+            ("timestamp", .dateAttributeType)
+        ])
 
-        let attrs: [(String, NSAttributeType)] = [
-            ("id", .stringAttributeType), ("content", .stringAttributeType),
-            ("emotion", .stringAttributeType), ("buoyancy", .doubleAttributeType),
-            ("isInternal", .booleanAttributeType), ("timestamp", .dateAttributeType)
-        ]
-        journal.properties = attrs.map { name, type in
-            let attr = NSAttributeDescription()
-            attr.name = name; attr.attributeType = type; attr.isOptional = true
-            return attr
-        }
-
+        // MemoryChunk entity
         let memory = NSEntityDescription()
         memory.name = "MemoryChunk"
         memory.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
-
-        let memAttrs: [(String, NSAttributeType)] = [
-            ("key", .stringAttributeType), ("content", .stringAttributeType),
-            ("sessionID", .stringAttributeType), ("createdAt", .dateAttributeType)
-        ]
-        memory.properties = memAttrs.map { name, type in
-            let attr = NSAttributeDescription()
-            attr.name = name; attr.attributeType = type; attr.isOptional = true
-            return attr
-        }
+        memory.properties = makeAttrs([
+            ("key",       .stringAttributeType),
+            ("content",   .stringAttributeType),
+            ("sessionID", .stringAttributeType),
+            ("createdAt", .dateAttributeType)
+        ])
 
         model.entities = [journal, memory]
         return model
     }()
 }
-// NOTE: JournalViewModel Core Data extensions moved to JournalAndSettings.swift (AutumnApp target)
+
+private func makeAttrs(_ pairs: [(String, NSAttributeType)]) -> [NSAttributeDescription] {
+    pairs.map { name, type in
+        let a = NSAttributeDescription()
+        a.name = name
+        a.attributeType = type
+        a.isOptional = true
+        return a
+    }
+}
+// NOTE: JournalViewModel Core Data extensions are in JournalAndSettings.swift (AutumnApp target)
