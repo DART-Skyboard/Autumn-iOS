@@ -8,8 +8,9 @@ public final class PersistenceController: @unchecked Sendable {
 
     public init(inMemory: Bool = false) {
         let model = NSManagedObjectModel.autumnModel
+        let built: NSPersistentContainer
 
-        if !inMemory && isCloudKitAvailable() {
+        if !inMemory && FileManager.default.ubiquityIdentityToken != nil {
             let ck = NSPersistentCloudKitContainer(name: "AutumnData",
                                                    managedObjectModel: model)
             let desc = ck.persistentStoreDescriptions.first
@@ -23,10 +24,10 @@ public final class PersistenceController: @unchecked Sendable {
             }
             ck.viewContext.automaticallyMergesChangesFromParent = true
             ck.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-            container = ck
+            built = ck
         } else {
             let local = NSPersistentContainer(name: "AutumnData",
-                                             managedObjectModel: model)
+                                              managedObjectModel: model)
             if inMemory {
                 local.persistentStoreDescriptions.first?.url =
                     URL(fileURLWithPath: "/dev/null")
@@ -35,12 +36,10 @@ public final class PersistenceController: @unchecked Sendable {
                 if let error { print("[CoreData] Local: \(error)") }
             }
             local.viewContext.automaticallyMergesChangesFromParent = true
-            container = local
+            built = local
         }
-    }
 
-    private func isCloudKitAvailable() -> Bool {
-        FileManager.default.ubiquityIdentityToken != nil
+        self.container = built
     }
 
     public var context: NSManagedObjectContext { container.viewContext }
@@ -69,8 +68,7 @@ public extension NSManagedObjectModel {
             ("timestamp", .dateAttributeType)
         ].map { name, type in
             let a = NSAttributeDescription()
-            a.name = name; a.attributeType = type; a.isOptional = true
-            return a
+            a.name = name; a.attributeType = type; a.isOptional = true; return a
         }
 
         let memory = NSEntityDescription()
@@ -83,8 +81,7 @@ public extension NSManagedObjectModel {
             ("createdAt", .dateAttributeType)
         ].map { name, type in
             let a = NSAttributeDescription()
-            a.name = name; a.attributeType = type; a.isOptional = true
-            return a
+            a.name = name; a.attributeType = type; a.isOptional = true; return a
         }
 
         model.entities = [journal, memory]
