@@ -2,17 +2,16 @@ import Foundation
 import CloudKit
 
 /// AutumnCloud — iCloud/CloudKit backend for Autumn iOS
-/// Mirrors GitHub-based memory/journal for Apple ID users
-/// Creates ashtree/autumn-ash directory structure in iCloud
+/// Bundle ID: com.dartmeadow.autumn
+/// iCloud container: iCloud.com.dartmeadow.autumn
 public actor AutumnCloud {
     public static let shared = AutumnCloud()
-    private let container = CKContainer(identifier: "iCloud.DART-Meadow-LLC.Autumn")
+    private let container = CKContainer(identifier: "iCloud.com.dartmeadow.autumn")
     private var db: CKDatabase { container.privateCloudDatabase }
 
     public init() {}
 
     // MARK: - Ash Directory Setup
-    /// Creates the Autumn Ash directory structure on first sign-in
     public func setupAshDirectory(for userID: String) async throws {
         let zoneID = CKRecordZone.ID(zoneName: "AutumnAsh-\(userID)", ownerName: CKCurrentUserDefaultName)
         let zone   = CKRecordZone(zoneID: zoneID)

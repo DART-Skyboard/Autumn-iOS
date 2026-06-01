@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>DART-Meadow-LLC.Autumn</string>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleName</key>
     <string>Autumn</string>
     <key>CFBundleDisplayName</key>
@@ -51,9 +51,9 @@
     <string>Optional — connect with MIST session peers</string>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
     <array>
-        <string>DART-Meadow-LLC.Autumn.reflex</string>
-        <string>DART-Meadow-LLC.Autumn.journal</string>
-        <string>DART-Meadow-LLC.Autumn.memory</string>
+        <string>com.dartmeadow.autumn.reflex</string>
+        <string>com.dartmeadow.autumn.journal</string>
+        <string>com.dartmeadow.autumn.memory</string>
     </array>
     <key>UIBackgroundModes</key>
     <array>

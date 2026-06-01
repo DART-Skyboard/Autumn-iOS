@@ -27,7 +27,7 @@ public final class PersistenceController: @unchecked Sendable {
             forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
         description?.cloudKitContainerOptions =
             NSPersistentCloudKitContainerOptions(
-                containerIdentifier: "iCloud.DART-Meadow-LLC.Autumn"
+                containerIdentifier: "iCloud.com.dartmeadow.autumn"
             )
 
         container.loadPersistentStores { _, error in
