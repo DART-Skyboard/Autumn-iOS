@@ -15,15 +15,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.2 and verify iOS SDK
+      - name: Select Xcode 16.2
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
-          # Verify iphoneos SDK is available inside Xcode.app (no download needed)
-          echo "=== iOS SDKs ==="
-          xcodebuild -showsdks | grep iphoneos
-          # List the SDK directory directly
-          ls /Applications/Xcode_16.2.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/ || true
+          echo "=== SDKs ==="
+          xcodebuild -showsdks
+          echo "=== iOS platform path ==="
+          ls /Applications/Xcode_16.2.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/ 2>/dev/null || echo "path not found"
+          xcrun --sdk iphoneos --show-sdk-path 2>/dev/null || echo "xcrun sdk check failed"
 
       - name: Install App Store Connect API key
         env:
@@ -59,6 +59,8 @@ jobs:
           xcodegen generate --spec project.yml
           grep -m1 "objectVersion" Autumn.xcodeproj/project.pbxproj
           xcodebuild -project Autumn.xcodeproj -list
+          echo "=== Available destinations ==="
+          xcodebuild -project Autumn.xcodeproj -scheme AutumnApp -showdestinations 2>/dev/null | head -20 || true
 
       - name: Resolve Swift packages
         env:
@@ -76,14 +78,12 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # Use explicit SDKROOT path to avoid destination resolution issues
-          SDK_PATH=$(xcodebuild -showsdks | grep iphoneos | tail -1 | awk '{print $NF}' | sed 's/-sdk //')
-          echo "Using SDK: $SDK_PATH"
+          # Set SDKROOT explicitly via build setting alongside destination
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
             -configuration Release \
-            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
@@ -91,6 +91,7 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
+            SDKROOT=iphoneos \
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
