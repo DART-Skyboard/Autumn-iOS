@@ -8,15 +8,15 @@
     <string>L7AHWS9Q6V</string>
     <key>signingStyle</key>
     <string>automatic</string>
-    <key>signingCertificate</key>
-    <string>Apple Distribution</string>
     <key>destination</key>
-    <string>upload</string>
+    <string>export</string>
     <key>uploadBitcode</key>
     <false/>
     <key>uploadSymbols</key>
     <true/>
     <key>manageAppVersionAndBuildNumber</key>
+    <true/>
+    <key>stripSwiftSymbols</key>
     <true/>
 </dict>
 </plist>

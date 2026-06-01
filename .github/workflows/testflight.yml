@@ -20,11 +20,9 @@ jobs:
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
 
-      - name: Download iOS platform SDK
+      - name: Download iOS platform
         run: |
-          # Download iOS platform so generic/platform=iOS destination works
           sudo xcodebuild -downloadPlatform iOS
-          echo "=== Available SDKs after download ==="
           xcodebuild -showsdks | grep -i iphoneos
 
       - name: Install App Store Connect API key
@@ -36,10 +34,7 @@ jobs:
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           KEY_SIZE=$(wc -c < ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8)
           echo "API key size: $KEY_SIZE bytes"
-          if [ "$KEY_SIZE" -lt 100 ]; then
-            echo "ERROR: APP_STORE_CONNECT_API_KEY_CONTENT secret is empty"
-            exit 1
-          fi
+          [ "$KEY_SIZE" -lt 100 ] && echo "ERROR: secret empty" && exit 1 || true
 
       - name: Setup signing keychain
         run: |
@@ -62,8 +57,7 @@ jobs:
       - name: Generate Xcode project
         run: |
           xcodegen generate --spec project.yml
-          OBJ_VER=$(grep -m1 "objectVersion" Autumn.xcodeproj/project.pbxproj | tr -d ' ;' | cut -d= -f2)
-          echo "objectVersion: $OBJ_VER"
+          grep -m1 "objectVersion" Autumn.xcodeproj/project.pbxproj
           xcodebuild -project Autumn.xcodeproj -list
 
       - name: Resolve Swift packages
@@ -77,11 +71,15 @@ jobs:
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-      - name: Build and archive
+      - name: Archive (phase 1 — Development signing OK here)
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
+          # Phase 1: Archive compiles and packages the app.
+          # Development signing is acceptable here because ExportOptions
+          # with method=app-store-connect will re-sign with Distribution
+          # cert during the Export phase (phase 2).
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
@@ -96,13 +94,16 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
-          ls -la "$RUNNER_TEMP/Autumn.xcarchive" || (echo "Archive missing!" && exit 1)
+          ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
-      - name: Export IPA
+      - name: Export IPA (phase 2 — Distribution re-signing)
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
+          # Phase 2: Export re-signs with Apple Distribution cert.
+          # method=app-store-connect + signingStyle=automatic selects
+          # the distribution cert and creates the App Store profile.
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
@@ -111,7 +112,7 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-          find $RUNNER_TEMP/export -name '*.ipa' | head -3
+          find $RUNNER_TEMP/export -name '*.ipa'
 
       - name: Upload to TestFlight
         env:
