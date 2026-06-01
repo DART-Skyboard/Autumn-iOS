@@ -15,10 +15,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.2
+      - name: Select Xcode 16.2 and run first launch setup
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
+          # Register all bundled platforms so generic/platform=iOS works
+          sudo xcodebuild -runFirstLaunch
+          echo "=== iOS SDK ==="
+          xcodebuild -showsdks | grep iphoneos
 
       - name: Install App Store Connect API key
         env:
@@ -66,13 +70,9 @@ jobs:
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-      - name: Archive (skip signing — export will sign)
+      - name: Archive (skip portal signing — export handles it)
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # Do NOT use -allowProvisioningUpdates here — that triggers
-          # Apple portal to create a Development profile (needs devices).
-          # Sign with CODE_SIGN_IDENTITY="" to skip portal calls entirely.
-          # The export step (with app-store-connect method) handles real signing.
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
@@ -86,13 +86,11 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
-      - name: Export IPA (signs with Distribution cert via ASC API key)
+      - name: Export IPA with Distribution signing
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # -allowProvisioningUpdates HERE creates an App Store Distribution
-          # profile (no devices needed) via the ASC API key
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
