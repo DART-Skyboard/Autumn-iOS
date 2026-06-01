@@ -9,21 +9,21 @@ jobs:
   build-and-deploy:
     name: Build Autumn iOS to TestFlight
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.2
+      - name: Select Xcode 16.2 and verify iOS SDK
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
-
-      - name: Download iOS platform
-        run: |
-          sudo xcodebuild -downloadPlatform iOS
-          xcodebuild -showsdks | grep -i iphoneos
+          # Verify iphoneos SDK is available inside Xcode.app (no download needed)
+          echo "=== iOS SDKs ==="
+          xcodebuild -showsdks | grep iphoneos
+          # List the SDK directory directly
+          ls /Applications/Xcode_16.2.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/ || true
 
       - name: Install App Store Connect API key
         env:
@@ -71,21 +71,19 @@ jobs:
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-      - name: Archive (phase 1 — Development signing OK here)
+      - name: Archive
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # Phase 1: Archive compiles and packages the app.
-          # Development signing is acceptable here because ExportOptions
-          # with method=app-store-connect will re-sign with Distribution
-          # cert during the Export phase (phase 2).
+          # Use explicit SDKROOT path to avoid destination resolution issues
+          SDK_PATH=$(xcodebuild -showsdks | grep iphoneos | tail -1 | awk '{print $NF}' | sed 's/-sdk //')
+          echo "Using SDK: $SDK_PATH"
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
             -configuration Release \
             -sdk iphoneos \
-            -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
@@ -96,14 +94,11 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
-      - name: Export IPA (phase 2 — Distribution re-signing)
+      - name: Export IPA
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
-          # Phase 2: Export re-signs with Apple Distribution cert.
-          # method=app-store-connect + signingStyle=automatic selects
-          # the distribution cert and creates the App Store profile.
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
