@@ -19,6 +19,8 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
+          # List available iOS platforms
+          xcodebuild -showsdks | grep -i ios || true
 
       - name: Install App Store Connect API key
         env:
@@ -39,8 +41,6 @@ jobs:
 
       - name: Install xcodegen 2.42.0
         run: |
-          # Download exact binary from GitHub releases
-          # zip extracts to: xcodegen_bin/xcodegen/bin/xcodegen
           curl -L "https://github.com/yonaskolb/XcodeGen/releases/download/2.42.0/xcodegen.zip" \
             -o /tmp/xcodegen.zip
           unzip -o /tmp/xcodegen.zip -d /tmp/xcodegen_bin
@@ -51,8 +51,7 @@ jobs:
       - name: Generate Xcode project
         run: |
           xcodegen generate --spec project.yml
-          OBJ_VER=$(grep -m1 "objectVersion" Autumn.xcodeproj/project.pbxproj | tr -d ' \t;' | cut -d= -f2)
-          echo "objectVersion: $OBJ_VER"
+          echo "objectVersion: $(grep -m1 objectVersion Autumn.xcodeproj/project.pbxproj | tr -d ' \t;' | cut -d= -f2)"
 
       - name: Resolve Swift packages
         env:
@@ -70,10 +69,14 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           security unlock-keychain -p "keychainpass" $RUNNER_TEMP/signing.keychain-db
+          # Use SDK directly — avoids destination platform matching issue
+          # macos-15 runner has iphoneos SDK built into Xcode 16.2
+          SDK=$(xcodebuild -showsdks | grep "iphoneos" | tail -1 | awk '{print $NF}')
+          echo "Using SDK: $SDK"
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
-            -destination "generic/platform=iOS" \
+            -sdk "$SDK" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8" \
