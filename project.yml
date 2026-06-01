@@ -11,7 +11,7 @@ packages:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     from: "2.4.0"
 targets:
-  # ── LEATRCore — standalone framework ──────────────────────
+  # ── LEATRCore — static library (no signing needed) ────────
   LEATRCore:
     type: framework
     platform: iOS
@@ -24,8 +24,11 @@ targets:
         SWIFT_VERSION: "5.9"
         DEFINES_MODULE: YES
         SKIP_INSTALL: YES
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        GENERATE_INFOPLIST_FILE: YES
 
-  # ── AutumnServices — standalone framework ─────────────────
+  # ── AutumnServices — framework (no signing needed) ────────
   AutumnServices:
     type: framework
     platform: iOS
@@ -40,8 +43,11 @@ targets:
         SWIFT_VERSION: "5.9"
         DEFINES_MODULE: YES
         SKIP_INSTALL: YES
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        GENERATE_INFOPLIST_FILE: YES
 
-  # ── AutumnApp — main application ──────────────────────────
+  # ── AutumnApp — main application (signed) ─────────────────
   AutumnApp:
     type: application
     platform: iOS
@@ -63,6 +69,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.dartmeadow.autumn
         DEVELOPMENT_TEAM: L7AHWS9Q6V
         CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "iPhone Distribution"
+        PROVISIONING_PROFILE: "97730134-ed09-4550-811e-7714a446eb79"
+        PROVISIONING_PROFILE_SPECIFIER: "AutumnGitHubFlow"
         SWIFT_VERSION: "5.9"
         CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
         ENABLE_USER_SCRIPT_SANDBOXING: NO
