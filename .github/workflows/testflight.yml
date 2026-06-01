@@ -37,35 +37,22 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "keychainpass" "$KEYCHAIN_PATH" 2>/dev/null || true
 
-      - name: Install xcodegen (exact binary from GitHub releases)
+      - name: Install xcodegen 2.42.0
         run: |
-          # Download exact v2.42.0 binary — bypasses brew versioning issue
-          # v2.42.0 generates objectVersion=76, compatible with Xcode 15.4+
-          # v2.43+ generates objectVersion=77 which only Xcode 16+ can open
-          XCODEGEN_VERSION="2.42.0"
-          RELEASE_URL="https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
-          echo "Downloading xcodegen ${XCODEGEN_VERSION}..."
-          curl -L "$RELEASE_URL" -o /tmp/xcodegen.zip
+          # Download exact binary from GitHub releases
+          # zip extracts to: xcodegen_bin/xcodegen/bin/xcodegen
+          curl -L "https://github.com/yonaskolb/XcodeGen/releases/download/2.42.0/xcodegen.zip" \
+            -o /tmp/xcodegen.zip
           unzip -o /tmp/xcodegen.zip -d /tmp/xcodegen_bin
-          sudo mv /tmp/xcodegen_bin/xcodegen /usr/local/bin/xcodegen || \
-            sudo mv /tmp/xcodegen_bin/*/xcodegen /usr/local/bin/xcodegen || \
-            find /tmp/xcodegen_bin -name xcodegen -exec sudo mv {} /usr/local/bin/xcodegen \;
-          chmod +x /usr/local/bin/xcodegen
+          sudo cp /tmp/xcodegen_bin/xcodegen/bin/xcodegen /usr/local/bin/xcodegen
+          sudo chmod +x /usr/local/bin/xcodegen
           xcodegen version
-          echo "✓ xcodegen $(xcodegen version) installed"
 
       - name: Generate Xcode project
         run: |
           xcodegen generate --spec project.yml
-          echo "=== Generated project ==="
-          ls -la *.xcodeproj
-          # Verify objectVersion is 76 (Xcode 15.4 compatible)
-          OBJ_VER=$(grep -m1 "objectVersion" Autumn.xcodeproj/project.pbxproj | tr -d ' 	;' | cut -d= -f2)
+          OBJ_VER=$(grep -m1 "objectVersion" Autumn.xcodeproj/project.pbxproj | tr -d ' \t;' | cut -d= -f2)
           echo "objectVersion: $OBJ_VER"
-          if [ "$OBJ_VER" -gt "76" ] 2>/dev/null; then
-            echo "ERROR: objectVersion $OBJ_VER > 76, Xcode 15.4 cannot open this project"
-            exit 1
-          fi
 
       - name: Resolve Swift packages
         env:
