@@ -19,8 +19,6 @@ jobs:
         run: |
           sudo xcode-select -switch /Applications/Xcode_16.2.app
           xcodebuild -version
-          echo "=== Available iOS SDKs ==="
-          xcodebuild -showsdks | grep -i iphoneos
 
       - name: Install App Store Connect API key
         env:
@@ -29,6 +27,12 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8
+          # Verify key file is not empty
+          if [ ! -s ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8 ]; then
+            echo "ERROR: ASC_KEY_CONTENT secret is empty"
+            exit 1
+          fi
+          echo "API key installed: $(wc -c < ~/.appstoreconnect/private_keys/AuthKey_P6Z72KS63T.p8) bytes"
 
       - name: Setup signing keychain
         run: |
@@ -73,6 +77,7 @@ jobs:
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
+            -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             -allowProvisioningUpdates \
@@ -80,7 +85,9 @@ jobs:
             -authenticationKeyID "P6Z72KS63T" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
           ls -la "$RUNNER_TEMP/Autumn.xcarchive" || (echo "Archive missing!" && exit 1)
 
@@ -105,6 +112,7 @@ jobs:
         run: |
           IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
           echo "Uploading: $IPA"
+          # Use xcrun altool with ASC API key (Xcode 16 compatible)
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA" \
