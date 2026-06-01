@@ -114,7 +114,7 @@ jobs:
 
           # Always use Manual signing with Distribution cert + known profile UUID
           # Automatic signing tries to find Development cert first — fails on CI
-          PP_UUID_FINAL="${PROFILE_UUID:-c70dd64b-f215-4399-a4d9-74aee45d132c}"
+          PP_UUID_FINAL="${PROFILE_UUID:-97730134-ed09-4550-811e-7714a446eb79}"
           echo "Signing with profile UUID: $PP_UUID_FINAL"
           xcodebuild archive \
             -project Autumn.xcodeproj \
