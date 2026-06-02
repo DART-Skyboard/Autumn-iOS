@@ -3,42 +3,19 @@ import CoreData
 
 public final class PersistenceController: @unchecked Sendable {
     public static let shared = PersistenceController()
-
     public let container: NSPersistentContainer
 
     public init(inMemory: Bool = false) {
         let model = NSManagedObjectModel.autumnModel
-        let built: NSPersistentContainer
-
-        if !inMemory && FileManager.default.ubiquityIdentityToken != nil {
-            let ck = NSPersistentCloudKitContainer(name: "AutumnData",
-                                                   managedObjectModel: model)
-            let desc = ck.persistentStoreDescriptions.first
-            desc?.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-            desc?.setOption(true as NSNumber,
-                forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-            desc?.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
-                containerIdentifier: "iCloud.com.dartmeadow.autumn")
-            ck.loadPersistentStores { _, error in
-                if let error { print("[CoreData] CloudKit: \(error)") }
-            }
-            ck.viewContext.automaticallyMergesChangesFromParent = true
-            ck.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-            built = ck
-        } else {
-            let local = NSPersistentContainer(name: "AutumnData",
-                                              managedObjectModel: model)
-            if inMemory {
-                local.persistentStoreDescriptions.first?.url =
-                    URL(fileURLWithPath: "/dev/null")
-            }
-            local.loadPersistentStores { _, error in
-                if let error { print("[CoreData] Local: \(error)") }
-            }
-            local.viewContext.automaticallyMergesChangesFromParent = true
-            built = local
+        let built = NSPersistentContainer(name: "AutumnData", managedObjectModel: model)
+        if inMemory {
+            built.persistentStoreDescriptions.first?.url =
+                URL(fileURLWithPath: "/dev/null")
         }
-
+        built.loadPersistentStores { _, error in
+            if let error { print("[CoreData] \(error)") }
+        }
+        built.viewContext.automaticallyMergesChangesFromParent = true
         self.container = built
     }
 
