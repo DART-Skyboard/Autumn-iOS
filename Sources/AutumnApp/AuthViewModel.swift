@@ -9,6 +9,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
     @Published public var isSignedIn = false
     @Published public var githubConnected = false
     @Published public var username = ""
+    @Published public var githubUsername = ""
     @Published public var appleUserId = ""
     @Published public var deviceFlowCode: DeviceFlowCode? = nil
     @Published public var error: String? = nil
@@ -16,6 +17,18 @@ public final class AuthViewModel: NSObject, ObservableObject {
     // GitHub OAuth App client ID (device flow — no secret needed)
     // Replace with your actual OAuth App client_id from github.com/settings/developers
     private let githubClientId = "Ov23li2li2K0njEqO1WTSdD"
+
+    // MARK: — Sign in with PAT (direct)
+    public func signInWithPAT(pat: String) {
+        guard !pat.isEmpty else { return }
+        KeychainService.shared.save(key: "github_pat", value: pat)
+        githubConnected = true
+        githubUsername = "dartsolarpunk"
+        if !isSignedIn {
+            isSignedIn = true
+            username = "Justin"
+        }
+    }
 
     // MARK: — Sign in with Apple
     public func signInWithApple() {
