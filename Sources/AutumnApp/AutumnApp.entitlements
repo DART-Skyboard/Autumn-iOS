@@ -2,11 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>application-identifier</key>
+    <string>L7AHWS9Q6V.com.dartmeadow.autumn</string>
     <key>com.apple.developer.applesignin</key>
     <array>
         <string>Default</string>
     </array>
+    <key>com.apple.developer.team-identifier</key>
+    <string>L7AHWS9Q6V</string>
     <key>aps-environment</key>
     <string>production</string>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>L7AHWS9Q6V.*</string>
+        <string>com.apple.token</string>
+    </array>
+    <key>get-task-allow</key>
+    <false/>
+    <key>beta-reports-active</key>
+    <true/>
 </dict>
 </plist>
