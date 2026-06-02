@@ -7,14 +7,15 @@
     <key>teamID</key>
     <string>L7AHWS9Q6V</string>
     <key>signingStyle</key>
-    <string>automatic</string>
-    <key>destination</key>
-    <string>export</string>
+    <string>manual</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.dartmeadow.autumn</key>
+        <string>AutumnGitHubFlow</string>
+    </dict>
     <key>uploadBitcode</key>
     <false/>
     <key>uploadSymbols</key>
-    <true/>
-    <key>manageAppVersionAndBuildNumber</key>
     <true/>
     <key>stripSwiftSymbols</key>
     <true/>
