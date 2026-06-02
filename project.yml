@@ -27,7 +27,7 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGN_IDENTITY: ""
         GENERATE_INFOPLIST_FILE: YES
-        CURRENT_PROJECT_VERSION: "20"
+        CURRENT_PROJECT_VERSION: "21"
         MARKETING_VERSION: "1.0.0"
 
   # ── AutumnServices — framework (no signing needed) ────────
@@ -48,7 +48,7 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGN_IDENTITY: ""
         GENERATE_INFOPLIST_FILE: YES
-        CURRENT_PROJECT_VERSION: "20"
+        CURRENT_PROJECT_VERSION: "21"
         MARKETING_VERSION: "1.0.0"
 
   # ── AutumnApp — main application (signed) ─────────────────
@@ -106,7 +106,7 @@ targets:
         DEVELOPMENT_TEAM: L7AHWS9Q6V
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "iPhone Distribution"
-        PROVISIONING_PROFILE: "97730134-ed09-4550-811e-7714a446eb79"
+        PROVISIONING_PROFILE: "d5e965c9-84bd-4151-9157-785629bc3d1f"
         PROVISIONING_PROFILE_SPECIFIER: "AutumnGitHubFlow"
         SWIFT_VERSION: "5.9"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -115,7 +115,7 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-        CURRENT_PROJECT_VERSION: "20"
+        CURRENT_PROJECT_VERSION: "21"
         MARKETING_VERSION: "1.0.0"
       configs:
         Debug:
