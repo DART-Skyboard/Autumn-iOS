@@ -133,33 +133,27 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          KP="${KEYCHAIN_PASSWORD:-keychainpass}"
-          security unlock-keychain -p "$KP" $RUNNER_TEMP/signing.keychain-db
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
-            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8" \
-            -authenticationKeyID "NQXQ595W59" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-          find $RUNNER_TEMP/export -name '*.ipa'
+          # Package IPA directly from archive (bypasses Xcode 26 exportArchive issues)
+          ARCHIVE="$RUNNER_TEMP/Autumn.xcarchive"
+          APP=$(find "$ARCHIVE/Products/Applications" -name "*.app" | head -1)
+          echo "Packaging: $APP"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -r "$APP" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qr "Autumn.ipa" Payload/
+          echo "IPA_PATH=$RUNNER_TEMP/Autumn.ipa" >> $GITHUB_ENV
+          ls -la "$RUNNER_TEMP/Autumn.ipa"
 
       - name: Upload to TestFlight
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          IPA=$(find $RUNNER_TEMP/export -name '*.ipa' | head -1)
-          echo "Uploading: $IPA"
+          echo "Uploading: $IPA_PATH"
           xcrun altool --upload-app \
             --type ios \
-            --file "$IPA" \
+            --file "$IPA_PATH" \
             --apiKey "NQXQ595W59" \
             --apiIssuer "$ASC_ISSUER_ID" \
+            --apiKeyPath ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8 \
             --verbose 2>&1
-          STATUS=$?
-          if [ $STATUS -ne 0 ]; then
-            echo "Upload failed with exit $STATUS"
-            exit $STATUS
-          fi
           echo "✓ Upload complete"
