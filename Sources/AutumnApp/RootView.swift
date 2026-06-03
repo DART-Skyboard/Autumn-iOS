@@ -14,6 +14,13 @@ public struct RootView: View {
             }
         }
         .onAppear { authVM.restoreAppleSession() }
+        .overlay {
+            if authVM.isSignedIn && !authVM.hasAcceptedPolicy {
+                PrivacyPolicyOverlay()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: authVM.hasAcceptedPolicy)
     }
 }
 
