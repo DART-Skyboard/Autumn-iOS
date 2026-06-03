@@ -1,5 +1,6 @@
 import SwiftUI
 import AutumnServices
+import AuthenticationServices
 
 public struct RootView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -24,47 +25,149 @@ public struct MainTabView: View {
     @State private var selected = 0
     @State private var showUserProfile = false
 
-    public var body: some View {
-        ZStack(alignment: .bottom) {
-            themeVM.current.gradient.ignoresSafeArea()
-
-            TabView(selection: $selected) {
-                ChatView().tag(0)
-                BRPNSceneView().tag(1)
-                ToolsView().tag(2)
-                JournalView().tag(3)
-                SettingsView().tag(4)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-
-            // User profile avatar button
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { showUserProfile = true } label: {
-                        ZStack {
-                            Circle().fill(themeVM.current.accent.opacity(0.15))
-                                .frame(width: 36, height: 36)
-                            Text(authVM.username.prefix(1).uppercased())
-                                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                .foregroundColor(themeVM.current.accent)
-                        }
-                    }
-                    .padding(.trailing, 16).padding(.top, 8)
-                }
-                Spacer()
-            }
-
-            // Custom tab bar
-            AutumnTabBar(selected: $selected)
-
-            // Privacy policy overlay — rendered as separate view to avoid binding issues
+    // Per-tab header leading content (title / badges)
+    private var tabTitle: String {
+        switch selected {
+        case 0: return "CHAT"
+        case 1: return "BRPN"
+        case 2: return "TOOLS"
+        case 3: return "JOURNAL"
+        case 4: return "SETTINGS"
+        default: return ""
         }
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            // ── Persistent top header ─────────────────────────────
+            AutumnHeader(
+                selected: selected,
+                showUserProfile: $showUserProfile
+            )
+
+            // ── Tab content ───────────────────────────────────────
+            ZStack {
+                themeVM.current.gradient.ignoresSafeArea()
+                TabView(selection: $selected) {
+                    ChatView().tag(0)
+                    BRPNSceneView().tag(1)
+                    ToolsView().tag(2)
+                    JournalView().tag(3)
+                    SettingsView().tag(4)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+
+            // ── Custom tab bar ────────────────────────────────────
+            AutumnTabBar(selected: $selected)
+        }
+        .ignoresSafeArea(edges: .bottom)
         .sheet(isPresented: $showUserProfile) { UserProfileSheet() }
     }
 }
 
-// MARK: — Policy overlay wrapper
+// MARK: — Persistent Top Header
+struct AutumnHeader: View {
+    let selected: Int
+    @Binding var showUserProfile: Bool
+    @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var sceneVM: BRPNSceneViewModel
+
+    var body: some View {
+        ZStack {
+            // Background
+            themeVM.current.surface
+                .overlay(
+                    Rectangle()
+                        .frame(height: 1)
+                        .foregroundColor(themeVM.current.accent.opacity(0.25)),
+                    alignment: .bottom
+                )
+
+            HStack(spacing: 8) {
+                // ── Left: per-tab content ─────────────────────────
+                Group {
+                    switch selected {
+                    case 1: // BRPN — shell badges
+                        BRPNHeaderBadges()
+                    default:
+                        Text(tabTitle(for: selected))
+                            .font(.custom("Orbitron-Bold", size: 13))
+                            .foregroundColor(themeVM.current.accent)
+                            .tracking(3)
+                    }
+                }
+
+                Spacer()
+
+                // ── Right: avatar button ──────────────────────────
+                Button { showUserProfile = true } label: {
+                    ZStack {
+                        Circle()
+                            .fill(themeVM.current.accent.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        Circle()
+                            .stroke(themeVM.current.accent.opacity(0.35), lineWidth: 1)
+                            .frame(width: 36, height: 36)
+                        Text(authVM.username.prefix(1).uppercased())
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(themeVM.current.accent)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+        .frame(height: 56)
+    }
+
+    private func tabTitle(for index: Int) -> String {
+        switch index {
+        case 0: return "CHAT"
+        case 2: return "TOOLS"
+        case 3: return "JOURNAL"
+        case 4: return "SETTINGS"
+        default: return ""
+        }
+    }
+}
+
+// MARK: — BRPN header badges (shell pills + node count)
+struct BRPNHeaderBadges: View {
+    @EnvironmentObject var sceneVM: BRPNSceneViewModel
+    @EnvironmentObject var themeVM: ThemeViewModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(BRPNShell.allCases, id: \.rawValue) { shell in
+                VStack(spacing: 1) {
+                    Text(shell.displayName.uppercased())
+                        .font(.system(size: 7, design: .monospaced))
+                        .foregroundColor(themeVM.current.textSecondary)
+                    Text(shell.role)
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .foregroundColor(themeVM.current.accent)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(themeVM.current.accent.opacity(0.08))
+                .cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8)
+                    .stroke(themeVM.current.accent.opacity(0.2), lineWidth: 1))
+            }
+            HStack(spacing: 4) {
+                Image(systemName: "circle.grid.3x3")
+                    .font(.system(size: 9))
+                    .foregroundColor(themeVM.current.textSecondary)
+                Text("\(sceneVM.activeNodes) nodes")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(themeVM.current.textSecondary)
+            }
+            .padding(.leading, 4)
+        }
+    }
+}
 
 // MARK: — User Profile Sheet
 struct UserProfileSheet: View {
@@ -96,14 +199,17 @@ struct UserProfileSheet: View {
                 Spacer().frame(height: 32)
 
                 VStack(spacing: 0) {
-                    profileRow("Apple ID", value: authVM.isSignedIn ? "Connected ✓" : "—", color: .green)
+                    profileRow("Apple ID",
+                               value: authVM.appleUserId.isEmpty ? "—" : "Connected ✓",
+                               color: authVM.appleUserId.isEmpty ? themeVM.current.textSecondary : .green)
                     Divider().background(Color.white.opacity(0.08))
-                    profileRow("GitHub", value: authVM.githubConnected ? authVM.githubUsername : "Not connected",
+                    profileRow("GitHub",
+                               value: authVM.githubConnected ? authVM.githubUsername : "Not connected",
                                color: authVM.githubConnected ? themeVM.current.accent : themeVM.current.textSecondary)
                     Divider().background(Color.white.opacity(0.08))
                     profileRow("LEATR", value: "v2 · Active", color: themeVM.current.accent)
                     Divider().background(Color.white.opacity(0.08))
-                    profileRow("Build", value: "1.0.0 (37)", color: themeVM.current.textSecondary)
+                    profileRow("Build", value: "1.0.0 (43)", color: themeVM.current.textSecondary)
                 }
                 .background(themeVM.current.surface).cornerRadius(12).padding(.horizontal, 20)
 
@@ -139,10 +245,10 @@ struct AutumnTabBar: View {
 
     private let tabs: [(icon: String, label: String)] = [
         ("bubble.left.and.bubble.right", "Chat"),
-        ("circle.grid.3x3.fill", "BRPN"),
-        ("wrench.and.screwdriver", "Tools"),
-        ("book.closed", "Journal"),
-        ("gearshape", "Settings")
+        ("circle.grid.3x3.fill",         "BRPN"),
+        ("wrench.and.screwdriver",        "Tools"),
+        ("book.closed",                   "Journal"),
+        ("gearshape",                     "Settings")
     ]
 
     var body: some View {
@@ -167,5 +273,6 @@ struct AutumnTabBar: View {
         .background(themeVM.current.surface)
         .overlay(Rectangle().frame(height: 1)
             .foregroundColor(themeVM.current.accent.opacity(0.3)), alignment: .top)
+        .padding(.bottom, 0)
     }
 }
