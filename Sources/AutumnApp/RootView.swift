@@ -64,8 +64,10 @@ public struct MainTabView: View {
             AutumnTabBar(selected: $selected)
 
             // Privacy policy — shown once on first launch
-                AutumnPolicyOverlay(onAccept: { authVM.acceptPolicy() },
-                                    onDecline: { authVM.signOut() })
+            if !policyAccepted {
+                AutumnPolicyOverlay(
+                    onAccept: { authVM.acceptPolicy(); policyAccepted = true },
+                    onDecline: { authVM.signOut() })
                     .zIndex(100)
             }
         }
