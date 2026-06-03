@@ -13,7 +13,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
     @Published public var username         = ""
     @Published public var githubUsername   = ""
     @Published public var appleUserId      = ""
-    @Published public var deviceFlowCode: DeviceFlowCode? = nil
+    @Published public var deviceFlowCode: DeviceFlowDisplay? = nil
     @Published public var error: String?   = nil
 
     // Correct client_id — Ov23li prefix
@@ -58,7 +58,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
         error = nil
         do {
             let flow = try await GitHubClient.shared.startDeviceFlow(clientId: githubClientId)
-            deviceFlowCode = DeviceFlowCode(
+            deviceFlowCode = DeviceFlowDisplay(
                 userCode:        flow.userCode,
                 verificationUrl: flow.verificationUri,
                 deviceCode:      flow.deviceCode,
@@ -168,4 +168,12 @@ extension AuthViewModel:
         if asErr?.code == .canceled { return }
         error = err.localizedDescription
     }
+}
+
+// MARK: — Display model for device flow UI
+public struct DeviceFlowDisplay {
+    public let userCode: String
+    public let verificationUrl: String
+    public let deviceCode: String
+    public let interval: Int
 }
