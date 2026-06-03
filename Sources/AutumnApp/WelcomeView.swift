@@ -1,6 +1,6 @@
-
 import SwiftUI
 import AuthenticationServices
+import SafariServices
 import LEATRCore
 
 public struct WelcomeView: View {
@@ -53,7 +53,7 @@ public struct WelcomeView: View {
 
                 Spacer()
 
-                // ── 3 auth buttons ────────────────────────────────────
+                // ── Auth buttons ──────────────────────────────────────
                 VStack(spacing: 12) {
 
                     // ① Sign in with Apple
@@ -109,7 +109,6 @@ public struct WelcomeView: View {
                                 .stroke(Color.white.opacity(0.1), lineWidth: 1))
                     }
 
-                    // Error display
                     if let err = authVM.error {
                         Text(err)
                             .font(.system(size: 10, design: .monospaced))
@@ -130,10 +129,13 @@ public struct WelcomeView: View {
 }
 
 // MARK: — GitHub Device Flow Sheet
+// Opens github.com/login/device in-app via SFSafariViewController when code is ready
 struct GitHubDeviceFlowSheet: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @Environment(\.dismiss) var dismiss
+    @State private var showSafari = false
+    @State private var didAutoOpen = false
 
     var body: some View {
         ZStack {
@@ -146,19 +148,8 @@ struct GitHubDeviceFlowSheet: View {
                     .padding(.top, 32)
 
                 if let flow = authVM.deviceFlowCode {
-                    // Show code + spinner
                     VStack(spacing: 16) {
-                        VStack(spacing: 6) {
-                            Text("Visit this address:")
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundColor(themeVM.current.textSecondary)
-                            Text(flow.verificationUrl)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(themeVM.current.accent)
-                                .multilineTextAlignment(.center)
-                        }
-
-                        // Code — large and copyable
+                        // Code — tap to copy
                         Button {
                             UIPasteboard.general.string = flow.userCode
                         } label: {
@@ -177,6 +168,31 @@ struct GitHubDeviceFlowSheet: View {
                             }
                         }
 
+                        // Open GitHub in-app button
+                        Button {
+                            UIPasteboard.general.string = flow.userCode
+                            showSafari = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "safari.fill")
+                                    .font(.system(size: 15))
+                                Text("Open GitHub Authorization")
+                                    .font(.custom("Exo2-SemiBold", size: 14))
+                            }
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(themeVM.current.accent)
+                            .cornerRadius(12)
+                        }
+                        .padding(.horizontal, 28)
+
+                        Text("Code copied to clipboard — paste it on the GitHub page.")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(themeVM.current.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+
                         HStack(spacing: 10) {
                             ProgressView()
                                 .tint(themeVM.current.accent)
@@ -187,9 +203,16 @@ struct GitHubDeviceFlowSheet: View {
                         }
                     }
                     .padding(.horizontal, 24)
+                    // Auto-open safari the first time the code appears
+                    .onAppear {
+                        if !didAutoOpen {
+                            didAutoOpen = true
+                            UIPasteboard.general.string = flow.userCode
+                            showSafari = true
+                        }
+                    }
 
                 } else {
-                    // Start button
                     VStack(spacing: 16) {
                         Text("Authorize Autumn to read/write your GitHub repositories.")
                             .font(.custom("Exo2-Regular", size: 13))
@@ -221,14 +244,33 @@ struct GitHubDeviceFlowSheet: View {
                 }
 
                 Spacer()
-
                 Button("Cancel") { dismiss() }
                     .foregroundColor(themeVM.current.textSecondary)
                     .padding(.bottom, 32)
+            }
+        }
+        .sheet(isPresented: $showSafari) {
+            if let url = URL(string: "https://github.com/login/device") {
+                SafariView(url: url)
+                    .ignoresSafeArea()
             }
         }
         .onChange(of: authVM.githubConnected) { connected in
             if connected { dismiss() }
         }
     }
+}
+
+// MARK: — SFSafariViewController wrapper
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let cfg = SFSafariViewController.Configuration()
+        cfg.entersReaderIfAvailable = false
+        let vc = SFSafariViewController(url: url, configuration: cfg)
+        vc.preferredControlTintColor = UIColor(red: 0, green: 0.9, blue: 1.0, alpha: 1)
+        vc.preferredBarTintColor = UIColor(red: 0.02, green: 0.05, blue: 0.08, alpha: 1)
+        return vc
+    }
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
