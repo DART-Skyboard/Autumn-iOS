@@ -23,6 +23,7 @@ public struct MainTabView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @State private var selected = 0
     @State private var showUserProfile = false
+    @State private var policyAccepted = UserDefaults.standard.bool(forKey: "policy_accepted_v1")
 
     public var body: some View {
         ZStack(alignment: .bottom) {
@@ -63,7 +64,6 @@ public struct MainTabView: View {
             AutumnTabBar(selected: $selected)
 
             // Privacy policy — shown once on first launch
-            if !authVM.hasAcceptedPolicy {
                 AutumnPolicyOverlay(onAccept: { authVM.acceptPolicy() },
                                     onDecline: { authVM.signOut() })
                     .zIndex(100)
