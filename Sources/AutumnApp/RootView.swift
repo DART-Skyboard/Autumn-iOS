@@ -59,35 +59,12 @@ public struct MainTabView: View {
             AutumnTabBar(selected: $selected)
 
             // Privacy policy overlay — rendered as separate view to avoid binding issues
-            PolicyOverlayWrapper()
         }
         .sheet(isPresented: $showUserProfile) { UserProfileSheet() }
     }
 }
 
 // MARK: — Policy overlay wrapper
-private struct PolicyOverlayWrapper: View {
-    @EnvironmentObject var authVM: AuthViewModel
-    @EnvironmentObject var themeVM: ThemeViewModel
-    @State private var shown = !UserDefaults.standard.bool(forKey: "policy_accepted_v1")
-    @State private var accepted = false
-    @State private var declined = false
-
-    var body: some View {
-        Group {
-            if shown {
-                AutumnPolicyOverlay(onAccept: { accepted = true }, onDecline: { declined = true })
-                    .zIndex(99)
-            }
-        }
-        .onChange(of: accepted) { val in
-            if val { authVM.acceptPolicy(); shown = false }
-        }
-        .onChange(of: declined) { val in
-            if val { authVM.signOut(); shown = false }
-        }
-    }
-}
 
 // MARK: — User Profile Sheet
 struct UserProfileSheet: View {
