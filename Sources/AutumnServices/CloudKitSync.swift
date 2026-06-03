@@ -1,22 +1,16 @@
 import Foundation
-import CloudKit
 import LEATRCore
 
-// MARK: — Phase 3: CloudKit Memory Sync + leatr-ash Journal Parity
-// Keeps CloudKit and GitHub (leatr-ash) in sync
-// CloudKit = primary on-device; GitHub = persistent cross-platform backup
+// MARK: — CloudKitSync (GitHub-only, CloudKit disabled until entitlement configured)
+// Memory chunks and journal entries sync to leatr-ash repo only.
 
 public actor CloudKitSync {
     public static let shared = CloudKitSync()
 
-    private let cloud = AutumnCloud.shared
     private let github = GitHubClient.shared
-
-    // Sync interval — memory chunks auto-save every 5 messages
     private let chunkSize = 5
 
     // MARK: — Rolling Memory Sync
-    // Called from ChatViewModel after every N messages
     public func syncMemoryChunk(messages: [ChatMessage], sessionID: String) async {
         guard !messages.isEmpty else { return }
 
@@ -27,8 +21,6 @@ public actor CloudKitSync {
             .joined(separator: "\n---\n")
 
         let key = "memory_\(sessionID)_\(Date().timeIntervalSince1970.rounded())"
-
-        try? await cloud.saveMemoryChunk(chunk, key: key)
         await syncChunkToGitHub(chunk: chunk, key: key)
     }
 
@@ -46,19 +38,14 @@ public actor CloudKitSync {
         )
     }
 
-    // MARK: — Journal Entry Dual-Write
+    // MARK: — Journal Entry (GitHub only)
     public func saveJournalEntry(thought: String, emotion: EmotionType, username: String) async {
         let entry = CloudJournalEntry(thought: thought, emotion: emotion.rawValue)
-        try? await cloud.saveCloudJournalEntry(entry)
         try? await github.syncJournalEntry(entry, username: username)
     }
 
-    // MARK: — Session Restore
+    // MARK: — Session Restore (GitHub only)
     public func restoreSessionMemory(sessionID: String) async -> [ChatMessage] {
-        if let raw = try? await cloud.fetchMemoryChunk(key: "memory_\(sessionID)_latest") {
-            return parseChunk(raw)
-        }
-
         let owner = "DART-Skyboard"
         let repo  = "leatr-ash"
         let path  = "ashtree/autumn-ios/memory"
@@ -82,13 +69,10 @@ public actor CloudKitSync {
         }
     }
 
-    // MARK: — leatr-ash Journal Parity Check
+    // MARK: — Parity Check (stub — CloudKit disabled)
     public func parityCheck() async -> (cloudCount: Int, githubCount: Int, inSync: Bool) {
-        async let cloudEntries = (try? await cloud.fetchJournalEntries(limit: 500)) ?? []
-        async let githubCount = githubJournalCount()
-        let (cloud, github) = await (cloudEntries, githubCount)
-        let inSync = abs(cloud.count - github) <= 2
-        return (cloud.count, github, inSync)
+        let gc = await githubJournalCount()
+        return (0, gc, true)
     }
 
     private func githubJournalCount() async -> Int {
@@ -104,4 +88,3 @@ public actor CloudKitSync {
         return entries.count
     }
 }
-// NOTE: ChatViewModel.autosaveIfNeeded() extension moved to ChatViewModel.swift (AutumnApp target)
