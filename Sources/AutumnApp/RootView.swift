@@ -23,7 +23,6 @@ public struct MainTabView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @State private var selected = 0
     @State private var showUserProfile = false
-    @State private var policyAccepted = UserDefaults.standard.bool(forKey: "policy_accepted_v1")
 
     public var body: some View {
         ZStack(alignment: .bottom) {
@@ -38,24 +37,20 @@ public struct MainTabView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
 
-            // User profile button — top right
+            // User profile avatar button
             VStack {
                 HStack {
                     Spacer()
-                    Button {
-                        showUserProfile = true
-                    } label: {
+                    Button { showUserProfile = true } label: {
                         ZStack {
-                            Circle()
-                                .fill(themeVM.current.accent.opacity(0.15))
+                            Circle().fill(themeVM.current.accent.opacity(0.15))
                                 .frame(width: 36, height: 36)
                             Text(authVM.username.prefix(1).uppercased())
                                 .font(.system(size: 14, weight: .bold, design: .monospaced))
                                 .foregroundColor(themeVM.current.accent)
                         }
                     }
-                    .padding(.trailing, 16)
-                    .padding(.top, 8)
+                    .padding(.trailing, 16).padding(.top, 8)
                 }
                 Spacer()
             }
@@ -63,16 +58,32 @@ public struct MainTabView: View {
             // Custom tab bar
             AutumnTabBar(selected: $selected)
 
-            // Privacy policy — shown once on first launch
-            if !policyAccepted {
-                AutumnPolicyOverlay(
-                    onAccept: { authVM.acceptPolicy(); policyAccepted = true },
-                    onDecline: { authVM.signOut() })
-                    .zIndex(100)
-            }
+            // Privacy policy overlay — rendered as separate view to avoid binding issues
+            PolicyOverlayWrapper()
         }
-        .sheet(isPresented: $showUserProfile) {
-            UserProfileSheet()
+        .sheet(isPresented: $showUserProfile) { UserProfileSheet() }
+    }
+}
+
+// MARK: — Policy overlay wrapper (owns its own @EnvironmentObject cleanly)
+private struct PolicyOverlayWrapper: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var themeVM: ThemeViewModel
+    @State private var shown = !UserDefaults.standard.bool(forKey: "policy_accepted_v1")
+
+    var body: some View {
+        if shown {
+            AutumnPolicyOverlay(
+                onAccept: {
+                    authVM.acceptPolicy()
+                    shown = false
+                },
+                onDecline: {
+                    authVM.signOut()
+                    shown = false
+                }
+            )
+            .zIndex(99)
         }
     }
 }
@@ -87,39 +98,25 @@ struct UserProfileSheet: View {
         ZStack {
             themeVM.current.gradient.ignoresSafeArea()
             VStack(spacing: 0) {
-                // Handle bar
-                Capsule()
-                    .fill(Color.white.opacity(0.2))
-                    .frame(width: 40, height: 4)
-                    .padding(.top, 12)
-                    .padding(.bottom, 20)
+                Capsule().fill(Color.white.opacity(0.2))
+                    .frame(width: 40, height: 4).padding(.top, 12).padding(.bottom, 20)
 
-                // Avatar
                 ZStack {
-                    Circle()
-                        .fill(themeVM.current.accent.opacity(0.12))
-                        .frame(width: 80, height: 80)
-                    Circle()
-                        .stroke(themeVM.current.accent.opacity(0.4), lineWidth: 1.5)
-                        .frame(width: 80, height: 80)
+                    Circle().fill(themeVM.current.accent.opacity(0.12)).frame(width: 80, height: 80)
+                    Circle().stroke(themeVM.current.accent.opacity(0.4), lineWidth: 1.5).frame(width: 80, height: 80)
                     Text(authVM.username.prefix(1).uppercased())
-                        .font(.custom("Orbitron-Bold", size: 32))
-                        .foregroundColor(themeVM.current.accent)
+                        .font(.custom("Orbitron-Bold", size: 32)).foregroundColor(themeVM.current.accent)
                 }
 
                 Spacer().frame(height: 16)
-
                 Text(authVM.username)
-                    .font(.custom("Orbitron-Bold", size: 18))
-                    .foregroundColor(.white)
+                    .font(.custom("Orbitron-Bold", size: 18)).foregroundColor(.white)
                 Text(authVM.githubConnected ? "GitHub Connected" : "GitHub Not Connected")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(authVM.githubConnected ? .green : themeVM.current.textSecondary)
                     .padding(.top, 4)
-
                 Spacer().frame(height: 32)
 
-                // Info rows
                 VStack(spacing: 0) {
                     profileRow("Apple ID", value: authVM.isSignedIn ? "Connected ✓" : "—", color: .green)
                     Divider().background(Color.white.opacity(0.08))
@@ -128,28 +125,19 @@ struct UserProfileSheet: View {
                     Divider().background(Color.white.opacity(0.08))
                     profileRow("LEATR", value: "v2 · Active", color: themeVM.current.accent)
                     Divider().background(Color.white.opacity(0.08))
-                    profileRow("Build", value: "1.0.0 (31)", color: themeVM.current.textSecondary)
+                    profileRow("Build", value: "1.0.0 (37)", color: themeVM.current.textSecondary)
                 }
-                .background(themeVM.current.surface)
-                .cornerRadius(12)
-                .padding(.horizontal, 20)
+                .background(themeVM.current.surface).cornerRadius(12).padding(.horizontal, 20)
 
                 Spacer()
-
-                // Sign out
                 Button {
-                    authVM.signOut()
-                    dismiss()
+                    authVM.signOut(); dismiss()
                 } label: {
-                    Text("Sign Out")
-                        .font(.custom("Exo2-SemiBold", size: 15))
-                        .foregroundColor(.red)
+                    Text("Sign Out").font(.custom("Exo2-SemiBold", size: 15)).foregroundColor(.red)
                         .frame(maxWidth: .infinity).frame(height: 48)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(10)
+                        .background(Color.red.opacity(0.1)).cornerRadius(10)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 40)
+                .padding(.horizontal, 20).padding(.bottom, 40)
             }
         }
         .presentationDetents([.medium, .large])
@@ -157,16 +145,12 @@ struct UserProfileSheet: View {
 
     private func profileRow(_ label: String, value: String, color: Color) -> some View {
         HStack {
-            Text(label)
-                .font(.system(size: 13, design: .monospaced))
+            Text(label).font(.system(size: 13, design: .monospaced))
                 .foregroundColor(themeVM.current.textSecondary)
             Spacer()
-            Text(value)
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(color)
+            Text(value).font(.system(size: 13, design: .monospaced)).foregroundColor(color)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 }
 
@@ -197,18 +181,13 @@ struct AutumnTabBar: View {
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(selected == i ? themeVM.current.accent : themeVM.current.textSecondary)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
                 }
             }
         }
         .background(.ultraThinMaterial)
         .background(themeVM.current.surface)
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundColor(themeVM.current.accent.opacity(0.3)),
-            alignment: .top
-        )
+        .overlay(Rectangle().frame(height: 1)
+            .foregroundColor(themeVM.current.accent.opacity(0.3)), alignment: .top)
     }
 }
