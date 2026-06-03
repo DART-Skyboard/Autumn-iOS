@@ -14,13 +14,6 @@ public struct RootView: View {
             }
         }
         .onAppear { authVM.restoreAppleSession() }
-        .overlay(alignment: .center) {
-            if authVM.isSignedIn && !authVM.hasAcceptedPolicy {
-                PrivacyPolicyOverlay()
-                    .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.3), value: authVM.hasAcceptedPolicy)
-            }
-        }
     }
 }
 
@@ -68,6 +61,13 @@ public struct MainTabView: View {
 
             // Custom tab bar
             AutumnTabBar(selected: $selected)
+
+            // Privacy policy — shown once on first launch
+            if !authVM.hasAcceptedPolicy {
+                AutumnPolicyOverlay(onAccept: { authVM.acceptPolicy() },
+                                    onDecline: { authVM.signOut() })
+                    .zIndex(100)
+            }
         }
         .sheet(isPresented: $showUserProfile) {
             UserProfileSheet()
