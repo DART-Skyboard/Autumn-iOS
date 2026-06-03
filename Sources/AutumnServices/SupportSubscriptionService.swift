@@ -118,11 +118,15 @@ public final class SupportSubscriptionService: ObservableObject {
 
 // MARK: — Support Sheet UI
 // Drop-in sheet for both apps — call .sheet(isPresented:) { SupportSheet() }
-public struct SupportSheet: View {
+public public struct SupportSheet: View {
     @StateObject private var store = SupportSubscriptionService.shared
     @Environment(\.dismiss) var dismiss
-    var accentColor: Color = Color(red:0.0, green:0.85, blue:1.0)
-    var appName: String = "Autumn"
+    public var accentColor: Color = Color(red:0.0, green:0.85, blue:1.0)
+    public var appName: String = "Autumn"
+    public init(accentColor: Color = Color(red:0.0,green:0.85,blue:1.0), appName: String = "Autumn") {
+        self.accentColor = accentColor
+        self.appName = appName
+    }
 
     public var body: some View {
         ZStack {
