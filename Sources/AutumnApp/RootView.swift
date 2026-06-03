@@ -174,57 +174,136 @@ struct UserProfileSheet: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @Environment(\.dismiss) var dismiss
+    @State private var showAppleAccountPicker = false
+    @State private var showGitHubAccountPicker = false
 
     var body: some View {
         ZStack {
             themeVM.current.gradient.ignoresSafeArea()
-            VStack(spacing: 0) {
-                Capsule().fill(Color.white.opacity(0.2))
-                    .frame(width: 40, height: 4).padding(.top, 12).padding(.bottom, 20)
-
-                ZStack {
-                    Circle().fill(themeVM.current.accent.opacity(0.12)).frame(width: 80, height: 80)
-                    Circle().stroke(themeVM.current.accent.opacity(0.4), lineWidth: 1.5).frame(width: 80, height: 80)
-                    Text(authVM.username.prefix(1).uppercased())
-                        .font(.custom("Orbitron-Bold", size: 32)).foregroundColor(themeVM.current.accent)
-                }
-
-                Spacer().frame(height: 16)
-                Text(authVM.username)
-                    .font(.custom("Orbitron-Bold", size: 18)).foregroundColor(.white)
-                Text(authVM.githubConnected ? "GitHub Connected" : "GitHub Not Connected")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(authVM.githubConnected ? .green : themeVM.current.textSecondary)
-                    .padding(.top, 4)
-                Spacer().frame(height: 32)
-
+            ScrollView {
                 VStack(spacing: 0) {
-                    profileRow("Apple ID",
-                               value: authVM.appleUserId.isEmpty ? "—" : "Connected ✓",
-                               color: authVM.appleUserId.isEmpty ? themeVM.current.textSecondary : .green)
-                    Divider().background(Color.white.opacity(0.08))
-                    profileRow("GitHub",
-                               value: authVM.githubConnected ? authVM.githubUsername : "Not connected",
-                               color: authVM.githubConnected ? themeVM.current.accent : themeVM.current.textSecondary)
-                    Divider().background(Color.white.opacity(0.08))
-                    profileRow("LEATR", value: "v2 · Active", color: themeVM.current.accent)
-                    Divider().background(Color.white.opacity(0.08))
-                    profileRow("Build", value: "1.0.0 (43)", color: themeVM.current.textSecondary)
-                }
-                .background(themeVM.current.surface).cornerRadius(12).padding(.horizontal, 20)
+                    Capsule().fill(Color.white.opacity(0.2))
+                        .frame(width: 40, height: 4).padding(.top, 12).padding(.bottom, 20)
 
-                Spacer()
-                Button {
-                    authVM.signOut(); dismiss()
-                } label: {
-                    Text("Sign Out").font(.custom("Exo2-SemiBold", size: 15)).foregroundColor(.red)
-                        .frame(maxWidth: .infinity).frame(height: 48)
-                        .background(Color.red.opacity(0.1)).cornerRadius(10)
+                    // Avatar
+                    ZStack {
+                        Circle().fill(themeVM.current.accent.opacity(0.12)).frame(width: 80, height: 80)
+                        Circle().stroke(themeVM.current.accent.opacity(0.4), lineWidth: 1.5).frame(width: 80, height: 80)
+                        Text(authVM.username.prefix(1).uppercased())
+                            .font(.custom("Orbitron-Bold", size: 32)).foregroundColor(themeVM.current.accent)
+                    }
+                    Spacer().frame(height: 16)
+                    Text(authVM.username)
+                        .font(.custom("Orbitron-Bold", size: 18)).foregroundColor(.white)
+                    Text(authVM.githubConnected ? "GitHub Connected" : "GitHub Not Connected")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(authVM.githubConnected ? .green : themeVM.current.textSecondary)
+                        .padding(.top, 4)
+                    Spacer().frame(height: 24)
+
+                    // ── Status rows ──────────────────────────────────
+                    VStack(spacing: 0) {
+                        // Apple ID row — tap to switch if multiple saved
+                        accountRow(
+                            label: "Apple ID",
+                            value: authVM.appleUserId.isEmpty ? "—" : authVM.username,
+                            status: authVM.appleUserId.isEmpty ? "Not signed in" : "Connected ✓",
+                            statusColor: authVM.appleUserId.isEmpty ? themeVM.current.textSecondary : .green,
+                            canSwitch: authVM.savedAppleAccounts.count > 1
+                        ) { showAppleAccountPicker = true }
+
+                        Divider().background(Color.white.opacity(0.08))
+
+                        // GitHub row — tap to switch or connect
+                        accountRow(
+                            label: "GitHub",
+                            value: authVM.githubConnected ? authVM.githubUsername : "Not connected",
+                            status: authVM.githubConnected ? "Connected ✓" : "Tap to connect",
+                            statusColor: authVM.githubConnected ? themeVM.current.accent : themeVM.current.textSecondary,
+                            canSwitch: true
+                        ) { showGitHubAccountPicker = true }
+
+                        Divider().background(Color.white.opacity(0.08))
+                        profileRow("Vault", value: "Autumn-Ash ✓", color: themeVM.current.accent)
+                        Divider().background(Color.white.opacity(0.08))
+                        profileRow("LEATR", value: "v2 · Active", color: themeVM.current.accent)
+                        Divider().background(Color.white.opacity(0.08))
+                        profileRow("Build", value: "1.0.0 (43)", color: themeVM.current.textSecondary)
+                    }
+                    .background(themeVM.current.surface).cornerRadius(12).padding(.horizontal, 20)
+
+                    Spacer().frame(height: 24)
+
+                    // Sign out
+                    Button {
+                        authVM.signOut(); dismiss()
+                    } label: {
+                        Text("Sign Out").font(.custom("Exo2-SemiBold", size: 15)).foregroundColor(.red)
+                            .frame(maxWidth: .infinity).frame(height: 48)
+                            .background(Color.red.opacity(0.1)).cornerRadius(10)
+                    }
+                    .padding(.horizontal, 20).padding(.bottom, 40)
                 }
-                .padding(.horizontal, 20).padding(.bottom, 40)
             }
         }
         .presentationDetents([.medium, .large])
+        // Apple account picker
+        .confirmationDialog("Switch Apple Account", isPresented: $showAppleAccountPicker) {
+            ForEach(authVM.savedAppleAccounts) { acct in
+                Button(acct.displayName) {
+                    authVM.switchAppleAccount(to: acct)
+                }
+            }
+            Button("Add New Apple ID") { authVM.signInWithApple() }
+            Button("Cancel", role: .cancel) {}
+        }
+        // GitHub account picker
+        .confirmationDialog("Switch GitHub Account", isPresented: $showGitHubAccountPicker) {
+            ForEach(authVM.savedGitHubAccounts) { acct in
+                Button(acct.displayName) {
+                    authVM.switchGitHubAccount(to: acct)
+                    dismiss()
+                }
+            }
+            Button("Connect New GitHub Account") {
+                Task { await authVM.startGitHubAuth() }
+                dismiss()
+            }
+            if authVM.githubConnected {
+                Button("Disconnect GitHub", role: .destructive) {
+                    authVM.disconnectGitHub()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func accountRow(
+        label: String, value: String, status: String,
+        statusColor: Color, canSwitch: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label).font(.system(size: 13, design: .monospaced))
+                        .foregroundColor(themeVM.current.textSecondary)
+                    Text(value).font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                Spacer()
+                HStack(spacing: 6) {
+                    Text(status).font(.system(size: 13, design: .monospaced))
+                        .foregroundColor(statusColor)
+                    if canSwitch {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(themeVM.current.textSecondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+        }
     }
 
     private func profileRow(_ label: String, value: String, color: Color) -> some View {
