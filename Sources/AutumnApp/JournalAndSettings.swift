@@ -195,6 +195,46 @@ public struct SettingsView: View {
                 }
                 .listRowBackground(themeVM.current.surface)
 
+                // GitHub PAT
+                Section {
+                    HStack {
+                        Text("GitHub PAT")
+                            .foregroundColor(themeVM.current.textSecondary)
+                        Spacer()
+                        if authVM.githubConnected {
+                            Text("Connected").foregroundColor(.green)
+                                .font(.system(size: 12, design: .monospaced))
+                        }
+                    }
+                    SecureField("ghp_...", text: $apiKeyInput)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundColor(.white)
+                    Button("Save & Connect PAT") {
+                        authVM.signInWithPAT(pat: apiKeyInput)
+                    }
+                    .foregroundColor(themeVM.current.accent)
+                } header: {
+                    Text("GITHUB").settingsHeader(theme: themeVM.current)
+                }
+                .listRowBackground(themeVM.current.surface)
+
+                // Privacy & Legal
+                Section {
+                    Link("Privacy Policy", destination: URL(string: "https://dartmeadow.com/privacy")!)
+                        .foregroundColor(themeVM.current.accent)
+                    Link("Terms of Service", destination: URL(string: "https://dartmeadow.com/terms")!)
+                        .foregroundColor(themeVM.current.accent)
+                    Button("View Policy Again") {
+                        UserDefaults.standard.removeObject(forKey: "policy_accepted_v1")
+                    }
+                    .foregroundColor(themeVM.current.textSecondary)
+                } header: {
+                    Text("LEGAL").settingsHeader(theme: themeVM.current)
+                }
+                .listRowBackground(themeVM.current.surface)
+
                 // AI backend
                 Section {
                     HStack {

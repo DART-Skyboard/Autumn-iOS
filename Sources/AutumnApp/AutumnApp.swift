@@ -5,6 +5,7 @@ import AutumnServices
 
 @main
 struct AutumnApp: App {
+    @AppStorage("policy_accepted_v1") private var policyAccepted = false
 
     @StateObject private var themeVM   = ThemeViewModel()
     @StateObject private var authVM    = AuthViewModel()
@@ -22,6 +23,14 @@ struct AutumnApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .fullScreenCover(isPresented: .init(
+                    get: { !policyAccepted },
+                    set: { _ in }
+                )) {
+                    PolicyGateView(onAccept: { policyAccepted = true },
+                                   onDecline: { policyAccepted = false })
+                        .environmentObject(themeVM)
+                }
                 .environmentObject(authVM)
                 .environmentObject(chatVM)
                 .environmentObject(sceneVM)
