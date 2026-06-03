@@ -15,7 +15,7 @@ public struct RootView: View {
                 WelcomeView()
             }
         }
-        .onAppear { authVM.restoreAppleSession() }
+        .onAppear { authVM.restoreSession() }
     }
 }
 
@@ -177,6 +177,7 @@ struct UserProfileSheet: View {
     @Environment(\.dismiss) var dismiss
     @State private var showAppleAccountPicker = false
     @State private var showGitHubAccountPicker = false
+    @State private var showSupport = false
 
     var body: some View {
         ZStack {
@@ -248,6 +249,9 @@ struct UserProfileSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .sheet(isPresented: $showSupport) {
+            SupportSheet(accentColor: themeVM.current.accent, appName: "Autumn")
+        }
         // Apple account picker
         .confirmationDialog("Switch Apple Account", isPresented: $showAppleAccountPicker) {
             ForEach(authVM.savedAppleAccounts) { acct in
