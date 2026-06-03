@@ -1,6 +1,7 @@
 import SwiftUI
 import AutumnServices
 import AuthenticationServices
+import LEATRCore
 
 public struct RootView: View {
     @EnvironmentObject var authVM: AuthViewModel
