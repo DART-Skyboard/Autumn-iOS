@@ -64,6 +64,12 @@ public actor GitHubClient {
         return try JSONDecoder().decode([GitHubRepo].self, from: data)
     }
 
+    public func fetchAuthenticatedUser() async throws -> String {
+        struct GHUser: Decodable { let login: String }
+        let data = try await get("/user")
+        return try JSONDecoder().decode(GHUser.self, from: data).login
+    }
+
     public func createRepo(name: String, isPrivate: Bool = true, description: String = "") async throws -> GitHubRepo {
         let body: [String: Any] = ["name": name, "private": isPrivate, "description": description, "auto_init": true]
         let data = try await post("/user/repos", body: body)
