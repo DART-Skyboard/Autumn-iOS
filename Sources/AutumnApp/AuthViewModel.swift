@@ -54,6 +54,16 @@ public final class AuthViewModel: NSObject, ObservableObject {
     }
 
     public func restoreAppleSession() {
+        // Restore GitHub session
+        if let pat = KeychainService.shared.load(key: "github_pat"), !pat.isEmpty {
+            Task { await GitHubClient.shared.setToken(pat) }
+            let savedGHUser = KeychainService.shared.load(key: "github_username") ?? ""
+            if !savedGHUser.isEmpty {
+                githubConnected = true
+                githubUsername  = savedGHUser
+                if !isSignedIn { isSignedIn = true; username = savedGHUser }
+            }
+        }
         let uid = KeychainService.shared.load(key: "apple_user_id") ?? ""
         guard !uid.isEmpty else { return }
         ASAuthorizationAppleIDProvider().getCredentialState(forUserID: uid) { [weak self] state, _ in
@@ -106,7 +116,8 @@ public final class AuthViewModel: NSObject, ObservableObject {
                 deviceFlowCode   = nil
                 if !isSignedIn { isSignedIn = true; username = ghUser }
 
-                // Save account + setup vault
+                // Persist username + save account + setup vault
+                KeychainService.shared.save(key: "github_username", value: ghUser)
                 saveGitHubAccount(id: ghUser, displayName: ghUser)
                 Task { await UserVaultService.shared.setup(githubUsername: ghUser) }
                 return
