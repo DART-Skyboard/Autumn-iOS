@@ -1,85 +1,34 @@
 import Foundation
-import CloudKit
 
-/// AutumnCloud — iCloud/CloudKit backend for Autumn iOS
-/// Bundle ID: com.dartmeadow.autumn
-/// iCloud container: iCloud.com.dartmeadow.autumn
-public actor AutumnCloud {
-    public static let shared = AutumnCloud()
-    private let container = CKContainer(identifier: "iCloud.com.dartmeadow.autumn")
-    private var db: CKDatabase { container.privateCloudDatabase }
+// AutumnCloud — CloudKit stub
+// CloudKit entitlement not yet configured in provisioning profile.
+// All methods are no-ops / return empty data.
+// Re-enable by adding iCloud capability + container in App ID on developer.apple.com,
+// then restore full implementation from git history.
 
-    public init() {}
+public struct CloudJournalEntry: Codable, Sendable {
+    public let thought: String
+    public let timestamp: Date
+    public let emotion: String
 
-    // MARK: - Ash Directory Setup
-    public func setupAshDirectory(for userID: String) async throws {
-        let zoneID = CKRecordZone.ID(zoneName: "AutumnAsh-\(userID)", ownerName: CKCurrentUserDefaultName)
-        let zone   = CKRecordZone(zoneID: zoneID)
-        let (_, _) = try await db.modifyRecordZones(saving: [zone], deleting: [])
-    }
-
-    // MARK: - Journal Sync
-    public func saveCloudJournalEntry(_ entry: CloudJournalEntry) async throws {
-        let record          = CKRecord(recordType: "CloudJournalEntry")
-        record["thought"]   = entry.thought as CKRecordValue
-        record["timestamp"] = entry.timestamp as CKRecordValue
-        record["emotion"]   = entry.emotion as CKRecordValue
-        try await db.save(record)
-    }
-
-    public func fetchJournalEntries(limit: Int = 50) async throws -> [CloudJournalEntry] {
-        let pred  = NSPredicate(value: true)
-        let query = CKQuery(recordType: "CloudJournalEntry", predicate: pred)
-        query.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
-        let (results, _) = try await db.records(matching: query, resultsLimit: limit)
-        return results.compactMap { _, result in
-            guard let record = try? result.get() else { return nil }
-            return CloudJournalEntry(
-                thought:   record["thought"]   as? String ?? "",
-                timestamp: record["timestamp"] as? Date   ?? Date(),
-                emotion:   record["emotion"]   as? String ?? "neutral"
-            )
-        }
-    }
-
-    // MARK: - Session Memory
-    public func saveMemoryChunk(_ chunk: String, key: String) async throws {
-        let record        = CKRecord(recordType: "MemoryChunk", recordID: CKRecord.ID(recordName: key))
-        record["content"] = chunk as CKRecordValue
-        record["updated"] = Date() as CKRecordValue
-        try await db.save(record)
-    }
-
-    public func fetchMemoryChunk(key: String) async throws -> String? {
-        let recordID = CKRecord.ID(recordName: key)
-        let record   = try await db.record(for: recordID)
-        return record["content"] as? String
-    }
-
-    // MARK: - Project File Backup
-    public func backupProjectFile(name: String, data: Data) async throws {
-        let asset         = CKAsset(fileURL: writeTemp(data: data, name: name))
-        let record        = CKRecord(recordType: "ProjectFile")
-        record["name"]    = name as CKRecordValue
-        record["file"]    = asset
-        record["backed"]  = Date() as CKRecordValue
-        try await db.save(record)
-    }
-
-    private func writeTemp(data: Data, name: String) -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-        try? data.write(to: url)
-        return url
+    public init(thought: String, timestamp: Date = Date(), emotion: String = "neutral") {
+        self.thought = thought
+        self.timestamp = timestamp
+        self.emotion = emotion
     }
 }
 
-public struct CloudJournalEntry: Codable, Sendable {
-    public let thought:   String
-    public let timestamp: Date
-    public let emotion:   String
-    public init(thought: String, timestamp: Date = Date(), emotion: String = "neutral") {
-        self.thought   = thought
-        self.timestamp = timestamp
-        self.emotion   = emotion
-    }
+public actor AutumnCloud {
+    public static let shared = AutumnCloud()
+    public init() {}
+
+    public func setupAshDirectory(for userID: String) async throws {}
+
+    public func saveCloudJournalEntry(_ entry: CloudJournalEntry) async throws {}
+    public func fetchJournalEntries(limit: Int = 50) async throws -> [CloudJournalEntry] { [] }
+
+    public func saveMemoryChunk(_ chunk: String, key: String) async throws {}
+    public func fetchMemoryChunk(key: String) async throws -> String? { nil }
+
+    public func backupProjectFile(name: String, data: Data) async throws {}
 }
