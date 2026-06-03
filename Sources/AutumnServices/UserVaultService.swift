@@ -1,29 +1,32 @@
 import Foundation
 
 // MARK: — UserVaultService
-// Manages the user's personal "Autumn-Ash" folder in iCloud Drive.
-// On first sign-in this folder is created automatically and shows up
-// in the Files app under iCloud Drive > Autumn-Ash.
-// If GitHub is connected the same structure is mirrored to a private
-// {username}/Autumn-Ash repo and kept in sync.
+// Shared vault service used by both Autumn and ArcLake.
+// Creates/manages the Autumn-Ash folder in iCloud Drive (visible in Files app)
+// and mirrors to a private GitHub repo if connected.
 //
-// Folder structure:
+// iCloud Drive structure:
 //   Autumn-Ash/
-//     journal/        — personal journal entries (.json)
-//     memory/         — rolling chat memory chunks (.txt)
-//     projects/       — user project files
-//     exports/        — manual exports land here
+//     journal/        — Autumn journal entries
+//     memory/         — Autumn chat memory chunks
+//     projects/       — Autumn projects
+//     exports/        — Autumn exports
+//     ArcLake/        — ArcLake subfolder
+//       models/       — exported GLB / 3D model files
+//       sessions/     — saved molecular sessions
+//       exports/      — ArcLake manual exports
 
 public actor UserVaultService {
     public static let shared = UserVaultService()
 
-    private let folderName = "Autumn-Ash"
-    private let github = GitHubClient.shared
+    private let containerID = "iCloud.com.dartmeadow.autumn"
+    private let vaultName   = "Autumn-Ash"
+    private let github      = GitHubClient.shared
 
-    // Cached iCloud root URL
     private var _vaultURL: URL?
+    public var vaultURL: URL? { _vaultURL }
 
-    // MARK: — Setup (call on every sign-in)
+    // MARK: — Setup (call on every sign-in from either app)
     public func setup(githubUsername: String?) async {
         await setupiCloudVault()
         if let gh = githubUsername, !gh.isEmpty {
@@ -33,38 +36,41 @@ public actor UserVaultService {
 
     // MARK: — iCloud Drive vault
     private func setupiCloudVault() async {
-        guard let root = iCloudVaultURL() else {
-            print("[UserVault] iCloud unavailable — falling back to local documents")
+        if let root = iCloudVaultURL() {
+            _vaultURL = root
+            createAllSubfolders(at: root)
+            print("[UserVault] iCloud vault ready: \(root.path)")
+        } else {
+            print("[UserVault] iCloud unavailable — using local Documents")
             await setupLocalVault()
-            return
         }
-        _vaultURL = root
-        createSubfolders(at: root)
-        print("[UserVault] iCloud vault ready at \(root.path)")
     }
 
     private func iCloudVaultURL() -> URL? {
         guard let container = FileManager.default.url(
-            forUbiquityContainerIdentifier: "iCloud.com.dartmeadow.autumn"
+            forUbiquityContainerIdentifier: containerID
         ) else { return nil }
-        let docs = container.appendingPathComponent("Documents", isDirectory: true)
-        let vault = docs.appendingPathComponent(folderName, isDirectory: true)
+        let vault = container
+            .appendingPathComponent("Documents", isDirectory: true)
+            .appendingPathComponent(vaultName, isDirectory: true)
         return vault
     }
 
-    // Fallback: local Documents if iCloud not available (guest, no Apple ID)
     private func setupLocalVault() async {
         guard let docs = FileManager.default.urls(
             for: .documentDirectory, in: .userDomainMask).first else { return }
-        let vault = docs.appendingPathComponent(folderName, isDirectory: true)
+        let vault = docs.appendingPathComponent(vaultName, isDirectory: true)
         _vaultURL = vault
-        createSubfolders(at: vault)
-        print("[UserVault] Local vault ready at \(vault.path)")
+        createAllSubfolders(at: vault)
     }
 
-    private func createSubfolders(at root: URL) {
+    private func createAllSubfolders(at root: URL) {
         let fm = FileManager.default
-        for sub in ["journal", "memory", "projects", "exports"] {
+        let folders = [
+            "journal", "memory", "projects", "exports",
+            "ArcLake", "ArcLake/models", "ArcLake/sessions", "ArcLake/exports"
+        ]
+        for sub in folders {
             let url = root.appendingPathComponent(sub, isDirectory: true)
             if !fm.fileExists(atPath: url.path) {
                 try? fm.createDirectory(at: url, withIntermediateDirectories: true)
@@ -72,95 +78,124 @@ public actor UserVaultService {
         }
     }
 
-    // MARK: — GitHub vault (mirror)
+    // MARK: — GitHub vault mirror
     private func setupGitHubVault(username: String) async {
         let repoName = "Autumn-Ash"
-        // Check if repo exists; create if not
         do {
             let repos = try await github.listRepos()
-            let exists = repos.contains { $0.name == repoName }
-            if !exists {
+            if !repos.contains(where: { $0.name == repoName }) {
                 _ = try await github.createRepo(
-                    name: repoName,
-                    isPrivate: true,
-                    description: "Personal Autumn-Ash vault — synced from Autumn iOS"
+                    name: repoName, isPrivate: true,
+                    description: "Personal Autumn-Ash vault — synced from Autumn & ArcLake iOS"
                 )
-                // Seed folder structure with .gitkeep files
-                for sub in ["journal", "memory", "projects", "exports"] {
+                let seedPaths = [
+                    "journal/.gitkeep", "memory/.gitkeep",
+                    "projects/.gitkeep", "exports/.gitkeep",
+                    "ArcLake/models/.gitkeep",
+                    "ArcLake/sessions/.gitkeep",
+                    "ArcLake/exports/.gitkeep"
+                ]
+                for path in seedPaths {
                     try? await github.writeFile(
                         owner: username, repo: repoName,
-                        path: "\(sub)/.gitkeep",
-                        content: "",
-                        message: "init: create \(sub) folder"
+                        path: path, content: "",
+                        message: "init: vault structure"
                     )
                 }
                 print("[UserVault] GitHub repo \(username)/\(repoName) created")
-            } else {
-                print("[UserVault] GitHub repo \(username)/\(repoName) exists")
             }
         } catch {
-            print("[UserVault] GitHub vault setup failed: \(error)")
+            print("[UserVault] GitHub vault setup error: \(error)")
         }
     }
 
-    // MARK: — Write a file to vault (iCloud + GitHub if connected)
+    // MARK: — Write (iCloud + GitHub mirror)
     public func write(
-        subfolder: VaultFolder,
+        folder: VaultFolder,
         filename: String,
         content: String,
         githubUsername: String? = nil
     ) async {
-        // iCloud / local
         if let root = _vaultURL {
             let url = root
-                .appendingPathComponent(subfolder.rawValue)
+                .appendingPathComponent(folder.path)
                 .appendingPathComponent(filename)
             try? content.write(to: url, atomically: true, encoding: .utf8)
         }
-        // GitHub mirror
         if let gh = githubUsername, !gh.isEmpty {
-            let path = "\(subfolder.rawValue)/\(filename)"
+            let path = "\(folder.path)/\(filename)"
             let sha = (try? await github.readFile(
                 owner: gh, repo: "Autumn-Ash", path: path))?.sha
             try? await github.writeFile(
                 owner: gh, repo: "Autumn-Ash",
                 path: path, content: content,
-                message: "sync: \(filename)",
-                sha: sha
+                message: "sync: \(filename)", sha: sha
             )
         }
     }
 
-    // MARK: — Read a file from vault
-    public func read(subfolder: VaultFolder, filename: String) -> String? {
+    // MARK: — Write Data (for binary files like GLB exports)
+    public func writeData(
+        folder: VaultFolder,
+        filename: String,
+        data: Data
+    ) async {
+        guard let root = _vaultURL else { return }
+        let url = root
+            .appendingPathComponent(folder.path)
+            .appendingPathComponent(filename)
+        try? data.write(to: url, options: .atomic)
+    }
+
+    // MARK: — Read
+    public func read(folder: VaultFolder, filename: String) -> String? {
         guard let root = _vaultURL else { return nil }
         let url = root
-            .appendingPathComponent(subfolder.rawValue)
+            .appendingPathComponent(folder.path)
             .appendingPathComponent(filename)
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
-    // MARK: — List files in a subfolder
-    public func list(subfolder: VaultFolder) -> [String] {
+    // MARK: — List files
+    public func list(folder: VaultFolder) -> [String] {
         guard let root = _vaultURL else { return [] }
-        let url = root.appendingPathComponent(subfolder.rawValue)
-        return (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+        let url = root.appendingPathComponent(folder.path)
+        return (try? FileManager.default
+            .contentsOfDirectory(atPath: url.path)
+            .filter { !$0.hasPrefix(".") }) ?? []
     }
 
-    // MARK: — Export: copy vault subfolder to user-chosen location
-    // Returns the export folder URL for use with UIDocumentPickerViewController
-    public func exportURL(subfolder: VaultFolder) -> URL? {
+    // MARK: — Export URL (for UIDocumentPickerViewController)
+    // Default save location for exports — opens directly to this folder
+    public func exportFolderURL(for folder: VaultFolder) -> URL? {
         guard let root = _vaultURL else { return nil }
-        return root.appendingPathComponent(subfolder.rawValue)
+        return root.appendingPathComponent(folder.path)
     }
-
-    public var vaultURL: URL? { _vaultURL }
 }
 
-// MARK: — Vault folder enum
+// MARK: — Vault folders
 public enum VaultFolder: String, CaseIterable {
-    case journal  = "journal"
-    case memory   = "memory"
-    case projects = "projects"
-    case exports  = "exports"
+    // Autumn folders
+    case journal    = "journal"
+    case memory     = "memory"
+    case projects   = "projects"
+    case exports    = "exports"
+    // ArcLake folders
+    case arcModels  = "ArcLake/models"
+    case arcSessions = "ArcLake/sessions"
+    case arcExports = "ArcLake/exports"
+
+    public var path: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .journal:     return "Journal"
+        case .memory:      return "Memory"
+        case .projects:    return "Projects"
+        case .exports:     return "Exports"
+        case .arcModels:   return "ArcLake Models"
+        case .arcSessions: return "ArcLake Sessions"
+        case .arcExports:  return "ArcLake Exports"
+        }
+    }
 }
