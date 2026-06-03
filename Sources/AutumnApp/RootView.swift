@@ -65,25 +65,26 @@ public struct MainTabView: View {
     }
 }
 
-// MARK: — Policy overlay wrapper (owns its own @EnvironmentObject cleanly)
+// MARK: — Policy overlay wrapper
 private struct PolicyOverlayWrapper: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @State private var shown = !UserDefaults.standard.bool(forKey: "policy_accepted_v1")
+    @State private var accepted = false
+    @State private var declined = false
 
     var body: some View {
-        if shown {
-            AutumnPolicyOverlay(
-                onAccept: {
-                    authVM.acceptPolicy()
-                    shown = false
-                },
-                onDecline: {
-                    authVM.signOut()
-                    shown = false
-                }
-            )
-            .zIndex(99)
+        Group {
+            if shown {
+                AutumnPolicyOverlay(onAccept: { accepted = true }, onDecline: { declined = true })
+                    .zIndex(99)
+            }
+        }
+        .onChange(of: accepted) { val in
+            if val { authVM.acceptPolicy(); shown = false }
+        }
+        .onChange(of: declined) { val in
+            if val { authVM.signOut(); shown = false }
         }
     }
 }
