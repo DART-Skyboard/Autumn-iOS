@@ -181,8 +181,7 @@ public final class MazeEngine {
                 let (dx,dy,dz) = dir.offset
                 let halfS = s * 0.5
                 let tube = SCNCylinder(radius: CGFloat(t), height: CGFloat(halfS))
-                tube.segmentCount = 5
-                tube.firstMaterial = mat
+                                tube.firstMaterial = mat
                 let tn = SCNNode(geometry: tube)
                 tn.position = SCNVector3(
                     cx + Float(dx)*halfS*0.5,
@@ -191,11 +190,11 @@ public final class MazeEngine {
                 // Orient tube along direction
                 switch dir {
                 case .posX, .negX:
-                    tn.eulerAngles = SCNVector3(0, 0, .pi/2)
+                    tn.eulerAngles = SCNVector3(0, 0, Float.pi/2)
                 case .posY, .negY:
                     tn.eulerAngles = SCNVector3(0, 0, 0)
                 case .posZ, .negZ:
-                    tn.eulerAngles = SCNVector3(.pi/2, 0, 0)
+                    tn.eulerAngles = SCNVector3(Float.pi/2, 0, 0)
                 }
                 root.addChildNode(tn)
             }
