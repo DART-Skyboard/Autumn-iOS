@@ -1,11 +1,10 @@
 import SwiftUI
 import LEATRCore
-import LEATRCore
 import SceneKit
-import LEATRCore
 import AutumnServices
 
 // MARK: — BRPN Scene View
+// Shell badges now live in AutumnHeader (RootView.swift) — not duplicated here
 public struct BRPNSceneView: View {
     @EnvironmentObject var sceneVM: BRPNSceneViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
@@ -17,9 +16,8 @@ public struct BRPNSceneView: View {
             SceneKitView(scene: sceneVM.scene)
                 .ignoresSafeArea()
 
-            // Shell badges overlay
+            // Bottom meta bar only
             VStack {
-                ShellBadgeBar()
                 Spacer()
                 BRPNMetaBar()
             }
@@ -63,13 +61,11 @@ public final class BRPNSceneViewModel: ObservableObject {
     private var cameraNode: SCNNode!
     var shellNodes: [BRPNShell: SCNNode] = [:]
 
-    // Shell radii (Geological > Maritime > Aerospace)
     let shellRadii: [BRPNShell: CGFloat] = [
         .geological: 2.8,
         .maritime:   1.9,
         .aerospace:  1.1
     ]
-    // Shell colors matching theme accent
     let shellColors: [BRPNShell: UIColor] = [
         .geological: UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.12),
         .maritime:   UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.18),
@@ -79,13 +75,11 @@ public final class BRPNSceneViewModel: ObservableObject {
     public func setupScene() {
         scene.background.contents = UIColor(red: 0.01, green: 0.04, blue: 0.08, alpha: 1)
 
-        // Camera
         cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
         cameraNode.position = SCNVector3(0, 0, 7)
         scene.rootNode.addChildNode(cameraNode)
 
-        // Ambient light
         let ambient = SCNNode()
         ambient.light = {
             let l = SCNLight(); l.type = .ambient
@@ -93,15 +87,9 @@ public final class BRPNSceneViewModel: ObservableObject {
         }()
         scene.rootNode.addChildNode(ambient)
 
-        // Build shells
-        for shell in BRPNShell.allCases {
-            buildShellNode(shell)
-        }
-
-        // Core node (user's session)
+        for shell in BRPNShell.allCases { buildShellNode(shell) }
         buildCoreNode()
 
-        // Slow rotation
         let rotate = SCNAction.repeatForever(
             SCNAction.rotateBy(x: 0, y: 2 * .pi, z: 0, duration: 30)
         )
@@ -119,7 +107,7 @@ public final class BRPNSceneViewModel: ObservableObject {
             m.diffuse.contents  = shellColors[shell] ?? .clear
             m.emission.contents = UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.05)
             m.isDoubleSided = true
-            m.fillMode = .lines  // wireframe
+            m.fillMode = .lines
             return m
         }()
         let node = SCNNode(geometry: geo)
@@ -128,7 +116,6 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     private func buildCoreNode() {
-        // User's session = icosahedron at center
         let geo = SCNSphere(radius: 0.15)
         geo.firstMaterial = {
             let m = SCNMaterial()
@@ -138,8 +125,6 @@ public final class BRPNSceneViewModel: ObservableObject {
         }()
         let node = SCNNode(geometry: geo)
         node.position = SCNVector3(0, 0, 0)
-
-        // Pulsing glow
         let pulse = SCNAction.sequence([
             SCNAction.scale(to: 1.3, duration: 0.8),
             SCNAction.scale(to: 1.0, duration: 0.8)
@@ -148,7 +133,6 @@ public final class BRPNSceneViewModel: ObservableObject {
         scene.rootNode.addChildNode(node)
     }
 
-    // MARK: — Add remote session node
     public func addRemoteNode(uid: String, color: UIColor) {
         let angle = Float.random(in: 0...(2 * .pi))
         let radius: Float = 2.0
@@ -185,36 +169,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 }
 
-// MARK: — Shell Badge Bar
-struct ShellBadgeBar: View {
-    @EnvironmentObject var sceneVM: BRPNSceneViewModel
-    @EnvironmentObject var themeVM: ThemeViewModel
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(BRPNShell.allCases, id: \.rawValue) { shell in
-                VStack(spacing: 2) {
-                    Text(shell.displayName.uppercased())
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundColor(themeVM.current.textSecondary)
-                    Text(shell.role)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundColor(themeVM.current.accent)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .glassCard(theme: themeVM.current)
-            }
-            Spacer()
-            Label("\(sceneVM.activeNodes) nodes", systemImage: "circle.grid.3x3")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(themeVM.current.textSecondary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-    }
-}
-
+// MARK: — Bottom Meta Bar
 struct BRPNMetaBar: View {
     @EnvironmentObject var sceneVM: BRPNSceneViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
