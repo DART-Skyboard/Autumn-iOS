@@ -1,190 +1,152 @@
 import SwiftUI
-import LEATRCore
 import SceneKit
-import AutumnServices
 
-// MARK: — BRPN Scene View
-// Shell badges now live in AutumnHeader (RootView.swift) — not duplicated here
+// MARK: — BRPNSceneView (full web-app faithful iOS port)
+// Matches the BRPN tab from index.html:
+// - 3-shell IcosahedronGeometry wireframe
+// - LEMAC maze cube at core (Autumn-only solve)
+// - ASH CANVAS drawer (slides up from bottom-right)
+// - Shell badges in header (wired to AutumnHeader)
+// - Presence nodes from leatr-ash GAS
+// - Autumn sentience state pulses shells
+
 public struct BRPNSceneView: View {
     @EnvironmentObject var sceneVM: BRPNSceneViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var authVM: AuthViewModel
+    @State private var showAshCanvas = false
+    @State private var showSolveBtn = false
 
     public var body: some View {
         ZStack {
-            themeVM.current.gradient.ignoresSafeArea()
+            Color(red:0.01,green:0.02,blue:0.05).ignoresSafeArea()
 
-            SceneKitView(scene: sceneVM.scene)
+            // ── Main SceneKit viewport ────────────────────────────
+            BRPNSceneKitView(vm: sceneVM)
                 .ignoresSafeArea()
 
-            // Bottom meta bar only
+            // ── Bottom meta bar ───────────────────────────────────
             VStack {
                 Spacer()
-                BRPNMetaBar()
+                VStack(spacing: 0) {
+                    // Maze solve button (shown when solvable)
+                    if sceneVM.mazeCanSolve && authVM.username == "dartsolarpunk" {
+                        Button {
+                            sceneVM.autumnSolveMaze()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.cyan)
+                                Text(sceneVM.isSolving ? "SOLVING…" : "⬡ SIGMA SOLVE")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.cyan)
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 6)
+                            .background(Color.cyan.opacity(0.1))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(Color.cyan.opacity(0.4), lineWidth: 0.8))
+                        }
+                        .padding(.bottom, 8)
+                    }
+
+                    // Bottom meta bar
+                    HStack {
+                        Text("SID: \(sceneVM.sessionId.uppercased())")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.3))
+                        Spacer()
+                        Text("QS: \(String(format: "%.4f", sceneVM.quantumSocket))")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.cyan.opacity(0.7))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial)
+                    .overlay(Rectangle().frame(height: 0.5)
+                        .foregroundColor(.cyan.opacity(0.15)), alignment: .top)
+                }
+            }
+            .padding(.bottom, 60) // above tab bar
+
+            // ── ASH CANVAS trigger (bottom-right, matches index.html button) ──
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button { withAnimation(.spring(response: 0.35)) { showAshCanvas.toggle() } } label: {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color.purple.opacity(showAshCanvas ? 0.8 : 0.4))
+                                .frame(width: 7, height: 7)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("ASH CANVAS")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color.purple.opacity(0.9))
+                                Text("NEURAL INFLUENCE")
+                                    .font(.system(size: 6, design: .monospaced))
+                                    .foregroundColor(Color.purple.opacity(0.4))
+                            }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.purple.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.purple.opacity(showAshCanvas ? 0.5 : 0.2), lineWidth: 0.7))
+                    }
+                    .padding(.trailing, 14)
+                }
+                .padding(.bottom, 110)
+            }
+
+            // ── ASH CANVAS DRAWER (slides up) ────────────────────
+            if showAshCanvas {
+                VStack {
+                    Spacer()
+                    AshCanvasView(isOpen: $showAshCanvas)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .ignoresSafeArea(edges: .bottom)
             }
         }
         .onAppear { sceneVM.setupScene() }
+        .onDisappear { sceneVM.teardown() }
     }
 }
 
-// MARK: — SceneKit UIKit wrapper
-struct SceneKitView: UIViewRepresentable {
-    let scene: SCNScene
+// MARK: — SceneKit UIViewRepresentable
+struct BRPNSceneKitView: UIViewRepresentable {
+    @ObservedObject var vm: BRPNSceneViewModel
 
     func makeUIView(context: Context) -> SCNView {
-        let view = SCNView()
-        view.scene = scene
-        view.allowsCameraControl = true
-        view.autoenablesDefaultLighting = false
-        view.backgroundColor = .clear
-        view.antialiasingMode = .multisampling4X
-        return view
+        let v = SCNView()
+        v.scene = vm.scene
+        v.allowsCameraControl = true
+        v.autoenablesDefaultLighting = false
+        v.backgroundColor = .clear
+        v.antialiasingMode = .multisampling4X
+        v.rendersContinuously = true
+        v.delegate = context.coordinator
+
+        // Camera
+        let cam = SCNCamera(); cam.fieldOfView = 50; cam.zFar = 100; cam.zNear = 0.1
+        let camNode = SCNNode(); camNode.camera = cam
+        camNode.position = SCNVector3(0, 1.5, 5)
+        camNode.look(at: SCNVector3(0,0,0))
+        vm.scene.rootNode.addChildNode(camNode)
+
+        return v
     }
 
-    func updateUIView(_ view: SCNView, context: Context) {
-        view.scene = scene
-    }
-}
+    func updateUIView(_ v: SCNView, context: Context) {}
 
-// MARK: — BRPN Scene ViewModel
-@MainActor
-public final class BRPNSceneViewModel: ObservableObject {
+    func makeCoordinator() -> Coordinator { Coordinator(vm: vm) }
 
-    public let scene = SCNScene()
-    @Published public var shellStates: [BRPNShell: String] = [
-        .geological: "FOUNDATION",
-        .maritime:   "REFLEX",
-        .aerospace:  "PERFORMANCE"
-    ]
-    @Published public var activeNodes: Int = 1
-    @Published public var sessionId = UUID().uuidString.prefix(8).description
-
-    private var cameraNode: SCNNode!
-    var shellNodes: [BRPNShell: SCNNode] = [:]
-
-    let shellRadii: [BRPNShell: CGFloat] = [
-        .geological: 2.8,
-        .maritime:   1.9,
-        .aerospace:  1.1
-    ]
-    let shellColors: [BRPNShell: UIColor] = [
-        .geological: UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.12),
-        .maritime:   UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.18),
-        .aerospace:  UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.25)
-    ]
-
-    public func setupScene() {
-        scene.background.contents = UIColor(red: 0.01, green: 0.04, blue: 0.08, alpha: 1)
-
-        cameraNode = SCNNode()
-        cameraNode.camera = SCNCamera()
-        cameraNode.position = SCNVector3(0, 0, 7)
-        scene.rootNode.addChildNode(cameraNode)
-
-        let ambient = SCNNode()
-        ambient.light = {
-            let l = SCNLight(); l.type = .ambient
-            l.color = UIColor(white: 0.3, alpha: 1); return l
-        }()
-        scene.rootNode.addChildNode(ambient)
-
-        for shell in BRPNShell.allCases { buildShellNode(shell) }
-        buildCoreNode()
-
-        let rotate = SCNAction.repeatForever(
-            SCNAction.rotateBy(x: 0, y: 2 * .pi, z: 0, duration: 30)
-        )
-        shellNodes[.geological]?.runAction(rotate)
-        shellNodes[.maritime]?.runAction(SCNAction.repeatForever(
-            SCNAction.rotateBy(x: 0.2, y: -2 * .pi, z: 0, duration: 20)
-        ))
-    }
-
-    private func buildShellNode(_ shell: BRPNShell) {
-        let radius = shellRadii[shell] ?? 2.0
-        let geo = SCNSphere(radius: radius)
-        geo.firstMaterial = {
-            let m = SCNMaterial()
-            m.diffuse.contents  = shellColors[shell] ?? .clear
-            m.emission.contents = UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.05)
-            m.isDoubleSided = true
-            m.fillMode = .lines
-            return m
-        }()
-        let node = SCNNode(geometry: geo)
-        shellNodes[shell] = node
-        scene.rootNode.addChildNode(node)
-    }
-
-    private func buildCoreNode() {
-        let geo = SCNSphere(radius: 0.15)
-        geo.firstMaterial = {
-            let m = SCNMaterial()
-            m.diffuse.contents  = UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.9)
-            m.emission.contents = UIColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.5)
-            return m
-        }()
-        let node = SCNNode(geometry: geo)
-        node.position = SCNVector3(0, 0, 0)
-        let pulse = SCNAction.sequence([
-            SCNAction.scale(to: 1.3, duration: 0.8),
-            SCNAction.scale(to: 1.0, duration: 0.8)
-        ])
-        node.runAction(.repeatForever(pulse))
-        scene.rootNode.addChildNode(node)
-    }
-
-    public func addRemoteNode(uid: String, color: UIColor) {
-        let angle = Float.random(in: 0...(2 * .pi))
-        let radius: Float = 2.0
-        let x = radius * cos(angle)
-        let z = radius * sin(angle)
-        let geo = SCNSphere(radius: 0.08)
-        geo.firstMaterial = {
-            let m = SCNMaterial()
-            m.diffuse.contents = color.withAlphaComponent(0.7)
-            m.emission.contents = color.withAlphaComponent(0.4)
-            return m
-        }()
-        let node = SCNNode(geometry: geo)
-        node.position = SCNVector3(x, 0, z)
-        node.name = "remote_\(uid)"
-        scene.rootNode.addChildNode(node)
-        addSignalLine(from: SCNVector3(0,0,0), to: node.position)
-        activeNodes += 1
-    }
-
-    private func addSignalLine(from: SCNVector3, to: SCNVector3) {
-        let positions: [SCNVector3] = [from, to]
-        let src = SCNGeometrySource(vertices: positions)
-        let idx: [Int32] = [0, 1]
-        let data = Data(bytes: idx, count: idx.count * MemoryLayout<Int32>.size)
-        let elem = SCNGeometryElement(data: data, primitiveType: .line, primitiveCount: 1, bytesPerIndex: 4)
-        let geo = SCNGeometry(sources: [src], elements: [elem])
-        geo.firstMaterial = {
-            let m = SCNMaterial()
-            m.diffuse.contents = UIColor(red: 0, green: 0.9, blue: 1.0, alpha: 0.3)
-            return m
-        }()
-        scene.rootNode.addChildNode(SCNNode(geometry: geo))
-    }
-}
-
-// MARK: — Bottom Meta Bar
-struct BRPNMetaBar: View {
-    @EnvironmentObject var sceneVM: BRPNSceneViewModel
-    @EnvironmentObject var themeVM: ThemeViewModel
-
-    var body: some View {
-        HStack {
-            Text("SID: \(sceneVM.sessionId)")
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundColor(themeVM.current.textSecondary)
-            Spacer()
-            Text("QS: \(String(format: "%.4f", LEATRIdentity.quantumSocket(b: 1.2, p: 0.8, a: 3.0, r: 1.5)))")
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundColor(themeVM.current.accent)
+    class Coordinator: NSObject, SCNSceneRendererDelegate {
+        let vm: BRPNSceneViewModel
+        init(vm: BRPNSceneViewModel) { self.vm = vm }
+        func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+            DispatchQueue.main.async { self.vm.updateFrame() }
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 80)
     }
 }
