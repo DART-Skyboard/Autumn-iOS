@@ -386,15 +386,17 @@ public final class BRPNSceneViewModel: ObservableObject {
     public func teardown() { presenceTimer?.invalidate() }
     public func pulseShells(_ intensity: Float = 0.4) {
         for (i,shell) in shells.enumerated() {
-            let base = 0.18+Float(i)*0.08
+            let base = Double(0.18 + Float(i)*0.08)
+            let intD = Double(intensity)
+            let col = shellColors[i]
             shell.runAction(SCNAction.sequence([
-                SCNAction.customAction(duration:0.3) { n,t in
-                    n.geometry?.firstMaterial?.emission.contents =
-                        self.shellColors[i].withAlphaComponent(CGFloat(base+intensity*Float(t)/0.3))
+                SCNAction.customAction(duration:0.3) { node,t in
+                    node.geometry?.firstMaterial?.emission.contents =
+                        col.withAlphaComponent(CGFloat(base + intD * Double(t) / 0.3))
                 },
-                SCNAction.customAction(duration:0.5) { n,t in
-                    n.geometry?.firstMaterial?.emission.contents =
-                        self.shellColors[i].withAlphaComponent(CGFloat(base+intensity*(1.0-Float(t)/0.5)))
+                SCNAction.customAction(duration:0.5) { node,t in
+                    node.geometry?.firstMaterial?.emission.contents =
+                        col.withAlphaComponent(CGFloat(base + intD * (1.0 - Double(t) / 0.5)))
                 }
             ]))
         }
