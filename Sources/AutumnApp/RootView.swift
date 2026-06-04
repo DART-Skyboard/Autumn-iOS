@@ -111,9 +111,21 @@ struct AutumnHeader: View {
                         Circle()
                             .stroke(themeVM.current.accent.opacity(0.35), lineWidth: 1)
                             .frame(width: 36, height: 36)
-                        Text(authVM.username.prefix(1).uppercased())
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(themeVM.current.accent)
+                        if let avatarURL = authVM.githubAvatarURL {
+                            AsyncImage(url: avatarURL) { img in
+                                img.resizable().scaledToFill()
+                                    .frame(width: 36, height: 36)
+                                    .clipShape(Circle())
+                            } placeholder: {
+                                Text(authVM.username.prefix(1).uppercased())
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .foregroundColor(themeVM.current.accent)
+                            }
+                        } else {
+                            Text(authVM.username.prefix(1).uppercased())
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .foregroundColor(themeVM.current.accent)
+                        }
                     }
                 }
             }
