@@ -21,6 +21,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
     @Published public var deviceFlowCode: DeviceFlowDisplay? = nil
     @Published public var savedAppleAccounts:  [SavedAccount] = []
     @Published public var savedGitHubAccounts: [SavedAccount] = []
+    @Published public var githubAvatarURL: URL? = nil
 
     private let githubClientId = "Ov23li2K0njEqO1WTSdD"
     private let keychainKey    = "autumn_apple_user_id"
@@ -30,6 +31,11 @@ public final class AuthViewModel: NSObject, ObservableObject {
     // Called from .onAppear — silently restores session or shows login
     public func restoreSession() {
         loadSavedAccounts()
+        // Restore cached avatar URL
+        if let urlStr = KeychainService.shared.load(key: "github_avatar_url"),
+           let url = URL(string: urlStr) {
+            githubAvatarURL = url
+        }
 
         // Restore GitHub first (always works from keychain)
         if let pat = KeychainService.shared.load(key: "github_pat"), !pat.isEmpty {
@@ -278,11 +284,22 @@ extension AuthViewModel:
         didCompleteWithError error: Error
     ) {
         let asErr = error as? ASAuthorizationError
-        // .canceled and .unknown (1001) are not real errors — user dismissed or
-        // performExistingAccountSetupFlows found no credential. Ignore silently.
         switch asErr?.code {
-        case .canceled, .unknown:
+        case .canceled:
+            // User tapped Cancel — silent
             return
+        case .unknown:
+            // Code 1000: no existing credential found by performExistingAccountSetupFlows
+            // OR code 1001: user canceled. Both are silent unless user explicitly tapped Sign in.
+            // Check if this was a user-initiated request by seeing if we were already signed in
+            if !isSignedIn {
+                // User explicitly tried to sign in and got unknown error
+                // This often means iCloud is not signed in on device
+                self.error = "Sign in with Apple requires iCloud to be enabled in Settings → Apple ID"
+            }
+            return
+        case .invalidResponse, .notHandled, .failed:
+            self.error = "Sign in failed: \(error.localizedDescription). Check iCloud is enabled in Settings."
         default:
             self.error = error.localizedDescription
         }
