@@ -118,7 +118,7 @@ public final class SupportSubscriptionService: ObservableObject {
 
 // MARK: — Support Sheet UI
 // Drop-in sheet for both apps — call .sheet(isPresented:) { SupportSheet() }
-public public struct SupportSheet: View {
+public struct SupportSheet: View {
     @StateObject private var store = SupportSubscriptionService.shared
     @Environment(\.dismiss) var dismiss
     public var accentColor: Color = Color(red:0.0, green:0.85, blue:1.0)
