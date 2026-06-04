@@ -30,7 +30,7 @@ public final class BRPNSceneViewModel: ObservableObject {
 
     // MARK: — Scene
     public let scene = SCNScene()
-    private var shells: [SCNNode] = []
+    public var shells: [SCNNode] = []
     private var coreNode: SCNNode!
     private var mazeOrbGroup: SCNNode!
     private var toolShapeNodes: [SCNNode] = []
