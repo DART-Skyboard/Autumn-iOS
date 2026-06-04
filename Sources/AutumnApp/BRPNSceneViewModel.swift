@@ -369,7 +369,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         let miniR: [Float] = [1.9*0.28, 1.4*0.28, 0.9*0.28]
         for (i,r) in miniR.enumerated() {
             let g = SCNSphere(radius:CGFloat(r)); g.segmentCount=4
-            let m = SCNMaterial(); m.emission.contents = colors[i].withAlphaComponent(0.25+Float(i)*0.06)
+            let m = SCNMaterial(); m.emission.contents = colors[i].withAlphaComponent(CGFloat(0.25 + Double(i)*0.06))
             m.fillMode = .lines; m.lightingModel = .constant; g.materials = [m]
             group.addChildNode(SCNNode(geometry:g))
         }
