@@ -116,10 +116,7 @@ extension MISTSession: GKMatchDelegate {
         case .mazeComplete:
             // Peer solved a maze — add their node to BRPN scene
             if let sessionID = event.payload["sessionID"] {
-                BRPNSceneViewModel.shared?.addRemoteNode(
-                    uid: sessionID,
-                    color: .cyan
-                )
+                BRPNSceneViewModel.shared?.addRemoteNode(uid: sessionID)
             }
         case .brpnNode:
             if let sid = event.payload["sessionID"],
@@ -127,7 +124,7 @@ extension MISTSession: GKMatchDelegate {
                let shellInt = Int(shellRaw),
                let shell = BRPNShell(rawValue: shellInt) {
                 _ = shell // shell routing for future node coloring
-                BRPNSceneViewModel.shared?.addRemoteNode(uid: sid, color: .cyan)
+                BRPNSceneViewModel.shared?.addRemoteNode(uid: sid)
             }
         case .signal:
             break
