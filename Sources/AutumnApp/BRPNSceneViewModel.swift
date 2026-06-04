@@ -82,7 +82,6 @@ public final class BRPNSceneViewModel: ObservableObject {
                 let m = SCNMaterial()
                 m.diffuse.contents = shellColors[i].withAlphaComponent(0)
                 m.emission.contents = shellColors[i]
-                m.emissionIntensity = 0.3 + Float(i) * 0.08
                 m.fillMode = .lines
                 m.isDoubleSided = true
                 m.transparency = CGFloat(0.18 + Float(i) * 0.08)
@@ -177,7 +176,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         let hue = (t * 0.02).truncatingRemainder(dividingBy: 1.0)
         (coreNode?.geometry?.firstMaterial?.emission.contents as? UIColor).map { _ in
             coreNode?.geometry?.firstMaterial?.emission.contents =
-                UIColor(hue: CGFloat(hue) * 0.15 + 0.45, saturation: 1, brightness: 1, alpha: 1)
+                UIColor(hue: CGFloat(hue * 0.15 + 0.45), saturation: 1, brightness: 1, alpha: 1)
         }
 
         // Advance maze solve animation
