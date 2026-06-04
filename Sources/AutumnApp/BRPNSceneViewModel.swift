@@ -345,7 +345,7 @@ public final class BRPNSceneViewModel: ObservableObject {
             geo.segmentCount = 4
             geo.firstMaterial = {
                 let m = SCNMaterial()
-                m.emission.contents = colors[i].withAlphaComponent(0.22 + Float(i) * 0.06)
+                m.emission.contents = colors[i].withAlphaComponent(CGFloat(0.22 + Double(i) * 0.06))
                 m.fillMode = .lines
                 m.lightingModel = .constant
                 return m
