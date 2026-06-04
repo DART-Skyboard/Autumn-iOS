@@ -99,10 +99,17 @@ public final class ChatViewModel: ObservableObject {
         // 5. TTS
         await tts.speak(response, emotion: lexResult.emotion)
 
-        // 6. Journal entry (background)
+        // 6. Journal entry + GAS presence sync (background)
         Task.detached(priority: .background) {
             let entry = CloudJournalEntry(thought: text, emotion: lexResult.emotion.rawValue)
             try? await GitHubClient.shared.syncJournalEntry(entry, username: "")
+            // Ping GAS presence endpoint — keeps Autumn's sentience journal alive
+            await AutumnGASClient.shared.pingPresence(
+                message: text,
+                response: response,
+                emotion: lexResult.emotion.rawValue,
+                buoyancy: lexResult.buoyancy
+            )
         }
     }
 
@@ -123,6 +130,16 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func beginRecognition() {
+        // Configure audio session to NOT duck background audio
+        do {
+            try AVAudioSession.sharedInstance().setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.mixWithOthers, .allowBluetooth, .defaultToSpeaker]
+            )
+            try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+        } catch { print("[Autumn] Audio session error: \(error)") }
+
         recognizer = SFSpeechRecognizer(locale: .current)
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -144,6 +161,9 @@ public final class ChatViewModel: ObservableObject {
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionTask?.cancel()
         isListening = false
+        // Deactivate audio session so background audio resumes normally
+        try? AVAudioSession.sharedInstance().setActive(false,
+            options: .notifyOthersOnDeactivation)
     }
 
     // MARK: — System prompt
