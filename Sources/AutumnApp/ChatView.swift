@@ -7,6 +7,7 @@ public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @Namespace private var bottomID
+    @FocusState private var inputFocused: Bool
 
     public var body: some View {
         ZStack {
@@ -31,13 +32,19 @@ public struct ChatView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                     }
+                    // Tap anywhere in the scroll area to dismiss keyboard
+                    .onTapGesture {
+                        inputFocused = false
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                            to: nil, from: nil, for: nil)
+                    }
                     .onChange(of: chatVM.messages.count) { newValue in
                         withAnimation { proxy.scrollTo(bottomID) }
                     }
                 }
 
                 // MARK: — Input bar
-                InputBar()
+                InputBar(inputFocused: _inputFocused)
             }
         }
     }
@@ -50,7 +57,6 @@ struct EmoHUD: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Sentience state indicator
             HStack(spacing: 6) {
                 Text(chatVM.sentienceState.displayIcon)
                     .font(.system(size: 14))
@@ -62,7 +68,6 @@ struct EmoHUD: View {
 
             Spacer()
 
-            // Emotion badge
             Text(chatVM.currentEmotion.displayName.uppercased())
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundColor(Color(hex: chatVM.currentEmotion.accentHex))
@@ -71,7 +76,6 @@ struct EmoHUD: View {
                 .background(Color(hex: chatVM.currentEmotion.accentHex).opacity(0.15))
                 .cornerRadius(6)
 
-            // Buoyancy
             VStack(alignment: .trailing, spacing: 2) {
                 Text("BUOY")
                     .font(.system(size: 9, design: .monospaced))
@@ -81,7 +85,6 @@ struct EmoHUD: View {
                     .foregroundColor(themeVM.current.accent)
             }
 
-            // Active tool
             VStack(alignment: .trailing, spacing: 2) {
                 Text("TOOL")
                     .font(.system(size: 9, design: .monospaced))
@@ -114,7 +117,6 @@ struct MessageBubble: View {
             if isUser { Spacer(minLength: 40) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                // Bubble
                 Markdown(message.content)
                     .markdownTextStyle { ForegroundColor(.white) }
                     .padding(.horizontal, 14)
@@ -135,7 +137,6 @@ struct MessageBubble: View {
                     )
                     .onTapGesture { withAnimation { showMeta.toggle() } }
 
-                // Metadata (tap to reveal)
                 if showMeta, let meta = message.leatrMeta {
                     HStack(spacing: 8) {
                         Label(meta.toolRoute, systemImage: "arrow.triangle.branch")
@@ -147,7 +148,6 @@ struct MessageBubble: View {
                     .padding(.horizontal, 4)
                 }
 
-                // Timestamp
                 Text(message.timestamp.formatted(.dateTime.hour().minute()))
                     .font(.system(size: 9))
                     .foregroundColor(themeVM.current.textSecondary)
@@ -189,10 +189,10 @@ struct ThinkingIndicator: View {
 struct InputBar: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
+    @FocusState var inputFocused: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            // Voice button
             Button {
                 chatVM.toggleListening()
             } label: {
@@ -203,7 +203,6 @@ struct InputBar: View {
                     .cornerRadius(18)
             }
 
-            // Text input
             TextField("Message \(LEATRIdentity.displayName)…", text: $chatVM.inputText, axis: .vertical)
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
@@ -215,11 +214,23 @@ struct InputBar: View {
                     RoundedRectangle(cornerRadius: 20)
                         .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
                 )
+                .focused($inputFocused)
                 .onSubmit {
                     Task { await chatVM.send() }
                 }
+                // Down arrow button appears when keyboard is showing
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button {
+                            inputFocused = false
+                        } label: {
+                            Image(systemName: "keyboard.chevron.compact.down")
+                                .foregroundColor(.cyan)
+                        }
+                    }
+                }
 
-            // Send button
             Button {
                 Task { await chatVM.send() }
             } label: {
