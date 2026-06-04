@@ -1,3 +1,5 @@
+import AutumnServices
+import LEATRCore
 import SwiftUI
 
 // MARK: — Ash Canvas Drawer
@@ -205,15 +207,15 @@ struct AshCanvasNodeView: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color(node.tool.color).opacity(0.3))
+                .fill(Color(node.tool.ashColor).opacity(0.3))
                 .frame(width: isSelected ? 26 : 22, height: isSelected ? 26 : 22)
                 .overlay(Circle()
-                    .stroke(Color(node.tool.color), lineWidth: isSelected ? 1.5 : 0.8))
+                    .stroke(Color(node.tool.ashColor), lineWidth: isSelected ? 1.5 : 0.8))
             Text(node.tool.prefix)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(Color(node.tool.color))
+                .foregroundColor(Color(node.tool.ashColor))
         }
-        .shadow(color: Color(node.tool.color).opacity(0.4), radius: isSelected ? 8 : 4)
+        .shadow(color: Color(node.tool.ashColor).opacity(0.4), radius: isSelected ? 8 : 4)
     }
 }
 
@@ -328,7 +330,7 @@ extension NaturalTool {
         case .scissors: return "R"
         }
     }
-    var color: UIColor {
+    var ashColor: UIColor {
         switch self {
         case .maze:     return UIColor(red:0,green:1,blue:0.8,alpha:1)
         case .puzzle:   return UIColor(red:0.53,green:0.8,blue:1,alpha:1)
