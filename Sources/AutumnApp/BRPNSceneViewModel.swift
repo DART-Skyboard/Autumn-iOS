@@ -1,3 +1,4 @@
+import LEATRCore
 import SwiftUI
 import SceneKit
 import Combine
