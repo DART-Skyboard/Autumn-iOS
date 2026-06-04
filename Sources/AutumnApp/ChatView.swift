@@ -19,7 +19,6 @@ public struct ChatView: View {
                 // MARK: — Message list
                 ScrollViewReader { proxy in
                     ScrollView {
-        .scrollDismissesKeyboard(.interactively)
                         LazyVStack(spacing: 12) {
                             ForEach(chatVM.messages.filter { !$0.isInternal }) { msg in
                                 MessageBubble(message: msg)
