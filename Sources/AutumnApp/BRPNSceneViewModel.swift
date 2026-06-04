@@ -2,13 +2,12 @@ import SwiftUI
 import SceneKit
 import LEATRCore
 
-// MARK: — BRPNSceneViewModel v3
-// Exact port of lemac.html generateCubic() + getRandomPerimeter3D():
-// 1. Generate maze via recursive backtracker starting at (0,0,0) — perfect maze, no loops/islands
-// 2. Pick random perimeter face cells for start & end
-// 3. Carve the outer wall face on those cells to create the opening
-// 4. BFS solve from start to end
-// 5. Cubic (equal W=H=D), shells visible, correct node sizing
+// MARK: — BRPNSceneViewModel v4
+// Changes from v3:
+// - Auto-solve removed: after solve completes, cube stays solved until user/Autumn triggers rebuild
+// - generateMaze() is now a separate public call (hooked to NEW MAZE button)
+// - Bouncy physics orbs restored (spheres + rounded-rect slabs, white, physics body)
+// - No delay between iterations
 
 @MainActor
 public final class BRPNSceneViewModel: ObservableObject {
@@ -30,11 +29,12 @@ public final class BRPNSceneViewModel: ObservableObject {
     private var particleData: [(r:Float,spd:Float,off:Float,yOff:Float)] = []
     private var sessionGroupNodes: [String: SCNNode] = [:]
     public var pathMeshNodes: [SCNNode] = []
+    private var bouncyNodes: [SCNNode] = []
     private var solveStep = 0
     private var frameCount = 0
     private var presenceTimer: Timer?
 
-    // Cubic maze dimensions — all equal (lemac.html style)
+    // Cubic maze dimensions
     private let mazeN = 5
     private let cellSize: Float = 0.046
 
@@ -48,7 +48,13 @@ public final class BRPNSceneViewModel: ObservableObject {
     // MARK: — Setup
     public func setupScene() {
         scene.background.contents = UIColor.clear
-        let amb = SCNNode(); amb.light = { let l=SCNLight(); l.type = .ambient; l.intensity=200; return l }()
+
+        // Physics world for bouncy orbs
+        scene.physicsWorld.gravity = SCNVector3(0, 0, 0) // zero-g float
+        scene.physicsWorld.speed = 1.0
+
+        let amb = SCNNode()
+        amb.light = { let l=SCNLight(); l.type = .ambient; l.intensity=200; return l }()
         scene.rootNode.addChildNode(amb)
 
         // 3 Wireframe shells
@@ -82,7 +88,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         scene.rootNode.addChildNode(mazeOrbGroup)
         buildOrbMazeGeometry()
 
-        // Particles
+        // Particles (small colored dots on spline paths)
         for i in 0..<30 {
             let pg=SCNSphere(radius:0.022)
             let pm=SCNMaterial(); pm.emission.contents=shellColors[i%3].withAlphaComponent(0.7)
@@ -93,27 +99,95 @@ public final class BRPNSceneViewModel: ObservableObject {
             scene.rootNode.addChildNode(node); particleNodes.append(node)
         }
 
-        // Tool swarm
-        let toolColors:[UIColor] = [
-            UIColor(red:1,green:0.27,blue:0.4,alpha:1), UIColor(red:0,green:1,blue:0.8,alpha:1),
-            UIColor(red:0,green:0.53,blue:1,alpha:1),   UIColor(red:0.53,green:0.8,blue:1,alpha:1),
-            UIColor(red:1,green:0.53,blue:0.27,alpha:1),
-        ]
-        for (ci,col) in toolColors.enumerated() {
-            for i in 0..<3 {
-                let tg=SCNBox(width:0.05,height:0.032,length:0.018,chamferRadius:0.005)
-                let tm=SCNMaterial(); tm.emission.contents=col.withAlphaComponent(0.6)
-                tm.lightingModel = .constant; tg.materials=[tm]
-                let tn=SCNNode(geometry:tg)
-                let r=shellRadii[i%3]*Float.random(in:0.85...1.15)
-                let ang=Float(ci*3+i)/15.0 * .pi*2
-                tn.position=SCNVector3(r*cos(ang),Float.random(in:-0.4...0.4),r*sin(ang))
-                scene.rootNode.addChildNode(tn)
-            }
-        }
+        // Bouncy orbs — white spheres + slab shapes floating with physics
+        spawnBouncyOrbs()
 
         presenceTimer=Timer.scheduledTimer(withTimeInterval:30,repeats:true){[weak self] _ in
             Task { await self?.pollPresence() }
+        }
+    }
+
+    // MARK: — Bouncy orbs
+    private func spawnBouncyOrbs() {
+        // Remove old ones
+        bouncyNodes.forEach { $0.removeFromParentNode() }
+        bouncyNodes.removeAll()
+
+        let whiteMat: () -> SCNMaterial = {
+            let m = SCNMaterial()
+            m.diffuse.contents = UIColor.white
+            m.lightingModel = .constant
+            return m
+        }
+
+        // 8 large spheres, varying radius
+        let sphereSizes: [Float] = [0.18, 0.22, 0.14, 0.20, 0.16, 0.24, 0.13, 0.19]
+        for (i, r) in sphereSizes.enumerated() {
+            let geo = SCNSphere(radius: CGFloat(r))
+            geo.segmentCount = 12
+            geo.materials = [whiteMat()]
+            let node = SCNNode(geometry: geo)
+            node.name = "bouncy_sphere_\(i)"
+            // Place at random shell-distance spread
+            let angle = Float(i) / Float(sphereSizes.count) * .pi * 2
+            let spread: Float = Float.random(in: 1.8...3.2)
+            node.position = SCNVector3(
+                spread * cos(angle),
+                Float.random(in: -1.4...1.4),
+                spread * sin(angle)
+            )
+            // Physics — small random impulse, no gravity
+            let physBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: SCNSphere(radius: CGFloat(r)), options: nil))
+            physBody.mass = CGFloat(r * 0.4)
+            physBody.damping = 0.96       // high damping = slow drift
+            physBody.angularDamping = 0.98
+            physBody.friction = 0.0
+            physBody.restitution = 0.85
+            physBody.isAffectedByGravity = false
+            // Small random velocity for initial drift
+            let vx = Float.random(in: -0.08...0.08)
+            let vy = Float.random(in: -0.05...0.05)
+            let vz = Float.random(in: -0.08...0.08)
+            physBody.velocity = SCNVector3(vx, vy, vz)
+            node.physicsBody = physBody
+            scene.rootNode.addChildNode(node)
+            bouncyNodes.append(node)
+        }
+
+        // 5 rounded-rect slabs (SCNBox with chamfer)
+        for i in 0..<5 {
+            let w = CGFloat(Float.random(in: 0.12...0.18))
+            let h = CGFloat(Float.random(in: 0.08...0.11))
+            let d = CGFloat(0.04)
+            let geo = SCNBox(width: w, height: h, length: d, chamferRadius: 0.025)
+            geo.materials = [whiteMat()]
+            let node = SCNNode(geometry: geo)
+            node.name = "bouncy_slab_\(i)"
+            let angle = Float(i) / 5.0 * .pi * 2 + 0.4
+            let spread: Float = Float.random(in: 2.0...3.5)
+            node.position = SCNVector3(
+                spread * cos(angle),
+                Float.random(in: -1.2...1.2),
+                spread * sin(angle)
+            )
+            node.eulerAngles = SCNVector3(
+                Float.random(in: -.pi...(.pi)),
+                Float.random(in: -.pi...(.pi)),
+                Float.random(in: -.pi...(.pi))
+            )
+            let physBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: SCNBox(width: w, height: h, length: d, chamferRadius: 0), options: nil))
+            physBody.mass = 0.05
+            physBody.damping = 0.97
+            physBody.angularDamping = 0.97
+            physBody.friction = 0.0
+            physBody.isAffectedByGravity = false
+            let vx = Float.random(in: -0.06...0.06)
+            let vy = Float.random(in: -0.04...0.04)
+            let vz = Float.random(in: -0.06...0.06)
+            physBody.velocity = SCNVector3(vx, vy, vz)
+            node.physicsBody = physBody
+            scene.rootNode.addChildNode(node)
+            bouncyNodes.append(node)
         }
     }
 
@@ -129,23 +203,34 @@ public final class BRPNSceneViewModel: ObservableObject {
         mazeOrbGroup?.eulerAngles.y = t*0.004
         mazeOrbGroup?.eulerAngles.x = sin(t*0.0025)*0.08
         coreNode?.scale = SCNVector3(1+sin(t*2.0)*0.06, 1+sin(t*2.0)*0.06, 1+sin(t*2.0)*0.06)
+
+        // Gentle containment force — push bouncy nodes back if they drift too far
+        let boundary: Float = 3.8
+        for node in bouncyNodes {
+            guard let pb = node.physicsBody else { continue }
+            let p = node.presentation.position
+            let dist = sqrt(p.x*p.x + p.y*p.y + p.z*p.z)
+            if dist > boundary {
+                let fx = -p.x * 0.002
+                let fy = -p.y * 0.002
+                let fz = -p.z * 0.002
+                pb.applyForce(SCNVector3(fx, fy, fz), asImpulse: false)
+            }
+        }
+
         if isSolving { stepMazeSolveAnim() }
     }
 
     // MARK: — Build maze geometry (lemac.html exact logic)
     public func buildOrbMazeGeometry() {
-        // CRITICAL: remove ALL previous children first
         while mazeOrbGroup.childNodes.count > 0 {
-            let c = mazeOrbGroup.childNodes[0]
-            c.geometry?.materials.forEach { _ in }
-            c.removeFromParentNode()
+            mazeOrbGroup.childNodes[0].removeFromParentNode()
         }
         pathMeshNodes.removeAll(); solveStep=0; isSolving=false
 
         let n=mazeN; let u:Float=cellSize
         let half=Float(n)*u/2; let hs=u*0.5
 
-        // Step 1: Generate perfect maze from (0,0,0) — exact lemac.html generateCubic
         var grid=Array(repeating:Array(repeating:Array(repeating:MazeCell(),count:n),count:n),count:n)
         var stack=[(x:0,y:0,z:0)]
         grid[0][0][0].visited=true
@@ -168,24 +253,19 @@ public final class BRPNSceneViewModel: ObservableObject {
             }
         }
 
-        // Step 2: Pick random perimeter faces for start/end (lemac getRandomPerimeter3D)
         let start=getRandomPerimeter3D(n:n)
         var end=getRandomPerimeter3D(n:n)
-        // Ensure they're different cells (simple check, lemac style)
         var tries=0
         while end.x==start.x && end.y==start.y && end.z==start.z && tries<20 {
             end=getRandomPerimeter3D(n:n); tries+=1
         }
 
-        // Step 3: Carve outer wall face at start/end — creates the opening
         grid[start.z][start.y][start.x].removeWall(start.face)
         grid[end.z][end.y][end.x].removeWall(end.face)
 
-        // Step 4: BFS solve
         let solution=bfsSolve(grid:grid,n:n,from:(start.x,start.y,start.z),to:(end.x,end.y,end.z))
         mazeCanSolve = !solution.isEmpty
 
-        // Step 5: Build wall geometry — exact lemac approach (draw face quads)
         var wallVerts:[Float]=[]
         func quad(_ pts:[(Float,Float,Float)]) {
             for i in 0..<pts.count { let a=pts[i]; let b=pts[(i+1)%pts.count]; wallVerts+=[a.0,a.1,a.2,b.0,b.1,b.2] }
@@ -196,7 +276,6 @@ public final class BRPNSceneViewModel: ObservableObject {
             if c.left   { quad([(cx-hs,cy-hs,cz-hs),(cx-hs,cy+hs,cz-hs),(cx-hs,cy+hs,cz+hs),(cx-hs,cy-hs,cz+hs)]) }
             if c.bottom { quad([(cx-hs,cy-hs,cz-hs),(cx+hs,cy-hs,cz-hs),(cx+hs,cy-hs,cz+hs),(cx-hs,cy-hs,cz+hs)]) }
             if c.back   { quad([(cx-hs,cy-hs,cz-hs),(cx+hs,cy-hs,cz-hs),(cx+hs,cy+hs,cz-hs),(cx-hs,cy+hs,cz-hs)]) }
-            // Also draw right/top/front for perimeter faces
             if x==n-1 && c.right  { quad([(cx+hs,cy-hs,cz-hs),(cx+hs,cy+hs,cz-hs),(cx+hs,cy+hs,cz+hs),(cx+hs,cy-hs,cz+hs)]) }
             if y==n-1 && c.top    { quad([(cx-hs,cy+hs,cz-hs),(cx+hs,cy+hs,cz-hs),(cx+hs,cy+hs,cz+hs),(cx-hs,cy+hs,cz+hs)]) }
             if z==n-1 && c.front  { quad([(cx-hs,cy-hs,cz+hs),(cx+hs,cy-hs,cz+hs),(cx+hs,cy+hs,cz+hs),(cx-hs,cy+hs,cz+hs)]) }
@@ -214,7 +293,6 @@ public final class BRPNSceneViewModel: ObservableObject {
             mazeOrbGroup.addChildNode(SCNNode(geometry:geo))
         }
 
-        // Path nodes
         let pathGeo=SCNSphere(radius:CGFloat(u*0.16))
         for pt in solution {
             let mat=SCNMaterial(); mat.emission.contents=UIColor(red:0,green:1,blue:1,alpha:0); mat.lightingModel = .constant
@@ -224,15 +302,17 @@ public final class BRPNSceneViewModel: ObservableObject {
             mesh.name="pathNode"; mazeOrbGroup.addChildNode(mesh); pathMeshNodes.append(mesh)
         }
 
-        // Start (green) / End (orange-red) markers
         addMarker(x:start.x,y:start.y,z:start.z,n:n,u:u,half:half,hs:hs,
                   color:UIColor(red:0.2,green:1.0,blue:0.4,alpha:1))
         addMarker(x:end.x,y:end.y,z:end.z,n:n,u:u,half:half,hs:hs,
                   color:UIColor(red:1.0,green:0.3,blue:0.15,alpha:1))
     }
 
-    // MARK: — getRandomPerimeter3D (exact port of lemac.html)
-    // Returns a random cell on any of the 6 cube faces, with the face name to carve
+    // MARK: — Public: generate new maze iteration (hooked to NEW MAZE button)
+    public func generateNewMaze() {
+        buildOrbMazeGeometry()
+    }
+
     private struct PerimeterPoint { let x,y,z: Int; let face: String }
 
     private func getRandomPerimeter3D(n:Int) -> PerimeterPoint {
@@ -247,7 +327,6 @@ public final class BRPNSceneViewModel: ObservableObject {
         }
     }
 
-    // MARK: — BFS solver
     private func bfsSolve(grid:[[[MazeCell]]],n:Int,from:(Int,Int,Int),to:(Int,Int,Int)) -> [(Int,Int,Int)] {
         typealias Pt=(Int,Int,Int)
         var queue:[(Pt,[Pt])]=[(from,[from])]
@@ -281,16 +360,17 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     // MARK: — Autumn-only solve
+    // Reveals path in place; does NOT auto-generate new maze after solving
     public func autumnSolveMaze() {
-        guard mazeCanSolve,!isSolving else { return }
+        guard mazeCanSolve, !isSolving else { return }
         solveStep=0; isSolving=true
         pathMeshNodes.forEach { $0.geometry?.firstMaterial?.emission.contents=UIColor(red:0,green:1,blue:1,alpha:0) }
     }
 
     private func stepMazeSolveAnim() {
         guard solveStep < pathMeshNodes.count else {
-            isSolving=false
-            DispatchQueue.main.asyncAfter(deadline:.now()+3) { [weak self] in self?.buildOrbMazeGeometry() }
+            // Solve complete — stay solved, do NOT auto-rebuild
+            isSolving = false
             return
         }
         let toReveal=min(2,pathMeshNodes.count-solveStep)
