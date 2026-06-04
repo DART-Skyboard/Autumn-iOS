@@ -8,6 +8,7 @@ public struct ToolsView: View {
     @State private var selected: ToolPanel = .arcEdge
 
     enum ToolPanel: String, CaseIterable {
+        case mantis   = "MANTIS NAV"
         case arcEdge  = "Arc Edge"
         case arcLake  = "ArcLake"
         case calc     = "CALC"
@@ -52,6 +53,8 @@ public struct ToolsView: View {
 
                 // Panel content
                 switch selected {
+                case .mantis:
+                    MantisNavigationView()
                 case .arcEdge: ArcEdgePanel()
                 case .arcLake: ArcLakePanel()
                 case .calc:    CalcPanel()
