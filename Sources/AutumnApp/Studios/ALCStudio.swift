@@ -320,14 +320,11 @@ final class ALCCalculator: ObservableObject {
             status = "Sign in with GitHub to export to your Ash repository."
             return
         }
-        let payload: [String: Any] = [
-            "tool": "calc",
-            "exported_at": ISO8601DateFormatter().string(from: Date()),
-            "uid": auth.sessionUID,
-            "calc_result": result,
-            "namo_query_len": NSNull(),
-            "namo_counts": NSNull()
-        ]
+        var payload: [String: Any] = [:]
+        payload["tool"] = "calc"
+        payload["exported_at"] = ISO8601DateFormatter().string(from: Date())
+        payload["uid"] = auth.sessionUID
+        payload["calc_result"] = result
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]),
               let content = String(data: data, encoding: .utf8) else { return }
         let filename = "alc_export_\(Int(Date().timeIntervalSince1970 * 1000)).json"
@@ -447,17 +444,20 @@ final class NamoEngine: ObservableObject {
             status = "Sign in with GitHub to export to your Ash repository."
             return
         }
-        let payload: [String: Any] = [
-            "tool": "namo",
-            "exported_at": ISO8601DateFormatter().string(from: Date()),
-            "uid": auth.sessionUID,
-            "calc_result": NSNull(),
-            "namo_query_len": query.trimmingCharacters(in: .whitespaces).count,
-            "namo_counts": [
-                "fLow": fLists["low"]?.count ?? 0, "fMod": fLists["moderate"]?.count ?? 0, "fHigh": fLists["high"]?.count ?? 0,
-                "mLow": mLists["low"]?.count ?? 0, "mMod": mLists["moderate"]?.count ?? 0, "mHigh": mLists["high"]?.count ?? 0
-            ]
+        let counts: [String: Int] = [
+            "fLow": fLists["low"]?.count ?? 0,
+            "fMod": fLists["moderate"]?.count ?? 0,
+            "fHigh": fLists["high"]?.count ?? 0,
+            "mLow": mLists["low"]?.count ?? 0,
+            "mMod": mLists["moderate"]?.count ?? 0,
+            "mHigh": mLists["high"]?.count ?? 0
         ]
+        var payload: [String: Any] = [:]
+        payload["tool"] = "namo"
+        payload["exported_at"] = ISO8601DateFormatter().string(from: Date())
+        payload["uid"] = auth.sessionUID
+        payload["namo_query_len"] = query.trimmingCharacters(in: .whitespaces).count
+        payload["namo_counts"] = counts
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]),
               let content = String(data: data, encoding: .utf8) else { return }
         let filename = "alc_export_\(Int(Date().timeIntervalSince1970 * 1000)).json"
