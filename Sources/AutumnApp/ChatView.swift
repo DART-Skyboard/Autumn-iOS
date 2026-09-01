@@ -11,8 +11,7 @@ public struct ChatView: View {
 
     public var body: some View {
         ZStack {
-            themeVM.current.gradient.ignoresSafeArea()
-
+            // Chrome panel only — no extra dark wash over the BRPN/video (web #vid-scrim owns overlay).
             VStack(spacing: 0) {
                 // MARK: — EMO HUD
                 EmoHUD()

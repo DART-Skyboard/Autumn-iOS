@@ -2,12 +2,9 @@ import SwiftUI
 import SceneKit
 import LEATRCore
 
-// MARK: — BRPNSceneViewModel v4
-// Changes from v3:
-// - Auto-solve removed: after solve completes, cube stays solved until user/Autumn triggers rebuild
-// - generateMaze() is now a separate public call (hooked to NEW MAZE button)
-// - Bouncy physics orbs restored (spheres + rounded-rect slabs, white, physics body)
-// - No delay between iterations
+// MARK: — BRPNSceneViewModel
+// Live port of index.html initBRPN / animate / buildOrbMazeGeometry.
+// JS names kept in comments. SceneKit, not WKWebView.
 
 @MainActor
 public final class BRPNSceneViewModel: ObservableObject {
@@ -20,424 +17,399 @@ public final class BRPNSceneViewModel: ObservableObject {
     @Published public var quantumSocket: Double = 6.9120
     @Published public var mazeCanSolve = false
     @Published public var isSolving = false
+    /// JS: `_mantisNodeMax` default 100 — node cap HUD 10/50/100/300/1200/2e6
+    @Published public var mantisNodeMax: Int = 100
 
     public let scene = SCNScene()
     public var shells: [SCNNode] = []
+    public var pathMeshNodes: [SCNNode] = []
+    public static weak var shared: BRPNSceneViewModel?
+
+    let animator = BRPNAnimator()
+    var cameraNode: SCNNode?
     private var coreNode: SCNNode!
     private var mazeOrbGroup: SCNNode!
     private var particleNodes: [SCNNode] = []
-    private var particleData: [(r:Float,spd:Float,off:Float,yOff:Float)] = []
     private var sessionGroupNodes: [String: SCNNode] = [:]
-    public var pathMeshNodes: [SCNNode] = []
-    public static weak var shared: BRPNSceneViewModel?
     private var splineGroup: SCNNode?
     private var splineSamples: [[SCNVector3]] = []
-    private var mistParticleNodes: [SCNNode] = []
-    private var bouncyNodes: [SCNNode] = []
-    private var solveStep = 0
-    private var frameCount = 0
     private var presenceTimer: Timer?
+    private var mantisNodes: [SCNNode] = []
+    private var toolPivots: [SCNNode] = []
 
-    // Cubic maze dimensions
-    private let mazeN = 5
-    private let cellSize: Float = 0.046
-
+    // JS: shellColors=[0x00ffcc,0x0088ff,0xff4466]; shellRadii=[1.9,1.4,0.9]
     private let shellColors: [UIColor] = [
-        UIColor(red:0.0,green:1.0,blue:0.8,alpha:1),
-        UIColor(red:0.0,green:0.53,blue:1.0,alpha:1),
-        UIColor(red:1.0,green:0.27,blue:0.4,alpha:1),
+        ThreeJSGeometry.hex(0x00ffcc),
+        ThreeJSGeometry.hex(0x0088ff),
+        ThreeJSGeometry.hex(0xff4466),
     ]
-    private let shellRadii: [Float] = [1.9,1.4,0.9]
+    private let shellRadii: [Float] = [1.9, 1.4, 0.9]
 
-    // MARK: — Setup
+    // MARK: — Setup  (JS initBRPN)
     public func setupScene() {
         Self.shared = self
         scene.background.contents = UIColor.clear
 
-        // Physics world for bouncy orbs
-        scene.physicsWorld.gravity = SCNVector3(0, 0, 0) // zero-g float
-        scene.physicsWorld.speed = 1.0
+        // Clear previous
+        scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
+        shells.removeAll()
+        particleNodes.removeAll()
+        sessionGroupNodes.removeAll()
+        pathMeshNodes.removeAll()
+        toolPivots.removeAll()
+        mantisNodes.removeAll()
 
         let amb = SCNNode()
-        amb.light = { let l=SCNLight(); l.type = .ambient; l.intensity=200; return l }()
+        amb.light = { let l = SCNLight(); l.type = .ambient; l.intensity = 280; l.color = UIColor.white; return l }()
         scene.rootNode.addChildNode(amb)
 
-        // 3 Wireframe shells
-        for (i,radius) in shellRadii.enumerated() {
-            let geo = SCNSphere(radius:CGFloat(radius)); geo.segmentCount=8
-            let mat = SCNMaterial()
-            mat.diffuse.contents  = UIColor.clear
-            mat.emission.contents = shellColors[i]
-            mat.fillMode = .lines
-            mat.isDoubleSided = true
-            mat.writesToDepthBuffer = false
-            geo.materials = [mat]
-            let node = SCNNode(geometry:geo); node.name="shell_\(i)"
-            let dur = Double(22+i*7)
-            node.runAction(SCNAction.repeatForever(SCNAction.rotateBy(
-                x:CGFloat(i==0 ? 0.15 : i==1 ? -0.1 : 0.2),
-                y:CGFloat(i==0 ? 1.0 : i==1 ? -0.85 : 0.65),
-                z:0, duration:dur)))
-            scene.rootNode.addChildNode(node); shells.append(node)
+        // Camera — JS: PerspectiveCamera(50,…,0.1,100) position.set(0,1.5,5) lookAt(0,0,0)
+        let cam = SCNCamera()
+        cam.fieldOfView = 50
+        cam.zNear = 0.1
+        cam.zFar = 100
+        let camNode = SCNNode()
+        camNode.camera = cam
+        camNode.position = SCNVector3(0, 1.5, 5)
+        camNode.look(at: SCNVector3(0, 0, 0))
+        camNode.name = "brpnCam"
+        scene.rootNode.addChildNode(camNode)
+        cameraNode = camNode
+
+        // Buoyancy shells — JS: IcosahedronGeometry(shellRadii[i], 1) opacity 0.18+i*0.08
+        for (i, radius) in shellRadii.enumerated() {
+            let geo = ThreeJSGeometry.icosahedron(radius: radius, detail: 1)
+            geo.materials = [ThreeJSGeometry.wireMat(shellColors[i], opacity: CGFloat(0.18 + Float(i) * 0.08))]
+            let mesh = SCNNode(geometry: geo)
+            mesh.name = "shell_\(i)" // GEO / MAR / AERO
+            scene.rootNode.addChildNode(mesh)
+            shells.append(mesh)
         }
 
-        // Core
-        let cg=SCNSphere(radius:0.16); cg.segmentCount=8
-        let cm=SCNMaterial(); cm.diffuse.contents=UIColor.clear
-        cm.emission.contents=UIColor(red:0,green:1,blue:0.8,alpha:0.18)
-        cm.fillMode = .lines; cg.materials=[cm]
-        coreNode=SCNNode(geometry:cg); scene.rootNode.addChildNode(coreNode)
+        // Core sphere — JS: SphereGeometry(0.18, 12, 12) opacity 0.18 wireframe 0x00ffcc
+        let cg = SCNSphere(radius: 0.18)
+        cg.segmentCount = 12
+        cg.materials = [ThreeJSGeometry.wireMat(ThreeJSGeometry.hex(0x00ffcc), opacity: 0.18)]
+        coreNode = SCNNode(geometry: cg)
+        coreNode.name = "core"
+        scene.rootNode.addChildNode(coreNode)
 
-        // Maze group
-        mazeOrbGroup=SCNNode(); mazeOrbGroup.name="mazeOrb"
+        // LEMAC 3D maze at core — JS: mazeOrbGroup + buildOrbMazeGeometry()
+        mazeOrbGroup = SCNNode()
+        mazeOrbGroup.name = "mazeOrb"
         scene.rootNode.addChildNode(mazeOrbGroup)
         buildOrbMazeGeometry()
 
-        // Particles (small colored dots on spline paths)
+        // Orbital particles — JS: 30 × SphereGeometry(0.025,4,4) r=0.55+rand*1.45
+        var pdata: [(r: Float, spd: Float, off: Float, yOff: Float)] = []
         for i in 0..<30 {
-            let pg=SCNSphere(radius:0.022)
-            let pm=SCNMaterial(); pm.emission.contents=shellColors[i%3].withAlphaComponent(0.7)
-            pm.lightingModel = .constant; pg.materials=[pm]
-            let node=SCNNode(geometry:pg); node.name="particle_\(i)"
-            particleData.append((Float.random(in:0.55...2.0),Float.random(in:0.3...1.5),
-                                  Float.random(in:0...(.pi*2)),Float.random(in:-0.8...0.8)))
-            scene.rootNode.addChildNode(node); particleNodes.append(node)
+            let pg = SCNSphere(radius: 0.025)
+            pg.segmentCount = 4
+            pg.materials = [ThreeJSGeometry.basicMat(shellColors[i % 3], opacity: 0.7)]
+            let p = SCNNode(geometry: pg)
+            let r = 0.55 + Float.random(in: 0..<1) * 1.45
+            let spd = 0.3 + Float.random(in: 0..<1) * 1.2
+            let off = Float.random(in: 0..<(Float.pi * 2))
+            let yOff = (Float.random(in: 0..<1) - 0.5) * 1.6
+            pdata.append((r, spd, off, yOff))
+            scene.rootNode.addChildNode(p)
+            particleNodes.append(p)
         }
 
-        // Bouncy orbs — white spheres + slab shapes floating with physics
-        spawnBouncyOrbs()
+        spawnToolShapes()
 
-        presenceTimer=Timer.scheduledTimer(withTimeInterval:30,repeats:true){[weak self] _ in
+        animator.configure(
+            shells: shells,
+            core: coreNode,
+            mazeOrbGroup: mazeOrbGroup,
+            particles: particleNodes,
+            particleData: pdata,
+            camera: camNode,
+            shellColors: shellColors
+        )
+        animator.onPublishedSolve = { [weak self] solving, can in
+            DispatchQueue.main.async {
+                self?.isSolving = solving
+                self?.mazeCanSolve = can
+            }
+        }
+        animator.onRegen = { [weak self] in
+            DispatchQueue.main.async { self?.buildOrbMazeGeometry() }
+        }
+        animator.pathMeshNodes = pathMeshNodes
+
+        presenceTimer?.invalidate()
+        presenceTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { await self?.pollPresence() }
         }
     }
 
-    // MARK: — Bouncy orbs
-    private func spawnBouncyOrbs() {
-        // Remove old ones
-        bouncyNodes.forEach { $0.removeFromParentNode() }
-        bouncyNodes.removeAll()
-
-        let whiteMat: () -> SCNMaterial = {
-            let m = SCNMaterial()
-            m.diffuse.contents = UIColor.white
-            m.lightingModel = .constant
-            return m
-        }
-
-        // 8 large spheres, varying radius
-        let sphereSizes: [Float] = [0.18, 0.22, 0.14, 0.20, 0.16, 0.24, 0.13, 0.19]
-        for (i, r) in sphereSizes.enumerated() {
-            let geo = SCNSphere(radius: CGFloat(r))
-            geo.segmentCount = 12
-            geo.materials = [whiteMat()]
-            let node = SCNNode(geometry: geo)
-            node.name = "bouncy_sphere_\(i)"
-            // Place at random shell-distance spread
-            let angle = Float(i) / Float(sphereSizes.count) * .pi * 2
-            let spread: Float = Float.random(in: 1.8...3.2)
-            node.position = SCNVector3(
-                spread * cos(angle),
-                Float.random(in: -1.4...1.4),
-                spread * sin(angle)
-            )
-            // Physics — small random impulse, no gravity
-            let physBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: SCNSphere(radius: CGFloat(r)), options: nil))
-            physBody.mass = CGFloat(r * 0.4)
-            physBody.damping = 0.96       // high damping = slow drift
-            physBody.angularDamping = 0.98
-            physBody.friction = 0.0
-            physBody.restitution = 0.85
-            physBody.isAffectedByGravity = false
-            // Small random velocity for initial drift
-            let vx = Float.random(in: -0.08...0.08)
-            let vy = Float.random(in: -0.05...0.05)
-            let vz = Float.random(in: -0.08...0.08)
-            physBody.velocity = SCNVector3(vx, vy, vz)
-            node.physicsBody = physBody
-            scene.rootNode.addChildNode(node)
-            bouncyNodes.append(node)
-        }
-
-        // 5 rounded-rect slabs (SCNBox with chamfer)
-        for i in 0..<5 {
-            let w = CGFloat(Float.random(in: 0.12...0.18))
-            let h = CGFloat(Float.random(in: 0.08...0.11))
-            let d = CGFloat(0.04)
-            let geo = SCNBox(width: w, height: h, length: d, chamferRadius: 0.025)
-            geo.materials = [whiteMat()]
-            let node = SCNNode(geometry: geo)
-            node.name = "bouncy_slab_\(i)"
-            let angle = Float(i) / 5.0 * .pi * 2 + 0.4
-            let spread: Float = Float.random(in: 2.0...3.5)
-            node.position = SCNVector3(
-                spread * cos(angle),
-                Float.random(in: -1.2...1.2),
-                spread * sin(angle)
-            )
-            node.eulerAngles = SCNVector3(
-                Float.random(in: -.pi...(.pi)),
-                Float.random(in: -.pi...(.pi)),
-                Float.random(in: -.pi...(.pi))
-            )
-            let physBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: SCNBox(width: w, height: h, length: d, chamferRadius: 0), options: nil))
-            physBody.mass = 0.05
-            physBody.damping = 0.97
-            physBody.angularDamping = 0.97
-            physBody.friction = 0.0
-            physBody.isAffectedByGravity = false
-            let vx = Float.random(in: -0.06...0.06)
-            let vy = Float.random(in: -0.04...0.04)
-            let vz = Float.random(in: -0.06...0.06)
-            physBody.velocity = SCNVector3(vx, vy, vz)
-            node.physicsBody = physBody
-            scene.rootNode.addChildNode(node)
-            bouncyNodes.append(node)
-        }
-    }
-
-    // MARK: — Frame update
-    public func updateFrame() {
-        frameCount += 1
-        let t = Float(frameCount)*0.016
-        for (i,node) in particleNodes.enumerated() {
-            guard i < particleData.count else { continue }
-            let d=particleData[i]; let a=t*d.spd+d.off
-            node.position=SCNVector3(d.r*cos(a),d.yOff+sin(t*0.3+Float(i))*0.12,d.r*sin(a))
-        }
-        mazeOrbGroup?.eulerAngles.y = t*0.004
-        mazeOrbGroup?.eulerAngles.x = sin(t*0.0025)*0.08
-        coreNode?.scale = SCNVector3(1+sin(t*2.0)*0.06, 1+sin(t*2.0)*0.06, 1+sin(t*2.0)*0.06)
-
-        // Gentle containment force — push bouncy nodes back if they drift too far
-        let boundary: Float = 3.8
-        for node in bouncyNodes {
-            guard let pb = node.physicsBody else { continue }
-            let p = node.presentation.position
-            let dist = sqrt(p.x*p.x + p.y*p.y + p.z*p.z)
-            if dist > boundary {
-                let fx = -p.x * 0.002
-                let fy = -p.y * 0.002
-                let fz = -p.z * 0.002
-                pb.applyForce(SCNVector3(fx, fy, fz), asImpulse: false)
+    // MARK: — Tool shape swarm  (JS makeToolShape / toolDefs)
+    private func spawnToolShapes() {
+        struct Def { let type: String; let color: UInt32; let count: Int }
+        let toolDefs: [Def] = [
+            Def(type: "knife", color: 0xff4466, count: 4),
+            Def(type: "stick", color: 0x00ffcc, count: 4),
+            Def(type: "hammer", color: 0x0088ff, count: 3),
+            Def(type: "envelope", color: 0x88ccff, count: 3),
+            Def(type: "scissors", color: 0xff8844, count: 3),
+        ]
+        var insts: [BRPNAnimator.ToolInst] = []
+        for def in toolDefs {
+            for i in 0..<def.count {
+                let shellLayer = i % 3
+                let baseR = shellRadii[shellLayer]
+                let r = baseR * (0.85 + Float.random(in: 0..<1) * 0.3)
+                let spd = 0.004 + Float.random(in: 0..<1) * 0.012
+                let off = Float.random(in: 0..<(Float.pi * 2))
+                let verts = BRPNToolShapes.verts(def.type)
+                guard let mesh = ThreeJSGeometry.lineSegments(verts, color: ThreeJSGeometry.hex(def.color), opacity: 0) else { continue }
+                mesh.scale = SCNVector3(0.55, 0.55, 0.55)
+                let pivot = SCNNode()
+                pivot.addChildNode(mesh)
+                scene.rootNode.addChildNode(pivot)
+                toolPivots.append(pivot)
+                var inst = BRPNAnimator.ToolInst()
+                inst.pivot = pivot
+                inst.mesh = mesh
+                inst.orbitRadius = r
+                inst.orbitSpeed = spd
+                inst.orbitOffset = off
+                inst.shellLayer = shellLayer
+                inst.tiltX = (Float.random(in: 0..<1) - 0.5) * Float.pi
+                inst.tiltZ = (Float.random(in: 0..<1) - 0.5) * Float.pi
+                insts.append(inst)
             }
         }
-
-        if isSolving { stepMazeSolveAnim() }
+        animator.tools = insts
     }
 
-    // MARK: — Build maze geometry (lemac.html exact logic)
+    // MARK: — buildOrbMazeGeometry  index.html 13076–13148
     public func buildOrbMazeGeometry() {
-        while mazeOrbGroup.childNodes.count > 0 {
-            mazeOrbGroup.childNodes[0].removeFromParentNode()
-        }
-        pathMeshNodes.removeAll(); solveStep=0; isSolving=false
+        mazeOrbGroup.childNodes.forEach { $0.removeFromParentNode() }
+        pathMeshNodes.removeAll()
+        animator.mazeOrbState.solveStep = 0
+        animator.mazeOrbState.solveActive = false
 
-        let n=mazeN; let u:Float=cellSize
-        let half=Float(n)*u/2; let hs=u*0.5
-
-        var grid=Array(repeating:Array(repeating:Array(repeating:MazeCell(),count:n),count:n),count:n)
-        var stack=[(x:0,y:0,z:0)]
-        grid[0][0][0].visited=true
-        while !stack.isEmpty {
-            let curr=stack.last!
-            var ns:[(x:Int,y:Int,z:Int,d1:String,d2:String)]=[]
-            if curr.x>0   && !grid[curr.z][curr.y][curr.x-1].visited { ns.append((curr.x-1,curr.y,curr.z,"left","right")) }
-            if curr.x<n-1 && !grid[curr.z][curr.y][curr.x+1].visited { ns.append((curr.x+1,curr.y,curr.z,"right","left")) }
-            if curr.y>0   && !grid[curr.z][curr.y-1][curr.x].visited { ns.append((curr.x,curr.y-1,curr.z,"bottom","top")) }
-            if curr.y<n-1 && !grid[curr.z][curr.y+1][curr.x].visited { ns.append((curr.x,curr.y+1,curr.z,"top","bottom")) }
-            if curr.z>0   && !grid[curr.z-1][curr.y][curr.x].visited { ns.append((curr.x,curr.y,curr.z-1,"back","front")) }
-            if curr.z<n-1 && !grid[curr.z+1][curr.y][curr.x].visited { ns.append((curr.x,curr.y,curr.z+1,"front","back")) }
-            if ns.isEmpty { stack.removeLast() }
-            else {
-                let next=ns[Int.random(in:0..<ns.count)]
-                grid[curr.z][curr.y][curr.x].removeWall(next.d1)
-                grid[next.z][next.y][next.x].removeWall(next.d2)
-                grid[next.z][next.y][next.x].visited=true
-                stack.append((next.x,next.y,next.z))
-            }
-        }
-
-        let start=getRandomPerimeter3D(n:n)
-        var end=getRandomPerimeter3D(n:n)
-        var tries=0
-        while end.x==start.x && end.y==start.y && end.z==start.z && tries<20 {
-            end=getRandomPerimeter3D(n:n); tries+=1
-        }
-
-        grid[start.z][start.y][start.x].removeWall(start.face)
-        grid[end.z][end.y][end.x].removeWall(end.face)
-
-        let solution=bfsSolve(grid:grid,n:n,from:(start.x,start.y,start.z),to:(end.x,end.y,end.z))
+        let w = animator.mazeOrbState.width
+        let h = animator.mazeOrbState.height
+        let d = animator.mazeOrbState.depth
+        let grid = MazeEngine.orbGenMaze(w, h, d)
+        animator.mazeOrbState.grid = grid
+        let solution = MazeEngine.orbSolveMaze(grid, w, h, d)
+        animator.mazeOrbState.solution = solution
         mazeCanSolve = !solution.isEmpty
+        isSolving = false
 
-        var wallVerts:[Float]=[]
-        func quad(_ pts:[(Float,Float,Float)]) {
-            for i in 0..<pts.count { let a=pts[i]; let b=pts[(i+1)%pts.count]; wallVerts+=[a.0,a.1,a.2,b.0,b.1,b.2] }
-        }
-        for z in 0..<n { for y in 0..<n { for x in 0..<n {
-            let c=grid[z][y][x]
-            let cx=Float(x)*u-half+hs, cy=Float(y)*u-half+hs, cz=Float(z)*u-half+hs
-            if c.left   { quad([(cx-hs,cy-hs,cz-hs),(cx-hs,cy+hs,cz-hs),(cx-hs,cy+hs,cz+hs),(cx-hs,cy-hs,cz+hs)]) }
-            if c.bottom { quad([(cx-hs,cy-hs,cz-hs),(cx+hs,cy-hs,cz-hs),(cx+hs,cy-hs,cz+hs),(cx-hs,cy-hs,cz+hs)]) }
-            if c.back   { quad([(cx-hs,cy-hs,cz-hs),(cx+hs,cy-hs,cz-hs),(cx+hs,cy+hs,cz-hs),(cx-hs,cy+hs,cz-hs)]) }
-            if x==n-1 && c.right  { quad([(cx+hs,cy-hs,cz-hs),(cx+hs,cy+hs,cz-hs),(cx+hs,cy+hs,cz+hs),(cx+hs,cy-hs,cz+hs)]) }
-            if y==n-1 && c.top    { quad([(cx-hs,cy+hs,cz-hs),(cx+hs,cy+hs,cz-hs),(cx+hs,cy+hs,cz+hs),(cx-hs,cy+hs,cz+hs)]) }
-            if z==n-1 && c.front  { quad([(cx-hs,cy-hs,cz+hs),(cx+hs,cy-hs,cz+hs),(cx+hs,cy+hs,cz+hs),(cx-hs,cy+hs,cz+hs)]) }
-        }}}
-
-        if !wallVerts.isEmpty {
-            let data=wallVerts.withUnsafeBufferPointer { Data(buffer:$0) }
-            let src=SCNGeometrySource(data:data,semantic:.vertex,vectorCount:wallVerts.count/3,
-                usesFloatComponents:true,componentsPerVector:3,bytesPerComponent:4,dataOffset:0,dataStride:12)
-            var idx=(0..<Int32(wallVerts.count/3)).map { Int32($0) }
-            let idxData=idx.withUnsafeMutableBufferPointer { Data(buffer:$0) }
-            let elem=SCNGeometryElement(data:idxData,primitiveType:.line,primitiveCount:idx.count/2,bytesPerIndex:4)
-            let geo=SCNGeometry(sources:[src],elements:[elem])
-            geo.firstMaterial = { let m=SCNMaterial(); m.emission.contents=UIColor(red:0,green:1,blue:0.8,alpha:0.55); m.lightingModel = .constant; return m }()
-            mazeOrbGroup.addChildNode(SCNNode(geometry:geo))
+        let u = MazeOrbState.u
+        let verts = MazeEngine.orbMazeWallVerts(grid: grid, w: w, h: h, d: d, u: u)
+        // JS: LineBasicMaterial({color:0x00ffcc,transparent:true,opacity:0.55})
+        if let wall = ThreeJSGeometry.lineSegments(verts, color: ThreeJSGeometry.hex(0x00ffcc), opacity: 0.55) {
+            wall.name = "mazeWalls"
+            mazeOrbGroup.addChildNode(wall)
         }
 
-        let pathGeo=SCNSphere(radius:CGFloat(u*0.16))
+        // Path spheres hidden, revealed during solve — JS: SphereGeometry(u*0.22,4,4) opacity 0
         for pt in solution {
-            let mat=SCNMaterial(); mat.emission.contents=UIColor(red:0,green:1,blue:1,alpha:0); mat.lightingModel = .constant
-            pathGeo.materials=[mat]
-            let mesh=SCNNode(geometry:pathGeo.copy() as! SCNGeometry)
-            mesh.position=SCNVector3(Float(pt.0)*u-half+hs,Float(pt.1)*u-half+hs,Float(pt.2)*u-half+hs)
-            mesh.name="pathNode"; mazeOrbGroup.addChildNode(mesh); pathMeshNodes.append(mesh)
+            let pg = SCNSphere(radius: CGFloat(u * 0.22))
+            pg.segmentCount = 4
+            pg.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00ffff), opacity: 0)]
+            let mesh = SCNNode(geometry: pg)
+            let c = MazeEngine.orbCellCenter(x: pt.x, y: pt.y, z: pt.z, w: w, h: h, d: d, u: u)
+            mesh.position = SCNVector3(c.0, c.1, c.2)
+            mesh.name = "pathNode"
+            mazeOrbGroup.addChildNode(mesh)
+            pathMeshNodes.append(mesh)
         }
 
-        addMarker(x:start.x,y:start.y,z:start.z,n:n,u:u,half:half,hs:hs,
-                  color:UIColor(red:0.2,green:1.0,blue:0.4,alpha:1))
-        addMarker(x:end.x,y:end.y,z:end.z,n:n,u:u,half:half,hs:hs,
-                  color:UIColor(red:1.0,green:0.3,blue:0.15,alpha:1))
+        // Start/end markers — JS: start 0x00ffcc Sphere u*0.35 at (0,0,0); end 0xff4466 at last
+        if !solution.isEmpty {
+            let mgeo = SCNSphere(radius: CGFloat(u * 0.35))
+            mgeo.segmentCount = 6
+            let sMat = ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00ffcc), opacity: 1)
+            let eMat = ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0xff4466), opacity: 1)
+            let sm = SCNNode(geometry: { let g = mgeo.copy() as! SCNSphere; g.materials = [sMat]; return g }())
+            let sc = MazeEngine.orbCellCenter(x: 0, y: 0, z: 0, w: w, h: h, d: d, u: u)
+            sm.position = SCNVector3(sc.0, sc.1, sc.2)
+            mazeOrbGroup.addChildNode(sm)
+            let last = solution[solution.count - 1]
+            let em = SCNNode(geometry: { let g = mgeo.copy() as! SCNSphere; g.materials = [eMat]; return g }())
+            let ec = MazeEngine.orbCellCenter(x: last.x, y: last.y, z: last.z, w: w, h: h, d: d, u: u)
+            em.position = SCNVector3(ec.0, ec.1, ec.2)
+            mazeOrbGroup.addChildNode(em)
+        }
+        animator.pathMeshNodes = pathMeshNodes
+        animator.mazeOrbGroup = mazeOrbGroup
     }
 
-    // MARK: — Public: generate new maze iteration (hooked to NEW MAZE button)
     public func generateNewMaze() {
+        // JS: regenOrbMazeCube
         buildOrbMazeGeometry()
-    }
-
-    private struct PerimeterPoint { let x,y,z: Int; let face: String }
-
-    private func getRandomPerimeter3D(n:Int) -> PerimeterPoint {
-        let face=Int.random(in:0..<6)
-        switch face {
-        case 0: return PerimeterPoint(x:0,     y:Int.random(in:0..<n), z:Int.random(in:0..<n), face:"left")
-        case 1: return PerimeterPoint(x:n-1,   y:Int.random(in:0..<n), z:Int.random(in:0..<n), face:"right")
-        case 2: return PerimeterPoint(x:Int.random(in:0..<n), y:0,     z:Int.random(in:0..<n), face:"bottom")
-        case 3: return PerimeterPoint(x:Int.random(in:0..<n), y:n-1,   z:Int.random(in:0..<n), face:"top")
-        case 4: return PerimeterPoint(x:Int.random(in:0..<n), y:Int.random(in:0..<n), z:0,     face:"back")
-        default:return PerimeterPoint(x:Int.random(in:0..<n), y:Int.random(in:0..<n), z:n-1,   face:"front")
+        if !animator.looking { dollyInOrbCube() }
+        else {
+            animator.camIdle = 0
+            animator.postSolveIdle = 0
+            animator.postRegenIdle = 1
         }
     }
 
-    private func bfsSolve(grid:[[[MazeCell]]],n:Int,from:(Int,Int,Int),to:(Int,Int,Int)) -> [(Int,Int,Int)] {
-        typealias Pt=(Int,Int,Int)
-        var queue:[(Pt,[Pt])]=[(from,[from])]
-        var visited=Set<String>(["\(from.0),\(from.1),\(from.2)"])
-        let goal="\(to.0),\(to.1),\(to.2)"
-        while !queue.isEmpty {
-            let (curr,path)=queue.removeFirst()
-            if "\(curr.0),\(curr.1),\(curr.2)"==goal { return path }
-            let c=grid[curr.2][curr.1][curr.0]
-            var moves:[Pt]=[]
-            if !c.left   && curr.0>0   { moves.append((curr.0-1,curr.1,curr.2)) }
-            if !c.right  && curr.0<n-1 { moves.append((curr.0+1,curr.1,curr.2)) }
-            if !c.bottom && curr.1>0   { moves.append((curr.0,curr.1-1,curr.2)) }
-            if !c.top    && curr.1<n-1 { moves.append((curr.0,curr.1+1,curr.2)) }
-            if !c.back   && curr.2>0   { moves.append((curr.0,curr.1,curr.2-1)) }
-            if !c.front  && curr.2<n-1 { moves.append((curr.0,curr.1,curr.2+1)) }
-            for m in moves {
-                let k="\(m.0),\(m.1),\(m.2)"
-                if !visited.contains(k) { visited.insert(k); queue.append((m,path+[m])) }
-            }
-        }
-        return []
-    }
-
-    private func addMarker(x:Int,y:Int,z:Int,n:Int,u:Float,half:Float,hs:Float,color:UIColor) {
-        let geo=SCNSphere(radius:CGFloat(u*0.35))
-        geo.firstMaterial = { let m=SCNMaterial(); m.emission.contents=color; m.lightingModel = .constant; return m }()
-        let node=SCNNode(geometry:geo)
-        node.position=SCNVector3(Float(x)*u-half+hs,Float(y)*u-half+hs,Float(z)*u-half+hs)
-        mazeOrbGroup.addChildNode(node)
-    }
-
-    // MARK: — Autumn-only solve
-    // Reveals path in place; does NOT auto-generate new maze after solving
+    /// JS: window.solveOrbMazeCube — dolly in + reveal BFS path of the 7×7×7 orb maze
     public func autumnSolveMaze() {
         guard mazeCanSolve, !isSolving else { return }
-        solveStep=0; isSolving=true
-        pathMeshNodes.forEach { $0.geometry?.firstMaterial?.emission.contents=UIColor(red:0,green:1,blue:1,alpha:0) }
+        dollyInOrbCube()
+        animator.mazeOrbState.solveActive = true
+        animator.mazeOrbState.solveStep = 0
+        animator.mazeOrbState.regenTimer = 0
+        for m in pathMeshNodes {
+            m.geometry?.firstMaterial?.emission.contents = ThreeJSGeometry.hex(0x00ffff).withAlphaComponent(0)
+            m.geometry?.firstMaterial?.diffuse.contents = ThreeJSGeometry.hex(0x00ffff).withAlphaComponent(0)
+        }
+        isSolving = true
     }
 
-    private func stepMazeSolveAnim() {
-        guard solveStep < pathMeshNodes.count else {
-            // Solve complete — stay solved, do NOT auto-rebuild
-            isSolving = false
-            return
-        }
-        let toReveal=min(2,pathMeshNodes.count-solveStep)
-        for i in 0..<toReveal {
-            let node=pathMeshNodes[solveStep+i]
-            node.geometry?.firstMaterial?.emission.contents=UIColor(red:0,green:1,blue:1,alpha:CGFloat.random(in:0.7...1.0))
-            node.runAction(SCNAction.sequence([SCNAction.scale(to:1.5,duration:0.08),SCNAction.scale(to:1.0,duration:0.12)]))
-        }
-        solveStep+=toReveal
+    /// JS: window.dollyInOrbCube
+    public func dollyInOrbCube() {
+        animator.looking = true
+        animator.camMode = "in"
+        animator.camIdle = 0
+        animator.postSolveIdle = 0
+        animator.postRegenIdle = 0
     }
 
-    public func addRemoteNode(uid:String,emotion:String="neutral") {
+    public func dollyOutOrbCube() {
+        if !animator.looking && animator.camMode == "wide" { return }
+        animator.camMode = "out"
+        animator.postSolveIdle = 0
+        animator.postRegenIdle = 0
+        animator.camIdle = 0
+    }
+
+    /// JS: setOrbThinking(active)
+    public func setOrbThinking(_ active: Bool) {
+        animator.orbThinking = active
+        if active {
+            pulseShells(1.2)
+        } else {
+            if !animator.looking { animator.mazeOrbState.regenTimer = 60 }
+            pulseShells(0.6)
+        }
+    }
+
+    public func pulseShells(_ intensity: Float = 0.4) {
+        // JS: shellPulse=Math.min(shellPulse+intensity,3)
+        animator.shellPulse = min(animator.shellPulse + intensity, 3)
+        if intensity > 0.5 && !animator.looking {
+            animator.mazeOrbState.solveActive = true
+            animator.mazeOrbState.solveStep = 0
+            for m in pathMeshNodes {
+                m.geometry?.firstMaterial?.emission.contents = ThreeJSGeometry.hex(0x00ffff).withAlphaComponent(0)
+            }
+        }
+    }
+
+    public func updateFrame() {
+        animator.tick()
+    }
+
+    public func applyDrag(dx: Float, dy: Float) {
+        // JS: rotY+=(e.clientX-prevX)*0.005; rotX+=(e.clientY-prevY)*0.005; clamp rotX ±1.2
+        animator.rotY += dx * 0.005
+        animator.rotX += dy * 0.005
+        animator.rotX = max(-1.2, min(1.2, animator.rotX))
+        if animator.looking { animator.camIdle = 0 }
+    }
+
+    public func applyZoom(_ delta: Float) {
+        guard let cam = cameraNode else { return }
+        let minZ: Float = animator.looking ? 0.85 : 2.5
+        cam.position.z = max(minZ, min(10, cam.position.z + delta))
+        if animator.looking {
+            animator.camIdle = 0
+            if animator.postSolveIdle > 0 { animator.postSolveIdle = 1 }
+            if animator.postRegenIdle > 0 { animator.postRegenIdle = 1 }
+        }
+    }
+
+    // MARK: — Remote session icosahedrons  JS _makeSessionGroup IcosahedronGeometry(r,1)
+    public func addRemoteNode(uid: String, emotion: String = "neutral") {
         if sessionGroupNodes[uid] != nil { return }
-        let pos=nodeBasePosition(uid:uid)
-        let group=SCNNode(); group.name="session_\(uid)"
-        let colors=uidShellColors(uid:uid)
-        let miniR:[Float]=[1.9*0.28,1.4*0.28,0.9*0.28]
-        for (i,r) in miniR.enumerated() {
-            let g=SCNSphere(radius:CGFloat(r)); g.segmentCount=4
-            let m=SCNMaterial(); m.emission.contents=colors[i].withAlphaComponent(CGFloat(0.22+Double(i)*0.06))
-            m.fillMode = .lines; m.lightingModel = .constant; g.materials=[m]
-            group.addChildNode(SCNNode(geometry:g))
+        let pos = nodeBasePosition(uid: uid)
+        let group = SCNNode(); group.name = "session_\(uid)"
+        let colors = uidShellColors(uid: uid)
+        let miniR: [Float] = [1.9 * 0.28, 1.4 * 0.28, 0.9 * 0.28]
+        for (i, r) in miniR.enumerated() {
+            let geo = ThreeJSGeometry.icosahedron(radius: r, detail: 1)
+            geo.materials = [ThreeJSGeometry.wireMat(colors[i], opacity: CGFloat(0.22 + Float(i) * 0.06))]
+            group.addChildNode(SCNNode(geometry: geo))
         }
-        let cg=SCNSphere(radius:0.03)
-        cg.firstMaterial = { let m=SCNMaterial(); m.emission.contents=colors[0]; m.lightingModel = .constant; return m }()
-        group.addChildNode(SCNNode(geometry:cg))
-        group.position=SCNVector3(pos.x,pos.y,pos.z)
-        scene.rootNode.addChildNode(group); sessionGroupNodes[uid]=group; activeNodes+=1
+        let cg = SCNSphere(radius: 0.032); cg.segmentCount = 6
+        cg.materials = [ThreeJSGeometry.wireMat(colors[0], opacity: 0.55)]
+        group.addChildNode(SCNNode(geometry: cg))
+        group.position = SCNVector3(pos.x, pos.y, pos.z)
+        scene.rootNode.addChildNode(group)
+        sessionGroupNodes[uid] = group
+        activeNodes += 1
     }
 
-    public func pulseShells(_ intensity:Float=0.4) {
-        for (i,shell) in shells.enumerated() {
-            let base=Double(0.18+Float(i)*0.08); let intD=Double(intensity); let col=shellColors[i]
-            shell.runAction(SCNAction.sequence([
-                SCNAction.customAction(duration:0.3){ node,t in node.geometry?.firstMaterial?.emission.contents=col.withAlphaComponent(CGFloat(base+intD*Double(t)/0.3)) },
-                SCNAction.customAction(duration:0.5){ node,t in node.geometry?.firstMaterial?.emission.contents=col.withAlphaComponent(CGFloat(base+intD*(1.0-Double(t)/0.5))) }
-            ]))
+    /// JS: _brpnInjectMantisContacts — aircraft TetrahedronGeometry(0.032,0), satellite OctahedronGeometry(0.045,0)
+    public func injectMantisContacts(_ contacts: [(type: String, lat: Double, lon: Double, alt: Double)]) {
+        while mantisNodes.count + contacts.count > mantisNodeMax && !mantisNodes.isEmpty {
+            let incoming = contacts.first?.type
+            var evictIdx = -1
+            if let incoming {
+                if let i = mantisNodes.firstIndex(where: { $0.name == incoming }) { evictIdx = i }
+            }
+            let old = evictIdx > -1 ? mantisNodes.remove(at: evictIdx) : mantisNodes.removeFirst()
+            old.removeFromParentNode()
         }
+        for c in contacts {
+            let phi = (90 - c.lat) * (.pi / 180)
+            let theta = (c.lon + 180) * (.pi / 180)
+            var r = c.type == "satellite"
+                ? 1.6 + (c.alt) / 50000 * 0.6
+                : 0.9 + Double.random(in: 0..<0.5)
+            r = min(r, 2.4)
+            let x = r * sin(phi) * cos(theta)
+            let y = r * cos(phi)
+            let z = r * sin(phi) * sin(theta)
+            let geo: SCNGeometry
+            let color: UIColor
+            if c.type == "satellite" {
+                geo = ThreeJSGeometry.octahedron(radius: 0.045, detail: 0)
+                color = ThreeJSGeometry.hex(0xff2d78)
+            } else {
+                geo = ThreeJSGeometry.tetrahedron(radius: 0.032, detail: 0)
+                color = ThreeJSGeometry.hex(0x00e5ff)
+            }
+            geo.materials = [ThreeJSGeometry.wireMat(color, opacity: 0.55)]
+            let mesh = SCNNode(geometry: geo)
+            mesh.position = SCNVector3(Float(x), Float(y), Float(z))
+            mesh.name = c.type
+            scene.rootNode.addChildNode(mesh)
+            mantisNodes.append(mesh)
+            animator.mantis.append(BRPNAnimator.MantisInst(
+                node: mesh,
+                spawn: animator.orbFrame,
+                type: c.type,
+                orbitR: Float(r),
+                orbitSpd: Float((c.type == "satellite" ? 0.0008 : 0.0022) + Double.random(in: 0..<0.001)),
+                orbitOff: Float.random(in: 0..<(Float.pi * 2)),
+                alt: Float(y)
+            ))
+        }
+        pulseShells(0.15)
     }
 
-
-    /// Ash Star is a 3D wireframe on the live BRPN scene — never a chat card.
-    /// Rides a plasma Catmull-Rom like js/ash-star-archive.js / mist-module.js.
     public func spawnAshStar(color: UIColor = UIColor(red: 1, green: 0.87, blue: 0, alpha: 1), target: String = "all") {
         rebuildSplines()
-        let geo = SCNSphere(radius: 0.09); geo.segmentCount = 6
-        let mat = SCNMaterial()
-        mat.diffuse.contents = UIColor.clear
-        mat.emission.contents = color
-        mat.fillMode = .lines
-        mat.isDoubleSided = true
-        geo.materials = [mat]
+        let geo = ThreeJSGeometry.icosahedron(radius: 0.09, detail: 0)
+        geo.materials = [ThreeJSGeometry.wireMat(color, opacity: 1)]
         let star = SCNNode(geometry: geo)
         star.name = "ashstar"
-        star.position = SCNVector3(0, 0, 0)
         scene.rootNode.addChildNode(star)
-        let path = sampledSpline(from: SCNVector3(0,0,0), to: SCNVector3(0.4, 1.8, -0.3))
+        let path = sampledSpline(from: SCNVector3(0, 0, 0), to: SCNVector3(0.4, 1.8, -0.3))
         var actions: [SCNAction] = []
-        for i in 1..<path.count {
-            let p = path[i]
-            actions.append(SCNAction.move(to: p, duration: 0.12))
-        }
+        for i in 1..<path.count { actions.append(SCNAction.move(to: path[i], duration: 0.12)) }
         actions.append(SCNAction.fadeOut(duration: 0.4))
         actions.append(SCNAction.removeFromParentNode())
         star.runAction(SCNAction.group([
@@ -451,26 +423,16 @@ public final class BRPNSceneViewModel: ObservableObject {
     public func spawnShard(color: UIColor) {
         rebuildSplines()
         let geo = SCNBox(width: 0.08, height: 0.11, length: 0.04, chamferRadius: 0.012)
-        let mat = SCNMaterial()
-        mat.emission.contents = color
-        mat.transparency = 0.55
-        mat.lightingModel = .constant
-        geo.materials = [mat]
+        geo.materials = [ThreeJSGeometry.basicMat(color, opacity: 0.55)]
         let node = SCNNode(geometry: geo)
         node.name = "shard"
-        node.position = SCNVector3(0, 0, 0)
         scene.rootNode.addChildNode(node)
         let dest: SCNVector3
-        if let last = sessionGroupNodes.values.first {
-            dest = last.position
-        } else {
-            dest = SCNVector3(1.6, 0.9, -1.1)
-        }
-        let path = sampledSpline(from: SCNVector3(0,0,0), to: dest)
+        if let last = sessionGroupNodes.values.first { dest = last.position }
+        else { dest = SCNVector3(1.6, 0.9, -1.1) }
+        let path = sampledSpline(from: SCNVector3(0, 0, 0), to: dest)
         var actions: [SCNAction] = []
-        for i in 1..<path.count {
-            actions.append(SCNAction.move(to: path[i], duration: 0.1))
-        }
+        for i in 1..<path.count { actions.append(SCNAction.move(to: path[i], duration: 0.1)) }
         actions.append(SCNAction.fadeOut(duration: 0.35))
         actions.append(SCNAction.removeFromParentNode())
         node.runAction(SCNAction.group([
@@ -492,7 +454,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         for t in targets {
             let samples = sampledSpline(from: origin, to: t)
             splineSamples.append(samples)
-            if let line = polyline(samples, color: UIColor(red: 0, green: 0.9, blue: 1, alpha: 0.35)) {
+            if let line = ThreeJSGeometry.lineSegments(polylineFloats(samples), color: UIColor(red: 0, green: 0.9, blue: 1, alpha: 0.35), opacity: 0.35) {
                 g.addChildNode(line)
             }
         }
@@ -502,20 +464,16 @@ public final class BRPNSceneViewModel: ObservableObject {
 
     public func emitMist(fromLocal: Bool) {
         rebuildSplines()
-        let curves = splineSamples.isEmpty ? [sampledSpline(from: SCNVector3(0,0,0), to: SCNVector3(1.5, 1.0, -1.0))] : splineSamples
+        let curves = splineSamples.isEmpty ? [sampledSpline(from: SCNVector3(0, 0, 0), to: SCNVector3(1.5, 1.0, -1.0))] : splineSamples
         for samples in curves.prefix(6) {
-            let n = SCNNode(geometry: {
-                let s = SCNSphere(radius: 0.03); s.segmentCount = 6
-                let m = SCNMaterial(); m.emission.contents = UIColor(red: 0, green: 0.9, blue: 1, alpha: 0.9); m.lightingModel = .constant; s.materials = [m]
-                return s
-            }())
-            n.position = samples.first ?? SCNVector3(0,0,0)
+            let s = SCNSphere(radius: 0.03); s.segmentCount = 6
+            s.materials = [ThreeJSGeometry.basicMat(UIColor(red: 0, green: 0.9, blue: 1, alpha: 1), opacity: 0.9)]
+            let n = SCNNode(geometry: s)
+            n.position = samples.first ?? SCNVector3(0, 0, 0)
             scene.rootNode.addChildNode(n)
             var acts: [SCNAction] = []
             let seq = fromLocal ? samples : samples.reversed()
-            for p in seq.dropFirst() {
-                acts.append(SCNAction.move(to: p, duration: 0.08))
-            }
+            for p in seq.dropFirst() { acts.append(SCNAction.move(to: p, duration: 0.08)) }
             acts.append(SCNAction.fadeOut(duration: 0.3))
             acts.append(SCNAction.removeFromParentNode())
             n.runAction(SCNAction.sequence(acts))
@@ -529,34 +487,25 @@ public final class BRPNSceneViewModel: ObservableObject {
             (a.y + b.y) * 0.5 + 0.8 + Float.random(in: 0...0.4),
             (a.z + b.z) * 0.5 + Float.random(in: -0.4...0.4)
         )
-        // Quadratic Bezier sample (Catmull-style arc between nodes)
         var out: [SCNVector3] = []
         for i in 0...steps {
             let t = Float(i) / Float(steps)
             let omt = 1 - t
-            let x = omt*omt*a.x + 2*omt*t*mid.x + t*t*b.x
-            let y = omt*omt*a.y + 2*omt*t*mid.y + t*t*b.y
-            let z = omt*omt*a.z + 2*omt*t*mid.z + t*t*b.z
-            out.append(SCNVector3(x, y, z))
+            out.append(SCNVector3(
+                omt * omt * a.x + 2 * omt * t * mid.x + t * t * b.x,
+                omt * omt * a.y + 2 * omt * t * mid.y + t * t * b.y,
+                omt * omt * a.z + 2 * omt * t * mid.z + t * t * b.z
+            ))
         }
         return out
     }
 
-    private func polyline(_ pts: [SCNVector3], color: UIColor) -> SCNNode? {
-        guard pts.count >= 2 else { return nil }
+    private func polylineFloats(_ pts: [SCNVector3]) -> [Float] {
         var floats: [Float] = []
-        for i in 0..<(pts.count-1) {
-            floats += [pts[i].x, pts[i].y, pts[i].z, pts[i+1].x, pts[i+1].y, pts[i+1].z]
+        for i in 0..<(pts.count - 1) {
+            floats += [pts[i].x, pts[i].y, pts[i].z, pts[i + 1].x, pts[i + 1].y, pts[i + 1].z]
         }
-        let data = floats.withUnsafeBufferPointer { Data(buffer: $0) }
-        let src = SCNGeometrySource(data: data, semantic: .vertex, vectorCount: floats.count/3,
-            usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12)
-        var idx = (0..<Int32(floats.count/3)).map { $0 }
-        let idxData = idx.withUnsafeMutableBufferPointer { Data(buffer: $0) }
-        let elem = SCNGeometryElement(data: idxData, primitiveType: .line, primitiveCount: idx.count/2, bytesPerIndex: 4)
-        let geo = SCNGeometry(sources: [src], elements: [elem])
-        geo.firstMaterial = { let m = SCNMaterial(); m.emission.contents = color; m.lightingModel = .constant; return m }()
-        return SCNNode(geometry: geo)
+        return floats
     }
 
     public func teardown() { presenceTimer?.invalidate(); Self.shared = nil }
@@ -565,43 +514,382 @@ public final class BRPNSceneViewModel: ObservableObject {
         await MISTModule.shared.refresh()
         let signals = MISTModule.shared.activeSignals
         for sig in signals {
-            let uid = sig.uid
-            if sessionGroupNodes[uid] == nil {
-                addRemoteNode(uid: uid, emotion: sig.isAsh ? "inspiring" : "neutral")
+            if sessionGroupNodes[sig.uid] == nil {
+                addRemoteNode(uid: sig.uid, emotion: sig.isAsh ? "inspiring" : "neutral")
             }
         }
         rebuildSplines()
     }
 
-    private func nodeBasePosition(uid:String) -> (x:Float,y:Float,z:Float) {
-        let h=Float(uid.hashValue & 0xFFFF)/65535.0
-        let h2=Float((uid+"y").hashValue & 0xFFFF)/65535.0
-        let h3=Float((uid+"z").hashValue & 0xFFFF)/65535.0
-        let theta=h * .pi*2; let phi=acos(2*h2-1); let r=3.2+h3*1.6
-        return (r*sin(phi)*cos(theta),r*sin(phi)*sin(theta),r*cos(phi))
+    /// JS: _nodeBasePos / _uidHash
+    private func nodeBasePosition(uid: String) -> (x: Float, y: Float, z: Float) {
+        let h = uidHash(uid)
+        let h2 = uidHash(uid + "y")
+        let h3 = uidHash(uid + "z")
+        let theta = h * .pi * 2
+        let phi = acos(2 * h2 - 1)
+        let r = 3.2 + h3 * 1.6
+        return (r * sin(phi) * cos(theta), r * sin(phi) * sin(theta), r * cos(phi))
     }
 
-    private func uidShellColors(uid:String) -> [UIColor] {
-        let hue=Float(uid.hashValue & 0xFFFF)/65535.0
+    private func uidHash(_ uid: String) -> Float {
+        // JS: h = 0; for i: h = (h*31 + charCode) & 0x7fffffff; return h / 0x7fffffff
+        var h: Int = 0
+        for ch in uid.utf8 {
+            h = (h &* 31 &+ Int(ch)) & 0x7fffffff
+        }
+        return Float(h) / Float(0x7fffffff)
+    }
+
+    private func uidShellColors(uid: String) -> [UIColor] {
+        let h = uidHash(uid)
+        let hue = h
         return [
-            UIColor(hue:CGFloat(hue),saturation:0.9,brightness:0.65,alpha:1),
-            UIColor(hue:CGFloat((hue+0.333).truncatingRemainder(dividingBy:1)),saturation:0.85,brightness:0.6,alpha:1),
-            UIColor(hue:CGFloat((hue+0.667).truncatingRemainder(dividingBy:1)),saturation:0.8,brightness:0.55,alpha:1),
+            UIColor(hue: CGFloat(hue), saturation: 0.9, brightness: 0.65, alpha: 1),
+            UIColor(hue: CGFloat((hue + 0.333).truncatingRemainder(dividingBy: 1)), saturation: 0.85, brightness: 0.6, alpha: 1),
+            UIColor(hue: CGFloat((hue + 0.667).truncatingRemainder(dividingBy: 1)), saturation: 0.8, brightness: 0.55, alpha: 1),
         ]
     }
 }
 
-public struct MazeCell {
-    var top=true,bottom=true,left=true,right=true,front=true,back=true,visited=false
-    mutating func removeWall(_ dir:String) {
-        switch dir {
-        case "top":    top=false
-        case "bottom": bottom=false
-        case "left":   left=false
-        case "right":  right=false
-        case "front":  front=false
-        case "back":   back=false
-        default: break
+// MARK: — Per-frame animator (JS animate())  not MainActor — called from SCN renderer
+final class BRPNAnimator {
+    struct ToolInst {
+        var pivot: SCNNode?
+        var mesh: SCNNode?
+        var orbitRadius: Float = 1
+        var orbitSpeed: Float = 0.008
+        var orbitOffset: Float = 0
+        var shellLayer: Int = 0
+        var active = false
+        var spawnT: Int = 0
+        var tiltX: Float = 0
+        var tiltZ: Float = 0
+    }
+    struct MantisInst {
+        var node: SCNNode
+        var spawn: Int
+        var type: String
+        var orbitR: Float
+        var orbitSpd: Float
+        var orbitOff: Float
+        var alt: Float
+    }
+
+    var shells: [SCNNode] = []
+    var core: SCNNode?
+    var mazeOrbGroup: SCNNode?
+    var particles: [SCNNode] = []
+    var particleData: [(r: Float, spd: Float, off: Float, yOff: Float)] = []
+    var pathMeshNodes: [SCNNode] = []
+    var tools: [ToolInst] = []
+    var camera: SCNNode?
+    var shellColors: [UIColor] = []
+    var mantis: [MantisInst] = []
+
+    var rotX: Float = 0
+    var rotY: Float = 0
+    var orbFrame = 0
+    var shellPulse: Float = 0
+    var orbThinking = false
+    var mazeOrbState = MazeOrbState()
+    var looking = false
+    var camMode = "wide"
+    var camIdle = 0
+    var postSolveIdle = 0
+    var postRegenIdle = 0
+    let home = SCNVector3(0, 1.5, 5)
+    let close = SCNVector3(0, 0.32, 1.38)
+    var onRegen: (() -> Void)?
+    var onPublishedSolve: ((Bool, Bool) -> Void)?
+    private var toolSeqTimer = 0
+    private var toolSeqIndex = 0
+    private let shellRadiiRef: [Float] = [1.9, 1.4, 0.9]
+
+    func configure(shells: [SCNNode], core: SCNNode?, mazeOrbGroup: SCNNode?, particles: [SCNNode],
+                   particleData: [(r: Float, spd: Float, off: Float, yOff: Float)], camera: SCNNode?,
+                   shellColors: [UIColor]) {
+        self.shells = shells
+        self.core = core
+        self.mazeOrbGroup = mazeOrbGroup
+        self.particles = particles
+        self.particleData = particleData
+        self.camera = camera
+        self.shellColors = shellColors
+        orbFrame = 0
+        rotX = 0
+        rotY = 0
+        shellPulse = 0
+    }
+
+    func tick() {
+        orbFrame = (orbFrame + 1) % 1_000_000
+        let f = Float(orbFrame)
+        let isThinking = orbThinking
+        let thinkBoost: Float = isThinking ? 1.0 : 0.0
+
+        // Shells — JS: rot x=rotX+f*0.0015*(i+1) y=rotY+f*0.002*(i+1) scale 1+sin(f*0.03+i)*0.03
+        for (i, m) in shells.enumerated() {
+            m.eulerAngles.x = rotX + f * 0.0015 * Float(i + 1)
+            m.eulerAngles.y = rotY + f * 0.002 * Float(i + 1)
+            let baseScale = 1 + sin(f * 0.03 + Float(i)) * 0.03
+            let pulseExtra = shellPulse * (0.04 + Float(i) * 0.015) * sin(f * 0.06 + Float(i) * 1.2)
+            let thinkExtra: Float = isThinking ? sin(f * 0.05 + Float(i) * 2.1) * 0.03 : 0
+            let s = baseScale + pulseExtra + thinkExtra
+            m.scale = SCNVector3(s, s, s)
+            let baseOp = 0.15 + Float(i) * 0.06
+            let pulseOp = shellPulse * 0.04 * sin(f * 0.04 + Float(i))
+            let thinkOp: Float = isThinking ? 0.06 * sin(f * 0.08 + Float(i)) : 0
+            let op = max(0.05, min(0.7, baseOp + pulseOp + thinkOp))
+            if i < shellColors.count {
+                let col = shellColors[i].withAlphaComponent(CGFloat(op))
+                m.geometry?.firstMaterial?.emission.contents = col
+                m.geometry?.firstMaterial?.diffuse.contents = col
+            }
+        }
+
+        // Core + maze group — JS: mazeOrbGroup.rotation.x=rotX+f*0.003 y=rotY+f*0.004
+        let mazePulse = 1 + shellPulse * 0.12 * sin(f * 0.08) + (isThinking ? 0.06 * sin(f * 0.12) : 0)
+        let mz = mazePulse * (1 + thinkBoost * 0.04 * sin(f * 0.07))
+        mazeOrbGroup?.eulerAngles.x = rotX + f * 0.003
+        mazeOrbGroup?.eulerAngles.y = rotY + f * 0.004
+        mazeOrbGroup?.scale = SCNVector3(mz, mz, mz)
+        core?.eulerAngles.x = rotX + f * 0.002
+        core?.eulerAngles.y = rotY + f * 0.003
+        let coreOp = 0.1 + shellPulse * 0.06 * sin(f * 0.04)
+        core?.geometry?.firstMaterial?.emission.contents = ThreeJSGeometry.hex(0x00ffcc).withAlphaComponent(CGFloat(coreOp))
+
+        if let wall = mazeOrbGroup?.childNodes.first {
+            let wop = 0.35 + 0.2 * sin(f * 0.04) + (isThinking ? 0.15 * sin(f * 0.09) : 0) + shellPulse * 0.08
+            wall.geometry?.firstMaterial?.emission.contents = ThreeJSGeometry.hex(0x00ffcc).withAlphaComponent(CGFloat(wop))
+        }
+
+        mazeOrbState.frame += 1
+        if !looking && (isThinking || shellPulse > 0.3) {
+            if !mazeOrbState.solveActive && !mazeOrbState.solution.isEmpty {
+                mazeOrbState.solveActive = true
+                mazeOrbState.solveStep = 0
+                for m in pathMeshNodes {
+                    m.geometry?.firstMaterial?.emission.contents = ThreeJSGeometry.hex(0x00ffff).withAlphaComponent(0)
+                }
+                onPublishedSolve?(true, true)
+            }
+        }
+        if mazeOrbState.solveActive {
+            let revealEvery = isThinking ? 2 : 4
+            if mazeOrbState.frame % revealEvery == 0 && mazeOrbState.solveStep < pathMeshNodes.count {
+                let pm = pathMeshNodes[mazeOrbState.solveStep]
+                let col = ThreeJSGeometry.hex(isThinking ? 0x00ffff : 0x00ffcc)
+                pm.geometry?.firstMaterial?.emission.contents = col.withAlphaComponent(0.9)
+                pm.geometry?.firstMaterial?.diffuse.contents = col.withAlphaComponent(0.9)
+                mazeOrbState.solveStep += 1
+            }
+            if mazeOrbState.solveStep >= pathMeshNodes.count {
+                mazeOrbState.solveActive = false
+                onPublishedSolve?(false, true)
+                if looking {
+                    mazeOrbState.regenTimer = 0
+                    postSolveIdle = 1
+                    postRegenIdle = 0
+                    camIdle = 0
+                } else {
+                    mazeOrbState.regenTimer = isThinking ? 90 : 240
+                }
+            }
+        }
+        if !looking && mazeOrbState.regenTimer > 0 {
+            mazeOrbState.regenTimer -= 1
+            if mazeOrbState.regenTimer == 0 {
+                onRegen?()
+                if isThinking { mazeOrbState.solveActive = true }
+            }
+        }
+        if !isThinking && !mazeOrbState.solveActive {
+            for pm in pathMeshNodes {
+                if let mat = pm.geometry?.firstMaterial,
+                   let c = mat.emission.contents as? UIColor {
+                    var a: CGFloat = 0, r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+                    c.getRed(&r, green: &g, blue: &b, alpha: &a)
+                    if a > 0 {
+                        let na = max(0, a - 0.008)
+                        mat.emission.contents = c.withAlphaComponent(na)
+                        mat.diffuse.contents = c.withAlphaComponent(na)
+                    }
+                }
+            }
+        }
+
+        // Particles — JS: t=f*0.007*spd+off; x=cos(t)*r; z=sin(t)*r; y=yOff+sin(t*2)*0.2
+        for (i, p) in particles.enumerated() where i < particleData.count {
+            let d = particleData[i]
+            let spd = d.spd * (isThinking ? 1.6 : 1.0)
+            let t = f * 0.007 * spd + d.off
+            let r = d.r * (1 + shellPulse * 0.1 * sin(f * 0.05))
+            p.position = SCNVector3(cos(t) * r, d.yOff + sin(t * 2) * 0.2, sin(t) * r)
+        }
+
+        // Tool orbits
+        if isThinking {
+            toolSeqTimer += 1
+            if toolSeqTimer > 22 {
+                toolSeqTimer = 0
+                toolSeqIndex = (toolSeqIndex + 1) % max(1, tools.count)
+                if toolSeqIndex < tools.count {
+                    tools[toolSeqIndex].active = true
+                    tools[toolSeqIndex].spawnT = orbFrame
+                }
+            }
+        }
+        for (ti, ts) in tools.enumerated() {
+            guard let pivot = ts.pivot, let mesh = ts.mesh else { continue }
+            let t = f * ts.orbitSpeed + ts.orbitOffset
+            let shellR = shellRadiiRef[ts.shellLayer]
+            let buoyancyT = f * 0.012 + Float(ti) * 1.1
+            let layerShift = sin(buoyancyT) * 0.35
+            let effectiveR = shellR * (0.72 + 0.28 * abs(sin(buoyancyT))) + layerShift * 0.4
+            pivot.position = SCNVector3(cos(t) * effectiveR, sin(t * 0.7) * 0.55, sin(t) * effectiveR)
+            mesh.eulerAngles.x = ts.tiltX + f * 0.01
+            mesh.eulerAngles.z = ts.tiltZ + f * 0.008
+            var op: Float = 0
+            if ts.active || isThinking {
+                op = min(0.85, 0.35 + 0.25 * abs(sin(f * 0.05 + Float(ti))))
+            } else {
+                op = 0.08
+            }
+            mesh.geometry?.firstMaterial?.emission.contents = (mesh.geometry?.firstMaterial?.emission.contents as? UIColor)?.withAlphaComponent(CGFloat(op))
+                ?? UIColor.cyan.withAlphaComponent(CGFloat(op))
+            let pulseFactor = 1 + 0.18 * sin(f * 0.08 + Float(ti) * 1.3 + shellPulse)
+            let sc = pulseFactor * (1 + shellPulse * 0.08) * 0.55
+            mesh.scale = SCNVector3(sc, sc, sc)
+        }
+
+        // Mantis drift — JS _brpnTickMantisNodes
+        var keep: [MantisInst] = []
+        for m in mantis {
+            let age = orbFrame - m.spawn
+            let life = m.type == "satellite" ? 108000 : 1800
+            let tt = Float(age) / Float(life)
+            if tt >= 1 { m.node.removeFromParentNode(); continue }
+            let op: Float = tt < 0.8 ? 0.55 : 0.55 * (1 - (tt - 0.8) / 0.2)
+            m.node.geometry?.firstMaterial?.emission.contents = (m.node.geometry?.firstMaterial?.emission.contents as? UIColor)?.withAlphaComponent(CGFloat(op))
+            m.node.position.x = m.orbitR * cos(f * m.orbitSpd + m.orbitOff)
+            m.node.position.z = m.orbitR * sin(f * m.orbitSpd + m.orbitOff)
+            m.node.position.y = m.alt + sin(f * m.orbitSpd * 0.4 + m.orbitOff) * 0.08
+            m.node.eulerAngles.x += 0.008
+            m.node.eulerAngles.y += 0.012
+            keep.append(m)
+        }
+        mantis = keep
+
+        shellPulse *= 0.994
+
+        // Camera dolly — JS _orbCam in/out/hold
+        if let cam = camera {
+            if camMode == "in" {
+                cam.position.x += (close.x - cam.position.x) * 0.055
+                cam.position.y += (close.y - cam.position.y) * 0.055
+                cam.position.z += (close.z - cam.position.z) * 0.055
+                cam.look(at: SCNVector3(0, 0, 0))
+                if abs(cam.position.z - close.z) < 0.05 { camMode = "hold" }
+            } else if camMode == "out" {
+                cam.position.x += (home.x - cam.position.x) * 0.055
+                cam.position.y += (home.y - cam.position.y) * 0.055
+                cam.position.z += (home.z - cam.position.z) * 0.055
+                cam.look(at: SCNVector3(0, 0, 0))
+                if abs(cam.position.z - home.z) < 0.08 { camMode = "wide"; looking = false }
+            } else if looking {
+                cam.look(at: SCNVector3(0, 0, 0))
+                camIdle += 1
+                if postSolveIdle > 0 {
+                    postSolveIdle += 1
+                    if postSolveIdle > 420 {
+                        postSolveIdle = 0
+                        onRegen?()
+                        postRegenIdle = 1
+                        camIdle = 0
+                    }
+                } else if postRegenIdle > 0 {
+                    postRegenIdle += 1
+                    if postRegenIdle > 540 {
+                        postRegenIdle = 0
+                        camMode = "out"
+                    }
+                } else if camIdle > 720 && !mazeOrbState.solveActive {
+                    camMode = "out"
+                }
+            }
+        }
+    }
+}
+
+// MARK: — JS tool shape extruded profiles (makeKnifeGeometry etc.)
+enum BRPNToolShapes {
+    static func extrudeProfile(_ profile2d: [[Float]], depth: Float) -> [Float] {
+        let d = depth * 0.5
+        var pts: [Float] = []
+        for seg in profile2d {
+            guard seg.count == 4 else { continue }
+            let x0 = seg[0], y0 = seg[1], x1 = seg[2], y1 = seg[3]
+            pts += [x0, y0, d, x1, y1, d]
+            pts += [x0, y0, -d, x1, y1, -d]
+        }
+        var done = Set<String>()
+        for seg in profile2d {
+            guard seg.count == 4 else { continue }
+            let x0 = seg[0], y0 = seg[1], x1 = seg[2], y1 = seg[3]
+            let k0 = String(format: "%.3f,%.3f", x0, y0)
+            let k1 = String(format: "%.3f,%.3f", x1, y1)
+            if !done.contains(k0) { pts += [x0, y0, d, x0, y0, -d]; done.insert(k0) }
+            if !done.contains(k1) { pts += [x1, y1, d, x1, y1, -d]; done.insert(k1) }
+        }
+        return pts
+    }
+
+    static func verts(_ type: String) -> [Float] {
+        switch type {
+        case "knife":
+            return extrudeProfile([
+                [-0.18, 0, 0.28, 0.05], [0.28, 0.05, 0.32, 0], [0.32, 0, 0.28, -0.03],
+                [0.28, -0.03, -0.18, 0], [-0.18, 0.05, -0.36, 0.05], [-0.36, 0.05, -0.36, -0.05],
+                [-0.36, -0.05, -0.18, -0.05], [-0.18, -0.05, -0.18, 0.05], [-0.18, -0.08, -0.18, 0.08]
+            ], 0.06)
+        case "stick":
+            var profile: [[Float]] = [
+                [-0.04, -0.3, 0.04, -0.3], [-0.04, -0.3, -0.04, 0.28], [0.04, -0.3, 0.04, 0.28]
+            ]
+            for i in 0..<8 {
+                let a0 = Float(i) / 8 * .pi, a1 = Float(i + 1) / 8 * .pi
+                profile.append([cos(a0) * 0.06, 0.28 + sin(a0) * 0.06, cos(a1) * 0.06, 0.28 + sin(a1) * 0.06])
+            }
+            return extrudeProfile(profile, 0.05)
+        case "hammer":
+            var pts = extrudeProfile([
+                [-0.02, -0.32, 0.02, -0.32], [-0.02, -0.32, -0.02, 0.14],
+                [0.02, -0.32, 0.02, 0.14], [-0.02, 0.14, 0.02, 0.14]
+            ], 0.04)
+            pts += extrudeProfile([
+                [-0.14, 0.14, 0.14, 0.14], [0.14, 0.14, 0.14, 0.28],
+                [0.14, 0.28, -0.14, 0.28], [-0.14, 0.28, -0.14, 0.14]
+            ], 0.12)
+            return pts
+        case "envelope":
+            return extrudeProfile([
+                [-0.24, -0.15, 0.24, -0.15], [0.24, -0.15, 0.24, 0.15], [0.24, 0.15, -0.24, 0.15],
+                [-0.24, 0.15, -0.24, -0.15], [-0.24, 0.15, 0, 0], [0.24, 0.15, 0, 0],
+                [-0.24, -0.15, 0, -0.02], [0.24, -0.15, 0, -0.02]
+            ], 0.06)
+        default: // scissors
+            var profile: [[Float]] = [
+                [-0.04, 0.28, 0.22, -0.18], [-0.08, 0.26, 0.19, -0.2],
+                [0.04, 0.28, -0.22, -0.18], [0.08, 0.26, -0.19, -0.2],
+                [-0.015, 0, 0.015, 0], [0, -0.015, 0, 0.015]
+            ]
+            for i in 0..<10 {
+                let a0 = Float(i) / 10 * .pi * 2, a1 = Float(i + 1) / 10 * .pi * 2
+                profile.append([0.12 + cos(a0) * 0.07, -0.22 + sin(a0) * 0.07, 0.12 + cos(a1) * 0.07, -0.22 + sin(a1) * 0.07])
+                profile.append([-0.12 + cos(a0) * 0.07, -0.22 + sin(a0) * 0.07, -0.12 + cos(a1) * 0.07, -0.22 + sin(a1) * 0.07])
+            }
+            return extrudeProfile(profile, 0.04)
         }
     }
 }

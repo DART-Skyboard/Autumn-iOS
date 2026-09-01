@@ -1,44 +1,64 @@
 import AutumnServices
 import SwiftUI
 import SceneKit
+import LEATRCore
 
-// MARK: — BRPNSceneView v4
-// - SIGMA SOLVE: reveals path, stays solved (no auto-rebuild)
-// - NEW MAZE: separate button to generate next iteration
-// - Bouncy orbs live in ViewModel physics world
-// - Landscape-safe: uses safeAreaInsets for bottom padding
+// MARK: — BRPNSceneView
+// Transparent SceneKit over theme video (JS renderer alpha:true, setClearColor(0,0)).
+// NO extra dark Color wash — video shows through like web. Scrim is AppShell #vid-scrim only.
 
 public struct BRPNSceneView: View {
     @EnvironmentObject var sceneVM: BRPNSceneViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var chatVM: ChatViewModel
     @State private var showAshCanvas = false
+
+    private let nodeCapVals: [(Int, String)] = [
+        (10, "10"), (50, "50"), (100, "100"), (300, "300"), (1200, "1.2K"), (2_000_000, "2M")
+    ]
 
     public var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color(red:0.01,green:0.02,blue:0.05).ignoresSafeArea()
-
-                // Main SceneKit viewport
+                // JS: renderer.setClearColor(0x000000, 0) — scene is transparent
                 BRPNSceneKitView(vm: sceneVM)
                     .ignoresSafeArea()
 
-                // Bottom control bar
                 VStack {
                     Spacer()
                     VStack(spacing: 6) {
-                        // Button row
-                        HStack(spacing: 10) {
-                            // SIGMA SOLVE button
-                            if sceneVM.mazeCanSolve {
+                        // Node cap — JS #node-cap-track data-val 10/50/100/300/1200/2000000
+                        HStack(spacing: 4) {
+                            Text("NODES")
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .foregroundColor(Color.cyan.opacity(0.45))
+                                .tracking(1.5)
+                            ForEach(nodeCapVals, id: \.0) { val, label in
                                 Button {
-                                    sceneVM.autumnSolveMaze()
+                                    sceneVM.mantisNodeMax = val
                                 } label: {
+                                    Text(label)
+                                        .font(.system(size: 8, weight: sceneVM.mantisNodeMax == val ? .bold : .regular, design: .monospaced))
+                                        .foregroundColor(sceneVM.mantisNodeMax == val ? Color.cyan : Color.cyan.opacity(0.35))
+                                        .padding(.horizontal, 5).padding(.vertical, 2)
+                                        .background(sceneVM.mantisNodeMax == val ? Color.cyan.opacity(0.18) : Color.clear)
+                                        .cornerRadius(2)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color.cyan.opacity(0.06))
+                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.cyan.opacity(0.15), lineWidth: 1))
+
+                        HStack(spacing: 10) {
+                            if sceneVM.mazeCanSolve {
+                                Button { sceneVM.autumnSolveMaze() } label: {
                                     HStack(spacing: 6) {
-                                        Image(systemName: "star.fill")
+                                        Text("⬡")
                                             .font(.system(size: 10))
                                             .foregroundColor(.cyan)
-                                        Text(sceneVM.isSolving ? "SOLVING…" : "⬡ SIGMA SOLVE")
+                                        Text(sceneVM.isSolving ? "SOLVING…" : "SIGMA SOLVE")
                                             .font(.system(size: 10, weight: .bold, design: .monospaced))
                                             .foregroundColor(.cyan)
                                     }
@@ -50,10 +70,7 @@ public struct BRPNSceneView: View {
                                 .disabled(sceneVM.isSolving)
                             }
 
-                            // NEW MAZE button — always visible
-                            Button {
-                                sceneVM.generateNewMaze()
-                            } label: {
+                            Button { sceneVM.generateNewMaze() } label: {
                                 HStack(spacing: 6) {
                                     Image(systemName: "arrow.triangle.2.circlepath")
                                         .font(.system(size: 10))
@@ -70,7 +87,6 @@ public struct BRPNSceneView: View {
                         }
                         .padding(.bottom, 4)
 
-                        // Meta bar
                         HStack {
                             Text("SID: \(sceneVM.sessionId.uppercased())")
                                 .font(.system(size: 9, design: .monospaced))
@@ -82,15 +98,11 @@ public struct BRPNSceneView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
-                        .background(.ultraThinMaterial)
-                        .overlay(Rectangle().frame(height: 0.5)
-                            .foregroundColor(.cyan.opacity(0.15)), alignment: .top)
+                        .background(Color.white.opacity(0.04))
                     }
-                    // Use safeAreaInsets so this lifts correctly in landscape too
-                    .padding(.bottom, max(geo.safeAreaInsets.bottom, 60))
+                    .padding(.bottom, max(geo.safeAreaInsets.bottom, 8))
                 }
 
-                // ASH CANVAS trigger
                 VStack {
                     Spacer()
                     HStack {
@@ -117,10 +129,9 @@ public struct BRPNSceneView: View {
                         }
                         .padding(.trailing, 14)
                     }
-                    .padding(.bottom, max(geo.safeAreaInsets.bottom + 50, 110))
+                    .padding(.bottom, max(geo.safeAreaInsets.bottom + 92, 130))
                 }
 
-                // ASH CANVAS drawer
                 if showAshCanvas {
                     VStack {
                         Spacer()
@@ -133,41 +144,73 @@ public struct BRPNSceneView: View {
         }
         .onAppear { sceneVM.setupScene() }
         .onDisappear { sceneVM.teardown() }
+        .onChange(of: chatVM.isThinking) { thinking in
+            sceneVM.setOrbThinking(thinking)
+        }
     }
 }
 
-// MARK: — SceneKit UIViewRepresentable
+// MARK: — SceneKit UIViewRepresentable  JS WebGLRenderer({antialias:true,alpha:true})
 struct BRPNSceneKitView: UIViewRepresentable {
     @ObservedObject var vm: BRPNSceneViewModel
 
     func makeUIView(context: Context) -> SCNView {
         let v = SCNView()
         v.scene = vm.scene
-        v.allowsCameraControl = true
+        v.allowsCameraControl = false // JS custom pointer drag on rotX/rotY, not orbit camera
         v.autoenablesDefaultLighting = false
         v.backgroundColor = .clear
+        v.isOpaque = false
         v.antialiasingMode = .multisampling4X
         v.rendersContinuously = true
         v.delegate = context.coordinator
 
-        let cam = SCNCamera(); cam.fieldOfView = 50; cam.zFar = 100; cam.zNear = 0.1
-        let camNode = SCNNode(); camNode.camera = cam
-        camNode.position = SCNVector3(0, 1.5, 5)
-        camNode.look(at: SCNVector3(0,0,0))
-        vm.scene.rootNode.addChildNode(camNode)
-
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
+        v.addGestureRecognizer(pan)
+        let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
+        v.addGestureRecognizer(pinch)
         return v
     }
 
-    func updateUIView(_ v: SCNView, context: Context) {}
+    func updateUIView(_ v: SCNView, context: Context) {
+        v.backgroundColor = .clear
+        v.isOpaque = false
+        if v.pointOfView !== vm.cameraNode {
+            v.pointOfView = vm.cameraNode
+        }
+        context.coordinator.vm = vm
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(vm: vm) }
 
     class Coordinator: NSObject, SCNSceneRendererDelegate {
-        let vm: BRPNSceneViewModel
+        var vm: BRPNSceneViewModel
+        private var lastPan = CGPoint.zero
+        private var pinch0: Float = 5
         init(vm: BRPNSceneViewModel) { self.vm = vm }
+
         func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-            DispatchQueue.main.async { self.vm.updateFrame() }
+            // Tick on the render thread — matches JS RAF. Do not hop to main.
+            vm.animator.tick()
+        }
+
+        @objc func pan(_ g: UIPanGestureRecognizer) {
+            let p = g.location(in: g.view)
+            if g.state == .began { lastPan = p; return }
+            let dx = Float(p.x - lastPan.x)
+            let dy = Float(p.y - lastPan.y)
+            lastPan = p
+            vm.applyDrag(dx: dx, dy: dy)
+        }
+
+        @objc func pinch(_ g: UIPinchGestureRecognizer) {
+            if g.state == .began {
+                pinch0 = vm.cameraNode?.position.z ?? 5
+            }
+            // JS wheel: camera.position.z += deltaY*0.005; pinch scale maps similarly
+            let z = pinch0 / Float(max(0.2, g.scale))
+            let minZ: Float = vm.animator.looking ? 0.85 : 2.5
+            vm.cameraNode?.position.z = max(minZ, min(10, z))
         }
     }
 }

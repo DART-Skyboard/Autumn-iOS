@@ -72,7 +72,7 @@ public struct AppShellView: View {
             sceneStage
             ChatView()
                 .frame(maxHeight: min(320, max(220, size.height * 0.34)))
-                .background(themeVM.chrome.surface)
+                .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
             footerBar
         }
     }
@@ -86,7 +86,7 @@ public struct AppShellView: View {
                 sceneStage
                 ChatView()
                     .frame(maxHeight: min(size.height * 0.42, 280))
-                    .background(themeVM.chrome.surface)
+                    .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
                 footerBar
             }
         }
