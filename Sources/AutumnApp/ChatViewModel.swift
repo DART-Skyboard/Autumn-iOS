@@ -92,6 +92,13 @@ public final class ChatViewModel: ObservableObject {
                 "emotion": turn.emotion.rawValue,
                 "tool": turn.tool.displayName
             ])
+            await AutumnGASClient.shared.pingPresence(
+                message: text,
+                response: response,
+                emotion: turn.emotion.rawValue,
+                buoyancy: turn.buoyancy,
+                uid: owner
+            )
         }
         autosaveIfNeeded()
     }

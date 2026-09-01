@@ -32,8 +32,12 @@ public actor WordNetStore {
         guard !loadedBuckets.contains(name) else { return }
         loadedBuckets.insert(name)
 
-        // Try bundle first, then remote leatr-ash CDN
-        if let url = Bundle.main.url(forResource: name, withExtension: "json") {
+        // Try bundle first (Resources/NLP + root), then remote leatr-ash CDN
+        let local: [URL?] = [
+            Bundle.main.url(forResource: name, withExtension: "json", subdirectory: "NLP"),
+            Bundle.main.url(forResource: name, withExtension: "json")
+        ]
+        for url in local.compactMap({ $0 }) {
             do {
                 let data = try Data(contentsOf: url)
                 let entries = try JSONDecoder().decode([String: WordNetEntry].self, from: data)

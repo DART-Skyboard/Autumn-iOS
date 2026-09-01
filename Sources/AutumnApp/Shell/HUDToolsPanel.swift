@@ -41,6 +41,7 @@ struct HUDToolsPanel: View {
             tool("N.A.T.E", key: .nate)
             Button { appNav.showMantis = true; appNav.showHUDTools = false } label: { row("MANTIS NAV") }
             Button { appNav.showRadar = true; appNav.showHUDTools = false } label: { row("RADAR") }
+            tool("ALC", key: .alc)
             tool("MOVEMENT", key: .movement)
             tool("HELP", key: .help)
             if !compact {

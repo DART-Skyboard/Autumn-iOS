@@ -44,6 +44,13 @@ public struct StarOverlay: View {
                     .background(Color(hex: "#ffdd00").opacity(0.12))
                     .clipShape(Capsule())
                     Spacer()
+                    Button("⬡ SAVE ALL") {
+                        Task { await saveAll() }
+                    }
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "#ffdd00"))
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .overlay(Capsule().stroke(Color(hex: "#ffdd00").opacity(0.4), lineWidth: 1))
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
@@ -91,6 +98,23 @@ public struct StarOverlay: View {
             }
             .padding(12)
         }
+    }
+
+    private func saveAll() async {
+        let unsaved = cards.filter { !$0.saved }
+        guard !unsaved.isEmpty else { status = "NOTHING TO SAVE"; return }
+        for c in unsaved {
+            await AutumnGASClient.shared.writeJournal(
+                uid: authVM.sessionUID,
+                thought: c.thought,
+                reply: "[ash star]",
+                emotion: "inspiring",
+                buoyancy: 0.8
+            )
+            AshStarArchive.markSaved(c.id)
+        }
+        cards = AshStarArchive.load()
+        status = "SAVED ALL \(unsaved.count) VIA GAS"
     }
 }
 

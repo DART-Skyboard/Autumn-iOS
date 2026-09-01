@@ -101,19 +101,33 @@ public actor FeedbackService {
     }
 
     public func replaceFolder(_ folder: MailboxFolder, entries: [FeedbackEntry], uid: String, message: String) async throws {
+        let intentional = message.range(of: "move|delete|unread|receive", options: [.regularExpression, .caseInsensitive]) != nil
+        if entries.isEmpty && !intentional {
+            throw FeedbackError.refusedEmpty
+        }
         let payload = entries.map { ["id": $0.id, "ts": $0.ts, "cat": $0.cat, "msg": $0.msg, "user": $0.user] }
         let ok = await AutumnGASClient.shared.ashwriteReplace(path: folder.path, uid: uid, payload: payload, message: message)
         if !ok { throw FeedbackError.submitFailed }
     }
 
     public func move(entries: [FeedbackEntry], from: MailboxFolder, to: MailboxFolder, remaining: [FeedbackEntry], uid: String) async throws {
+        guard await AdminCircuitStore.shared.allows(
+            username: uid, githubConnected: true, adminEnabled: true
+        ) else { throw FeedbackError.circuitOpen }
         var dest = try await loadFolder(to).entries
         dest.append(contentsOf: entries)
         try await replaceFolder(to, entries: dest, uid: uid, message: "feedback: receive entries in \(to.rawValue)")
         try await replaceFolder(from, entries: remaining, uid: uid, message: "feedback: move \(entries.count) entry to \(to.rawValue)")
     }
 
+    /// Permanent delete only from trash. Other folders move to trash first.
     public func delete(remaining: [FeedbackEntry], folder: MailboxFolder, uid: String, count: Int) async throws {
+        guard await AdminCircuitStore.shared.allows(
+            username: uid, githubConnected: true, adminEnabled: true
+        ) else { throw FeedbackError.circuitOpen }
+        if folder != .trash {
+            throw FeedbackError.trashLast
+        }
         try await replaceFolder(folder, entries: remaining, uid: uid, message: "feedback: delete \(count) entry")
     }
 
@@ -155,11 +169,14 @@ public actor FeedbackService {
 }
 
 public enum FeedbackError: LocalizedError {
-    case empty, submitFailed
+    case empty, submitFailed, refusedEmpty, trashLast, circuitOpen
     public var errorDescription: String? {
         switch self {
         case .empty: return "Please enter a message"
         case .submitFailed: return "Submission failed — please try again"
+        case .refusedEmpty: return "Refusing to PUT [] over a folder"
+        case .trashLast: return "Permanent delete only from trash"
+        case .circuitOpen: return "Admin circuit open — web must be live"
         }
     }
 }

@@ -13,6 +13,8 @@ public struct AppShellView: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var sceneVM: BRPNSceneViewModel
     @EnvironmentObject var appNav: AppNavigation
+    @EnvironmentObject var circuit: AdminCircuitMonitor
+    @EnvironmentObject var journalVM: JournalViewModel
 
     public var body: some View {
         GeometryReader { geo in
@@ -41,7 +43,7 @@ public struct AppShellView: View {
 
                 if appNav.showProfile { ProfileSheet().transition(.move(edge: .trailing)) }
                 if appNav.showFeedback { FeedbackSheet().transition(.opacity) }
-                if appNav.showAdmin, authVM.adminEnabled { AdminDrawerView().transition(.move(edge: .leading)) }
+                if appNav.showAdmin, circuit.allows(authVM) { AdminDrawerView().transition(.move(edge: .leading)) }
                 if appNav.showMantis { studioWrap { MantisNavigationView() } }
                 if appNav.showRadar { studioWrap { MantisRadarView() } }
                 if let studio = appNav.studio { StudioHostView(kind: studio) }
@@ -54,6 +56,13 @@ public struct AppShellView: View {
         .animation(.easeInOut(duration: 0.25), value: appNav.showAdmin)
         .animation(.easeInOut(duration: 0.25), value: appNav.rightTab)
         .animation(.easeInOut(duration: 0.2), value: appNav.showHUDTools)
+        .onAppear { circuit.start() }
+        .onChange(of: circuit.live) { _ in
+            if !circuit.allows(authVM) { appNav.showAdmin = false }
+        }
+        .onChange(of: authVM.adminEnabled) { _ in
+            if !circuit.allows(authVM) { appNav.showAdmin = false }
+        }
     }
 
     // MARK: — Portrait: top bar / scene / chat
@@ -64,6 +73,7 @@ public struct AppShellView: View {
             ChatView()
                 .frame(maxHeight: min(320, max(220, size.height * 0.34)))
                 .background(themeVM.chrome.surface)
+            footerBar
         }
     }
 
@@ -77,6 +87,7 @@ public struct AppShellView: View {
                 ChatView()
                     .frame(maxHeight: min(size.height * 0.42, 280))
                     .background(themeVM.chrome.surface)
+                footerBar
             }
         }
     }
@@ -116,13 +127,22 @@ public struct AppShellView: View {
     private var topBar: some View {
         let chrome = themeVM.chrome
         return HStack(spacing: 8) {
-            themePill
-            scrimPill
+            Image("AutumnLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Autumn")
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundColor(chrome.accent)
+                Text("LEATR v2.1")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(chrome.textSecondary)
+            }
             Spacer()
-            Text(LEATRIdentity.displayName.uppercased())
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .tracking(3)
-                .foregroundColor(chrome.accent.opacity(0.7))
+            scrimPill
+            themePill
+            livePill
             profileChip
         }
         .padding(.horizontal, 12)
@@ -135,13 +155,16 @@ public struct AppShellView: View {
     private var leftDrawer: some View {
         let chrome = themeVM.chrome
         return VStack(alignment: .leading, spacing: 8) {
-            Text(LEATRIdentity.displayName.uppercased())
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .tracking(3)
-                .foregroundColor(chrome.accent)
-                .padding(.top, 10)
-            themePill
+            HStack(spacing: 6) {
+                Image("AutumnLogo").resizable().scaledToFit().frame(width: 22, height: 22)
+                Text("Autumn")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(chrome.accent)
+            }
+            .padding(.top, 10)
             scrimPill
+            themePill
+            livePill
             profileChip
             Divider().background(chrome.accent.opacity(0.2))
             HUDToolsPanel(compact: true)
@@ -174,7 +197,8 @@ public struct AppShellView: View {
     private var scrimPill: some View {
         Button { themeVM.cycleScrim() } label: {
             HStack(spacing: 6) {
-                Text("◐")
+                Text("\(Int((1.0 - themeVM.scrim.alpha) * 100))%")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                 Text(themeVM.scrim.label)
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .tracking(1.5)
@@ -185,6 +209,54 @@ public struct AppShellView: View {
             .overlay(Capsule().stroke(themeVM.scrim.color.opacity(0.35), lineWidth: 1))
             .clipShape(Capsule())
         }
+    }
+
+    private var livePill: some View {
+        Button {
+            Task {
+                await AutumnGASClient.shared.pingPresence(
+                    message: "LIVE",
+                    response: "ios shell",
+                    emotion: "neutral",
+                    buoyancy: 0.5,
+                    uid: authVM.sessionUID
+                )
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Circle().fill(Color(hex: "#00ff88")).frame(width: 6, height: 6)
+                Text("LIVE")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .tracking(1.5)
+            }
+            .foregroundColor(Color(hex: "#00ff88"))
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color(hex: "#00ff88").opacity(0.10))
+            .overlay(Capsule().stroke(Color(hex: "#00ff88").opacity(0.35), lineWidth: 1))
+            .clipShape(Capsule())
+        }
+    }
+
+    private var footerBar: some View {
+        let chrome = themeVM.chrome
+        return HStack(spacing: 10) {
+            HStack(spacing: 4) {
+                Circle().fill(chrome.accent).frame(width: 5, height: 5)
+                Text("LEATR")
+            }
+            Text("OPS: 25")
+            Text("JOURNAL: \(journalVM.entries.count)")
+            Text("SOURCES: 0")
+            Spacer()
+            Text("© 2026 DART MEADOW")
+                .opacity(0.55)
+        }
+        .font(.system(size: 9, design: .monospaced))
+        .foregroundColor(chrome.accent.opacity(0.7))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(chrome.surface.opacity(0.92))
+        .overlay(Rectangle().frame(height: 1).foregroundColor(chrome.accent.opacity(0.15)), alignment: .top)
     }
 
     private var profileChip: some View {
@@ -275,7 +347,7 @@ public final class AppNavigation: ObservableObject {
     public enum RightTab { case none, mist, star, shard, sys }
     public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", msg = "MESSAGES" }
     public enum StudioKind: String, Identifiable {
-        case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap
+        case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc
         public var id: String { rawValue }
         public var title: String {
             switch self {
@@ -289,6 +361,7 @@ public final class AppNavigation: ObservableObject {
             case .arcEdge: return "ARC EDGE"
             case .calc: return "CALC"
             case .emoMap: return "EMO MAP"
+            case .alc: return "ALC · AFTERLIFE CROSSING"
             }
         }
     }

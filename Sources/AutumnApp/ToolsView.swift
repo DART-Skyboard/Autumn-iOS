@@ -161,7 +161,6 @@ struct ArcLakePanel: View {
                 SliderControl(label: "PRESSURE (kPa)", value: $pressure, range: 0...10000, format: "%.3f")
                     .padding(.horizontal, 16)
 
-                // CFD readout placeholder
                 VStack(alignment: .leading, spacing: 8) {
                     Text("CFD SIMULATION")
                         .font(.system(size: 10, design: .monospaced))
@@ -169,6 +168,10 @@ struct ArcLakePanel: View {
                     Text("\(selectedPreset) @ \(temperature, specifier: "%.1f")°C, \(pressure, specifier: "%.1f") kPa")
                         .font(.system(size: 13, design: .monospaced))
                         .foregroundColor(.white)
+                    ArcLakeCFDField(temperature: temperature, pressure: pressure)
+                        .frame(height: 110)
+                        .background(Color.black.opacity(0.35))
+                        .cornerRadius(6)
                     Text("DART Reflex: f(d) = ((d×2)+1)/d")
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(themeVM.current.accent)
@@ -329,5 +332,31 @@ struct ArcLakeAtomView: UIViewRepresentable {
             g.addChildNode(n)
         }
         root.addChildNode(g)
+    }
+}
+
+
+struct ArcLakeCFDField: View {
+    var temperature: Double
+    var pressure: Double
+    var body: some View {
+        Canvas { ctx, size in
+            let cols = 14
+            let rows = 8
+            let heat = max(0, min(1, (temperature + 50) / 1200))
+            let flow = max(0.15, min(1.6, pressure / 101.325))
+            for r in 0..<rows {
+                for c in 0..<cols {
+                    let x = (CGFloat(c) + 0.5) / CGFloat(cols) * size.width
+                    let y = (CGFloat(r) + 0.5) / CGFloat(rows) * size.height
+                    let ang = Double(c) * 0.35 + Double(r) * 0.22 + heat * 1.2
+                    let len = 6.0 * flow
+                    var path = Path()
+                    path.move(to: CGPoint(x: x, y: y))
+                    path.addLine(to: CGPoint(x: x + CGFloat(cos(ang) * len), y: y + CGFloat(sin(ang) * len)))
+                    ctx.stroke(path, with: .color(Color(red: heat, green: 0.55, blue: 1 - heat)), lineWidth: 1)
+                }
+            }
+        }
     }
 }

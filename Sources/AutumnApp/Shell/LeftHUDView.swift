@@ -8,6 +8,7 @@ public struct LeftHUDView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var appNav: AppNavigation
     @EnvironmentObject var sceneVM: BRPNSceneViewModel
+    @EnvironmentObject var circuit: AdminCircuitMonitor
 
     public var body: some View {
         let chrome = themeVM.chrome
@@ -21,7 +22,33 @@ public struct LeftHUDView: View {
             pill("AERO", sub: sceneVM.shellStates[.aerospace] ?? "PERFORMANCE", color: Color(hex: "#ff4466")) {
                 appNav.leftTab = appNav.leftTab == .aero ? .none : .aero
             }
-            if authVM.adminEnabled && authVM.adminAllowed {
+            Button {
+                appNav.showRadar = true
+            } label: {
+                VStack(spacing: 2) {
+                    Text("📡").font(.system(size: 11))
+                    Text("RADAR")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                }
+                .foregroundColor(Color(hex: "#00ff88"))
+                .padding(.horizontal, 8).padding(.vertical, 8)
+                .background(Color(hex: "#00ff88").opacity(0.10))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: "#00ff88").opacity(0.35), lineWidth: 1))
+            }
+            Button {
+                appNav.studio = .alc
+            } label: {
+                VStack(spacing: 2) {
+                    Text("✦").font(.system(size: 11))
+                    Text("ALC")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                }
+                .foregroundColor(Color(hex: "#a050ff"))
+                .padding(.horizontal, 8).padding(.vertical, 8)
+                .background(Color(hex: "#a050ff").opacity(0.10))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: "#a050ff").opacity(0.35), lineWidth: 1))
+            }
+            if circuit.allows(authVM) {
                 Button {
                     appNav.showAdmin.toggle()
                 } label: {

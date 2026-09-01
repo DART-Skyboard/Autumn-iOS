@@ -7,6 +7,7 @@ public struct ProfileSheet: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
+    @EnvironmentObject var circuit: AdminCircuitMonitor
 
     public var body: some View {
         let chrome = themeVM.chrome
@@ -70,10 +71,15 @@ public struct ProfileSheet: View {
                     Button { authVM.toggleAdminFlag() } label: {
                         labelRow(authVM.adminEnabled ? "⚙ DISABLE ADMIN" : "⚙ ENABLE ADMIN")
                     }
-                    if authVM.adminEnabled {
+                    if circuit.allows(authVM) {
                         Button { appNav.showAdmin = true; appNav.showProfile = false } label: {
                             labelRow("⚙ OPEN ADMIN")
                         }
+                    } else if authVM.adminEnabled {
+                        Text("Admin waits for web circuit (leatr.xyz live)")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.45))
+                            .padding(.horizontal, 14).padding(.bottom, 6)
                     }
                 }
 

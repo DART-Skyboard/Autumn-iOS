@@ -26,6 +26,8 @@ public actor GrammarEngine {
     /// Per-user memory. Never mix users.
     private var userMemory: [String: [String]] = [:]
     private var lastOwner: String = "guest"
+    /// Roles from Grammar Study train (lexicon POS). Empty until first train.
+    private var trainedRoles: [String: String] = [:]
 
     private let articles: Set<String> = ["a", "an", "the"]
     private let pronouns: Set<String> = ["i", "me", "my", "mine", "you", "your", "yours", "we", "us", "our", "they", "them", "he", "she", "it", "his", "her", "its"]
@@ -35,10 +37,13 @@ public actor GrammarEngine {
     private let interrogatives: Set<String> = ["who", "what", "when", "where", "why", "how", "which"]
     private let greetings: Set<String> = ["hi", "hello", "hey", "yo", "sup", "howdy", "hiya"]
 
-    public func processForChat(_ text: String, facts: [String: String] = [:]) -> GrammarTurn {
+    public func processForChat(_ text: String, facts: [String: String] = [:]) async -> GrammarTurn {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let owner = facts["_memoryOwner"] ?? facts["user"] ?? lastOwner
         lastOwner = owner
+        if trainedRoles.isEmpty {
+            trainedRoles = await GrammarStudy.shared.wordRoles
+        }
 
         // 0. GBV — core always True, reflex never loop
         let gbv = CoreCognition.generationBreachValidate(raw)
@@ -156,7 +161,12 @@ public actor GrammarEngine {
         if articles.contains(n) { return "determiner" }
         if interrogatives.contains(n) { return "interrogative" }
         if Double(n) != nil { return "number" }
+        if let trained = trainedRoles[n] { return trained }
         return "content"
+    }
+
+    public func applyStudyRoles(_ roles: [String: String]) {
+        trainedRoles = roles
     }
 
     private func routeTool(tokens: [Tok], raw: String, math: Bool) -> NaturalTool {
@@ -183,7 +193,7 @@ public actor GrammarEngine {
         if lower.contains("leatr") || lower.contains("core cognition") {
             return "Core Cognition is frozen True. Magnetize open \(CoreCognition.openEq), close \(CoreCognition.closeEq). BRPN hierarchy \(CoreCognition.brpnHierarchy.joined(separator: " → ")). Reflex never loops."
         }
-        let content = tokens.filter { $0.role == "content" }.map { $0.word }
+        let content = tokens.filter { $0.role == "content" || $0.role == "noun" || $0.role == "verb" || $0.role == "adjective" }.map { $0.word }
         let topic = content.prefix(6).joined(separator: " ")
         let prior = userMemory[owner]?.last
         var parts: [String] = []

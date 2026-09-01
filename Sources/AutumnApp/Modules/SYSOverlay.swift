@@ -6,6 +6,7 @@ public struct SYSOverlay: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var circuit: AdminCircuitMonitor
     @State private var message = "LOADING…"
     @State private var updated = ""
     @State private var author = ""
@@ -30,7 +31,7 @@ public struct SYSOverlay: View {
                 }
                 .frame(maxHeight: 180)
 
-                if authVM.adminAllowed {
+                if circuit.allows(authVM) {
                     Button("⚡ COMPOSE") { showCompose = true; draft = live ? message : "" }
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(themeVM.chrome.accent)
@@ -118,6 +119,7 @@ public struct SYSOverlay: View {
     }
 
     private func post(clear: Bool = false) async {
+        guard circuit.allows(authVM) else { status = "CIRCUIT OPEN — write no-op"; return }
         let msg = clear ? def : draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !msg.isEmpty || clear else { status = "Message cannot be empty"; return }
         status = "SAVING…"

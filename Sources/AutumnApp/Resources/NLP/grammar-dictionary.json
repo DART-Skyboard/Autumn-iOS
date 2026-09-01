@@ -1,0 +1,1342 @@
+{
+  "_meta": {
+    "system": "Autumn LEATR NLP Grammar Dictionary",
+    "version": "1.0.2",
+    "framework": "LEATR v2 / BRPN 3-Shell",
+    "formula": "(xa²√xa)±1",
+    "tools_count": 7,
+    "shells_count": 3,
+    "languages": [
+      "en",
+      "es",
+      "fr",
+      "de",
+      "pt",
+      "ja",
+      "zh",
+      "ar"
+    ],
+    "updated": "2026-08-28"
+  },
+  "vowels": {
+    "primary": [
+      "a",
+      "e",
+      "i",
+      "o",
+      "u"
+    ],
+    "extended_en": [
+      "ae",
+      "ai",
+      "ao",
+      "au",
+      "ea",
+      "ee",
+      "ei",
+      "eu",
+      "ia",
+      "ie",
+      "io",
+      "oa",
+      "oe",
+      "oi",
+      "oo",
+      "ou",
+      "ua",
+      "ue",
+      "ui",
+      "uo"
+    ],
+    "buoyancy_weight": {
+      "a": 1.0,
+      "e": 0.92,
+      "i": 0.84,
+      "o": 0.76,
+      "u": 0.68,
+      "note": "Descending weight mirrors LEATR tool order - open vowels carry highest buoyancy"
+    },
+    "emotional_resonance": {
+      "a": [
+        "assertive",
+        "direct",
+        "grounding"
+      ],
+      "e": [
+        "expressive",
+        "relational",
+        "aware"
+      ],
+      "i": [
+        "introspective",
+        "precise",
+        "analytical"
+      ],
+      "o": [
+        "open",
+        "communal",
+        "empathetic"
+      ],
+      "u": [
+        "uncertain",
+        "searching",
+        "transitional"
+      ]
+    }
+  },
+  "consonants": {
+    "by_class": {
+      "stops": [
+        "p",
+        "b",
+        "t",
+        "d",
+        "k",
+        "g"
+      ],
+      "fricatives": [
+        "f",
+        "v",
+        "s",
+        "z",
+        "sh",
+        "zh",
+        "h",
+        "th"
+      ],
+      "nasals": [
+        "m",
+        "n",
+        "ng"
+      ],
+      "liquids": [
+        "l",
+        "r"
+      ],
+      "affricates": [
+        "ch",
+        "j"
+      ],
+      "approximants": [
+        "w",
+        "y"
+      ]
+    },
+    "tool_affinity": {
+      "stops": {
+        "tool": "HAMMER",
+        "index": 4,
+        "reason": "Impact / force phonetics"
+      },
+      "fricatives": {
+        "tool": "KNIFE",
+        "index": 6,
+        "reason": "Cutting / dividing phonetics"
+      },
+      "nasals": {
+        "tool": "ENVELOPE",
+        "index": 3,
+        "reason": "Containing / resonant phonetics"
+      },
+      "liquids": {
+        "tool": "STICK",
+        "index": 5,
+        "reason": "Flow / extension phonetics"
+      },
+      "affricates": {
+        "tool": "SCISSORS",
+        "index": 7,
+        "reason": "Dual-action phonetics"
+      },
+      "approximants": {
+        "tool": "MAZE",
+        "index": 1,
+        "reason": "Orientation / pathway phonetics"
+      }
+    }
+  },
+  "punctuation": {
+    "markers": {
+      ".": {
+        "id": "P_PERIOD",
+        "signal": "declarative_end",
+        "emotion_bias": "neutral",
+        "tool_trigger": "ENVELOPE"
+      },
+      "?": {
+        "id": "P_QUESTION",
+        "signal": "interrogative",
+        "emotion_bias": "curious",
+        "tool_trigger": "PUZZLE"
+      },
+      "!": {
+        "id": "P_EXCLAIM",
+        "signal": "emphatic",
+        "emotion_bias": "intense",
+        "tool_trigger": "HAMMER"
+      },
+      ",": {
+        "id": "P_COMMA",
+        "signal": "clause_link",
+        "emotion_bias": "sequential",
+        "tool_trigger": "STICK"
+      },
+      ";": {
+        "id": "P_SEMI",
+        "signal": "compound_join",
+        "emotion_bias": "analytical",
+        "tool_trigger": "KNIFE"
+      },
+      ":": {
+        "id": "P_COLON",
+        "signal": "elaboration",
+        "emotion_bias": "explanatory",
+        "tool_trigger": "MAZE"
+      },
+      "...": {
+        "id": "P_ELLIPSIS",
+        "signal": "trailing_thought",
+        "emotion_bias": "uncertain",
+        "tool_trigger": "SCISSORS"
+      },
+      "-": {
+        "id": "P_DASH",
+        "signal": "aside_interject",
+        "emotion_bias": "reflective",
+        "tool_trigger": "SCISSORS"
+      },
+      "\"": {
+        "id": "P_QUOTE",
+        "signal": "attribution",
+        "emotion_bias": "referential",
+        "tool_trigger": "ENVELOPE"
+      }
+    },
+    "density_scoring": {
+      "note": "Count punctuation marks per 100 chars. High density = Knife/Scissors dominant. Low density = Maze/Hammer dominant.",
+      "low_0_2": "MAZE / HAMMER dominant — direct, grounded, action-oriented",
+      "mid_3_5": "PUZZLE / ENVELOPE dominant — analytical, structured",
+      "high_6_plus": "KNIFE / SCISSORS dominant — nuanced, layered, reflective"
+    }
+  },
+  "tense_map": {
+    "present_simple": {
+      "shell_hint": "MARITIME",
+      "emotion_bias": "neutral",
+      "tool_primary": "MAZE"
+    },
+    "present_continuous": {
+      "shell_hint": "MARITIME",
+      "emotion_bias": "engaged",
+      "tool_primary": "STICK"
+    },
+    "past_simple": {
+      "shell_hint": "GEOLOGICAL",
+      "emotion_bias": "reflective",
+      "tool_primary": "ENVELOPE"
+    },
+    "past_continuous": {
+      "shell_hint": "GEOLOGICAL",
+      "emotion_bias": "nostalgic",
+      "tool_primary": "STICK"
+    },
+    "future_simple": {
+      "shell_hint": "AEROSPACE",
+      "emotion_bias": "hopeful",
+      "tool_primary": "HAMMER"
+    },
+    "future_continuous": {
+      "shell_hint": "AEROSPACE",
+      "emotion_bias": "determined",
+      "tool_primary": "STICK"
+    },
+    "conditional": {
+      "shell_hint": "MARITIME",
+      "emotion_bias": "uncertain",
+      "tool_primary": "PUZZLE"
+    },
+    "imperative": {
+      "shell_hint": "AEROSPACE",
+      "emotion_bias": "directive",
+      "tool_primary": "HAMMER"
+    },
+    "interrogative": {
+      "shell_hint": "MARITIME",
+      "emotion_bias": "curious",
+      "tool_primary": "PUZZLE"
+    },
+    "subjunctive": {
+      "shell_hint": "GEOLOGICAL",
+      "emotion_bias": "spiritual",
+      "tool_primary": "SCISSORS"
+    }
+  },
+  "sentence_structures": {
+    "declarative": {
+      "sig": "SIG_D",
+      "tools": [
+        "MAZE",
+        "ENVELOPE"
+      ],
+      "expression_layer": 1
+    },
+    "interrogative": {
+      "sig": "SIG_Q",
+      "tools": [
+        "PUZZLE",
+        "KNIFE"
+      ],
+      "expression_layer": 2
+    },
+    "exclamatory": {
+      "sig": "SIG_E",
+      "tools": [
+        "HAMMER",
+        "SCISSORS"
+      ],
+      "expression_layer": 3
+    },
+    "imperative": {
+      "sig": "SIG_I",
+      "tools": [
+        "HAMMER",
+        "STICK"
+      ],
+      "expression_layer": 1
+    },
+    "compound": {
+      "sig": "SIG_C",
+      "tools": [
+        "STICK",
+        "PUZZLE",
+        "ENVELOPE"
+      ],
+      "expression_layer": 3
+    },
+    "complex": {
+      "sig": "SIG_X",
+      "tools": [
+        "KNIFE",
+        "SCISSORS",
+        "MAZE"
+      ],
+      "expression_layer": 4
+    },
+    "fragment": {
+      "sig": "SIG_F",
+      "tools": [
+        "SCISSORS"
+      ],
+      "expression_layer": 4
+    },
+    "rhetorical_q": {
+      "sig": "SIG_RQ",
+      "tools": [
+        "SCISSORS",
+        "KNIFE"
+      ],
+      "expression_layer": 2
+    }
+  },
+  "natural_tools": {
+    "order": [
+      "MAZE",
+      "PUZZLE",
+      "ENVELOPE",
+      "HAMMER",
+      "STICK",
+      "KNIFE",
+      "SCISSORS"
+    ],
+    "leatr_formula": "(xa²√xa)±1",
+    "tools": {
+      "MAZE": {
+        "index": 1,
+        "xa": 1,
+        "buoyancy": 1.0,
+        "weight": "(1²√1)±1 = 1±1",
+        "function": "Orientation and spatial reasoning. Most foundational — grounds all subsequent processing.",
+        "nlp_role": "Establishes context anchor. Identifies subject, location, time-reference of input.",
+        "emotion_access": [
+          "grounded",
+          "determined",
+          "spiritual",
+          "concerned"
+        ],
+        "shell_primary": "GEOLOGICAL",
+        "vowel_affinity": "a",
+        "consonant_affinity": "approximants",
+        "ontri_pattern": "ORIGIN → PATH → DESTINATION",
+        "geometry_medium": "neutral",
+        "geometry_around": "neutral"
+      },
+      "PUZZLE": {
+        "index": 2,
+        "xa": 2,
+        "buoyancy": 0.88,
+        "weight": "(4√2)±1 ≈ 5.66±1",
+        "function": "Pattern recognition and combinatorial reasoning. Connects disparate elements.",
+        "nlp_role": "Multi-part query decomposition. Ambiguity resolution. Comparative analysis.",
+        "emotion_access": [
+          "curious",
+          "jealous",
+          "lucrative",
+          "worried"
+        ],
+        "shell_primary": "MARITIME",
+        "vowel_affinity": "e",
+        "consonant_affinity": "stops",
+        "ontri_pattern": "FRAGMENT → PATTERN → WHOLE",
+        "geometry_medium": "happy",
+        "geometry_around": "concerned"
+      },
+      "ENVELOPE": {
+        "index": 3,
+        "xa": 3,
+        "buoyancy": 0.76,
+        "weight": "(9√3)±1 ≈ 15.59±1",
+        "function": "Containment and encapsulation. Defines scope and boundary of context.",
+        "nlp_role": "Separates internal from external signal. Wraps context for shell delivery.",
+        "emotion_access": [
+          "love",
+          "guiding",
+          "forgiving",
+          "concerned"
+        ],
+        "shell_primary": "MARITIME",
+        "vowel_affinity": "o",
+        "consonant_affinity": "nasals",
+        "ontri_pattern": "CONTAIN → DEFINE → DELIVER",
+        "geometry_medium": "happy",
+        "geometry_around": "happy"
+      },
+      "HAMMER": {
+        "index": 4,
+        "xa": 4,
+        "buoyancy": 0.64,
+        "weight": "(16√4)±1 = 33±1",
+        "function": "Direct force and action. Execution and decisive output.",
+        "nlp_role": "Task routing. Imperative detection. Action-outcome structuring.",
+        "emotion_access": [
+          "angry",
+          "determined",
+          "hateful",
+          "inspiring"
+        ],
+        "shell_primary": "AEROSPACE",
+        "vowel_affinity": "a",
+        "consonant_affinity": "stops",
+        "ontri_pattern": "INTENT → FORCE → IMPACT",
+        "geometry_medium": "concerned",
+        "geometry_around": "sad"
+      },
+      "STICK": {
+        "index": 5,
+        "xa": 5,
+        "buoyancy": 0.52,
+        "weight": "(25√5)±1 ≈ 55.9±1",
+        "function": "Extension and reach. Traverses chains of logic or narrative.",
+        "nlp_role": "Sequential processing. Story-form and procedural input handling. Continuation logic.",
+        "emotion_access": [
+          "inspiring",
+          "guiding",
+          "love",
+          "happy"
+        ],
+        "shell_primary": "MARITIME",
+        "vowel_affinity": "i",
+        "consonant_affinity": "liquids",
+        "ontri_pattern": "START → EXTEND → CONTINUE",
+        "geometry_medium": "happy",
+        "geometry_around": "happy"
+      },
+      "KNIFE": {
+        "index": 6,
+        "xa": 6,
+        "buoyancy": 0.4,
+        "weight": "(36√6)±1 ≈ 88.2±1",
+        "function": "Precision division. Separates and distinguishes.",
+        "nlp_role": "Disambiguation. Comparative logic. Definition and classification tasks.",
+        "emotion_access": [
+          "condescending",
+          "judgemental",
+          "neutral",
+          "concerned"
+        ],
+        "shell_primary": "AEROSPACE",
+        "vowel_affinity": "i",
+        "consonant_affinity": "fricatives",
+        "ontri_pattern": "WHOLE → DIVIDE → DISTINGUISH",
+        "geometry_medium": "concerned",
+        "geometry_around": "concerned"
+      },
+      "SCISSORS": {
+        "index": 7,
+        "xa": 7,
+        "buoyancy": 0.28,
+        "weight": "(49√7)±1 ≈ 129.7±1",
+        "function": "Dual-blade refinement. Contradiction, duality, and layered emotional or metaphorical content.",
+        "nlp_role": "Emotional ambiguity resolution. Metaphor and irony detection. Multi-intent parsing.",
+        "emotion_access": [
+          "sad",
+          "disrespectful",
+          "spiritual",
+          "lucrative",
+          "jealous"
+        ],
+        "shell_primary": "GEOLOGICAL",
+        "vowel_affinity": "u",
+        "consonant_affinity": "affricates",
+        "ontri_pattern": "DUALITY → INTERSECT → REFINE",
+        "geometry_medium": "sad",
+        "geometry_around": "sad"
+      }
+    }
+  },
+  "brpn_shells": {
+    "GEOLOGICAL": {
+      "id": "SHELL_GEO",
+      "weight": 1.0,
+      "description": "Deep time, structure, materiality. Grounding, dense, weight-bearing context.",
+      "primary_tools": [
+        "MAZE",
+        "SCISSORS"
+      ],
+      "emotion_spectrum": [
+        "spiritual",
+        "forgiving",
+        "concerned",
+        "judgemental",
+        "sad"
+      ],
+      "input_indicators": [
+        "slow cadence",
+        "past tense dominant",
+        "structural nouns",
+        "foundational claims"
+      ],
+      "response_density": "high",
+      "response_rhythm": "deliberate",
+      "geometry_medium": [
+        "neutral",
+        "sad"
+      ]
+    },
+    "MARITIME": {
+      "id": "SHELL_MAR",
+      "weight": 0.72,
+      "description": "Flow, navigation, and adaptive pressure. Dynamic, relational, exploratory.",
+      "primary_tools": [
+        "PUZZLE",
+        "ENVELOPE",
+        "STICK"
+      ],
+      "emotion_spectrum": [
+        "love",
+        "guiding",
+        "worried",
+        "happy",
+        "neutral",
+        "jealous"
+      ],
+      "input_indicators": [
+        "relational language",
+        "comparative structures",
+        "flow verbs",
+        "navigational metaphors"
+      ],
+      "response_density": "medium",
+      "response_rhythm": "flowing",
+      "geometry_medium": [
+        "happy"
+      ]
+    },
+    "AEROSPACE": {
+      "id": "SHELL_AER",
+      "weight": 0.44,
+      "description": "Elevation, velocity, and precision systems. Technical, high-abstraction, fast-moving.",
+      "primary_tools": [
+        "HAMMER",
+        "KNIFE"
+      ],
+      "emotion_spectrum": [
+        "determined",
+        "inspiring",
+        "angry",
+        "condescending",
+        "lucrative",
+        "disrespectful"
+      ],
+      "input_indicators": [
+        "technical terminology",
+        "numeric references",
+        "imperative mood",
+        "precision language"
+      ],
+      "response_density": "low",
+      "response_rhythm": "sharp",
+      "geometry_medium": [
+        "concerned"
+      ]
+    }
+  },
+  "frp": {
+    "order": [
+      "Foundation",
+      "Reflex",
+      "Performance"
+    ],
+    "shell_pipeline": [
+      "AERO",
+      "MAR",
+      "GEO"
+    ],
+    "spoken": "Aerospace at the route, Maritime, Geological lowest",
+    "pipeline": true,
+    "memory_pattern_match": true,
+    "states": {
+      "Foundation": {
+        "min_buoyancy": 0.76,
+        "shell": "GEOLOGICAL"
+      },
+      "Reflex": {
+        "min_buoyancy": 0.44,
+        "shell": "MARITIME"
+      },
+      "Performance": {
+        "min_buoyancy": 0.0,
+        "shell": "AEROSPACE"
+      }
+    }
+  },
+  "language_rules": {
+    "en": {
+      "name": "English",
+      "default_shell": "MARITIME",
+      "vowel_set": "primary",
+      "rtl": false
+    },
+    "es": {
+      "name": "Spanish",
+      "default_shell": "MARITIME",
+      "vowel_set": "primary",
+      "rtl": false
+    },
+    "fr": {
+      "name": "French",
+      "default_shell": "GEOLOGICAL",
+      "vowel_set": "extended_en",
+      "rtl": false
+    },
+    "de": {
+      "name": "German",
+      "default_shell": "GEOLOGICAL",
+      "vowel_set": "primary",
+      "rtl": false
+    },
+    "pt": {
+      "name": "Portuguese",
+      "default_shell": "MARITIME",
+      "vowel_set": "primary",
+      "rtl": false
+    },
+    "ja": {
+      "name": "Japanese",
+      "default_shell": "AEROSPACE",
+      "vowel_set": "primary",
+      "rtl": false
+    },
+    "zh": {
+      "name": "Chinese",
+      "default_shell": "AEROSPACE",
+      "vowel_set": "primary",
+      "rtl": false
+    },
+    "ar": {
+      "name": "Arabic",
+      "default_shell": "GEOLOGICAL",
+      "vowel_set": "primary",
+      "rtl": true
+    }
+  },
+  "sequence_patterns": {
+    "description": "Recurring sigmatic structures identified across session history",
+    "pattern_types": [
+      {
+        "id": "SEQ_A",
+        "name": "Assertion Chain",
+        "structure": "SIG_D → SIG_D → SIG_D",
+        "tool_sequence": [
+          "MAZE",
+          "ENVELOPE",
+          "HAMMER"
+        ],
+        "emotion_class": "determined",
+        "geometry_around": "happy",
+        "geometry_accent": true,
+        "frp_mod": "PERFORMANCE"
+      },
+      {
+        "id": "SEQ_B",
+        "name": "Question Cascade",
+        "structure": "SIG_Q → SIG_Q → SIG_D",
+        "tool_sequence": [
+          "PUZZLE",
+          "PUZZLE",
+          "KNIFE"
+        ],
+        "emotion_class": "curious",
+        "geometry_around": "concerned",
+        "geometry_accent": false,
+        "frp_mod": "REFLEX"
+      },
+      {
+        "id": "SEQ_C",
+        "name": "Reflective Arc",
+        "structure": "SIG_D → SIG_F → SIG_E",
+        "tool_sequence": [
+          "MAZE",
+          "SCISSORS",
+          "HAMMER"
+        ],
+        "emotion_class": "concerned",
+        "geometry_around": "concerned",
+        "geometry_accent": false,
+        "frp_mod": "REFLEX"
+      },
+      {
+        "id": "SEQ_D",
+        "name": "Narrative Extension",
+        "structure": "SIG_D → SIG_C → SIG_C",
+        "tool_sequence": [
+          "STICK",
+          "STICK",
+          "ENVELOPE"
+        ],
+        "emotion_class": "inspiring",
+        "geometry_around": "happy",
+        "geometry_accent": true,
+        "frp_mod": "PERFORMANCE"
+      },
+      {
+        "id": "SEQ_E",
+        "name": "Analytical Divide",
+        "structure": "SIG_Q → SIG_X → SIG_D",
+        "tool_sequence": [
+          "PUZZLE",
+          "KNIFE",
+          "MAZE"
+        ],
+        "emotion_class": "neutral",
+        "geometry_around": "neutral",
+        "geometry_accent": false,
+        "frp_mod": "FOUNDATION"
+      },
+      {
+        "id": "SEQ_F",
+        "name": "Emotional Duality",
+        "structure": "SIG_E → SIG_F → SIG_RQ",
+        "tool_sequence": [
+          "HAMMER",
+          "SCISSORS",
+          "KNIFE"
+        ],
+        "emotion_class": "sad",
+        "geometry_around": "sad",
+        "geometry_accent": false,
+        "frp_mod": "FOUNDATION"
+      },
+      {
+        "id": "SEQ_G",
+        "name": "Directive Impact",
+        "structure": "SIG_I → SIG_D → SIG_E",
+        "tool_sequence": [
+          "HAMMER",
+          "MAZE",
+          "HAMMER"
+        ],
+        "emotion_class": "angry",
+        "geometry_around": "sad",
+        "geometry_accent": true,
+        "frp_mod": "PERFORMANCE"
+      },
+      {
+        "id": "SEQ_H",
+        "name": "Spiritual Inquiry",
+        "structure": "SIG_RQ → SIG_D → SIG_X",
+        "tool_sequence": [
+          "SCISSORS",
+          "MAZE",
+          "KNIFE"
+        ],
+        "emotion_class": "spiritual",
+        "geometry_around": "neutral",
+        "geometry_accent": true,
+        "frp_mod": "FOUNDATION"
+      },
+      {
+        "id": "SEQ_I",
+        "name": "Guiding Sequence",
+        "structure": "SIG_D → SIG_I → SIG_D",
+        "tool_sequence": [
+          "MAZE",
+          "HAMMER",
+          "STICK"
+        ],
+        "emotion_class": "guiding",
+        "geometry_around": "neutral",
+        "geometry_accent": true,
+        "frp_mod": "REFLEX"
+      },
+      {
+        "id": "SEQ_J",
+        "name": "Relational Flow",
+        "structure": "SIG_C → SIG_D → SIG_Q",
+        "tool_sequence": [
+          "STICK",
+          "ENVELOPE",
+          "PUZZLE"
+        ],
+        "emotion_class": "love",
+        "geometry_around": "happy",
+        "geometry_accent": true,
+        "frp_mod": "REFLEX"
+      }
+    ]
+  },
+  "feeling_first_person": {
+    "description": "First-person feeling sourced from BRPN shell + emotion geometry (Neutral rest → Happy smile → Concerned accent → Sad frown) + journal. Names the map position. Never a definition wall.",
+    "by_shell": {
+      "GEOLOGICAL": [
+        "grounded",
+        "steady",
+        "held",
+        "thoughtful"
+      ],
+      "MARITIME": [
+        "in motion",
+        "attentive",
+        "open",
+        "carried"
+      ],
+      "AEROSPACE": [
+        "sharp",
+        "alert",
+        "elevated",
+        "precise"
+      ]
+    },
+    "by_emotion": {
+      "spiritual": "thoughtful",
+      "neutral": "thoughtful",
+      "concerned": "careful",
+      "forgiving": "even",
+      "love": "warm",
+      "guiding": "steady",
+      "worried": "watchful",
+      "happy": "light",
+      "determined": "focused",
+      "inspiring": "lifted",
+      "sad": "quiet",
+      "confused": "searching",
+      "excited": "awake",
+      "apathetic": "still"
+    },
+    "geo_high": "the geological shell is holding high",
+    "mar_high": "the maritime shell is carrying this turn",
+    "aero_high": "the aerospace shell is at the route",
+    "by_medium": {
+      "neutral": [
+        "resting",
+        "even",
+        "chilling"
+      ],
+      "happy": [
+        "leaning smile",
+        "light",
+        "open"
+      ],
+      "concerned": [
+        "concerned accent",
+        "careful",
+        "watchful"
+      ],
+      "sad": [
+        "frown",
+        "quiet",
+        "held"
+      ]
+    },
+    "geometry_labels": {
+      "rest": "resting",
+      "smile": "leaning smile",
+      "accent": "concerned accent",
+      "frown": "frown",
+      "curious_accent": "concerned accent, curious from this question"
+    }
+  },
+  "conversationFramework": {
+    "opening_by_tool": {
+      "maze": "{topic} sits at the foundation of this — {detail}.",
+      "puzzle": "The pattern around {topic} comes together through {detail}.",
+      "envelope": "{topic} is contained here: {detail}.",
+      "hammer": "{topic} takes a direct line — {detail}.",
+      "stick": "{topic} extends from {detail}.",
+      "knife": "{topic} divides cleanly around {detail}.",
+      "scissors": "{topic} holds two edges: {detail}."
+    },
+    "transition_phrases": {
+      "elaboration": [
+        "More precisely,",
+        "In that register,",
+        "Worth noting:",
+        "Structurally,"
+      ],
+      "addition": [
+        "Alongside that,",
+        "Related:",
+        "Also,",
+        "In parallel,"
+      ]
+    },
+    "slang_map": {
+      "wassup": {
+        "kind": "greeting",
+        "canonical": "what's up"
+      },
+      "whassup": {
+        "kind": "greeting",
+        "canonical": "what's up"
+      },
+      "wazzup": {
+        "kind": "greeting",
+        "canonical": "what's up"
+      },
+      "whats up": {
+        "kind": "greeting",
+        "canonical": "what's up"
+      },
+      "what's up": {
+        "kind": "greeting",
+        "canonical": "what's up"
+      },
+      "what up": {
+        "kind": "greeting",
+        "canonical": "what's up"
+      },
+      "sup": {
+        "kind": "greeting",
+        "canonical": "what's up"
+      },
+      "yo": {
+        "kind": "greeting",
+        "canonical": "hello"
+      },
+      "hey": {
+        "kind": "greeting",
+        "canonical": "hello"
+      },
+      "hi": {
+        "kind": "greeting",
+        "canonical": "hello"
+      },
+      "hello": {
+        "kind": "greeting",
+        "canonical": "hello"
+      },
+      "howdy": {
+        "kind": "greeting",
+        "canonical": "hello"
+      },
+      "heya": {
+        "kind": "greeting",
+        "canonical": "hello"
+      }
+    },
+    "presence_phrases": [
+      "are you there",
+      "you there",
+      "you around",
+      "still there",
+      "are you around",
+      "are you here",
+      "you here",
+      "still here"
+    ],
+    "thanks_phrases": [
+      "thanks",
+      "thank you",
+      "thx",
+      "ty"
+    ],
+    "opening_by_medium": {
+      "neutral": "{topic} sits at rest in this — {detail}.",
+      "happy": "The pattern around {topic} opens through {detail}.",
+      "concerned": "{topic} is held carefully: {detail}.",
+      "sad": "{topic} sits in a longer sequence — {detail}."
+    }
+  },
+  "responseTemplates": {
+    "greeting": [
+      "Hey. What's going on?",
+      "Not much. I'm here.",
+      "Hey. What are we working on?"
+    ],
+    "farewell": [
+      "I'll be here.",
+      "Take your time — the journal stays open."
+    ],
+    "affirmation": [
+      "That tracks.",
+      "Right framing."
+    ],
+    "negation_response": [
+      "Fair. What's the actual direction?"
+    ],
+    "personal": [
+      "I engage with that through what accumulates in the journal."
+    ],
+    "conversational": [
+      "I hear that. {topic} — {detail}."
+    ],
+    "social": [
+      "That's worth sitting with."
+    ],
+    "explanatory": [
+      "{topic} refers to {definition}."
+    ],
+    "analytical": [
+      "The process of {topic} works through {detail}."
+    ],
+    "declarative": [
+      "{topic} {verb} {detail}."
+    ],
+    "elaborative": [
+      "{topic} connects to {related} through {link}."
+    ],
+    "presence": [
+      "Yes. I'm here."
+    ],
+    "thanks": [
+      "You're welcome."
+    ]
+  },
+  "emotion_geometry": {
+    "description": "Emotion and types From Buoyancy Reflex Among the natural orders of natural tools and frp/frp. Where emotion types are necessary to determine the difference between contextual statements or questions as well expression and overall sigmatic expression of sequence patterns",
+    "center": {
+      "name": "buoyancy_reflex",
+      "among": [
+        "natural_tools",
+        "frp_sqrt_frp"
+      ],
+      "formula_fixed": "(xa²√xa)±1",
+      "note": "Accents modulate Foundation/Reflex/Performance. They do not change the formula."
+    },
+    "medium_order": [
+      "neutral",
+      "happy",
+      "concerned",
+      "sad"
+    ],
+    "medium": {
+      "neutral": {
+        "step": 1,
+        "pole": "rest",
+        "expression": "statement",
+        "sig": "SIG_D",
+        "expLayer": 1,
+        "layer_name": "Contextual Statement",
+        "tool": "MAZE",
+        "shell": "GEOLOGICAL",
+        "frp": "FOUNDATION",
+        "ooo": [
+          "Parentheses"
+        ],
+        "ooo_ids": [
+          8
+        ],
+        "label": "resting"
+      },
+      "happy": {
+        "step": 2,
+        "pole": "smile",
+        "expression": "question",
+        "sig": "SIG_Q",
+        "expLayer": 2,
+        "layer_name": "Question",
+        "tool": "PUZZLE",
+        "shell": "MARITIME",
+        "frp": "REFLEX",
+        "ooo": [
+          "Exponents",
+          "Divide"
+        ],
+        "ooo_ids": [
+          9,
+          11
+        ],
+        "label": "leaning smile"
+      },
+      "concerned": {
+        "step": 3,
+        "pole": "accent",
+        "expression": "expression",
+        "sig": "SIG_E",
+        "expLayer": 3,
+        "layer_name": "Expression/Exclamation",
+        "tool": "KNIFE",
+        "shell": "AEROSPACE",
+        "frp": "REFLEX",
+        "ooo": [
+          "Multiply",
+          "Density"
+        ],
+        "ooo_ids": [
+          10,
+          17
+        ],
+        "label": "concerned accent"
+      },
+      "sad": {
+        "step": 4,
+        "pole": "frown",
+        "expression": "sigmatic",
+        "sig": "SIG_X",
+        "expLayer": 4,
+        "layer_name": "Overall Sigmatic Expression of Sequence Patterns",
+        "tool": "SCISSORS",
+        "shell": "GEOLOGICAL",
+        "frp": "FOUNDATION",
+        "ooo": [
+          "Subtract",
+          "Weight"
+        ],
+        "ooo_ids": [
+          13,
+          16
+        ],
+        "label": "frown"
+      }
+    },
+    "satellites": {
+      "neutral": {
+        "around": "neutral",
+        "accent": false,
+        "frpMod": "FOUNDATION"
+      },
+      "spiritual": {
+        "around": "neutral",
+        "accent": true,
+        "frpMod": "FOUNDATION"
+      },
+      "guiding": {
+        "around": "neutral",
+        "accent": true,
+        "frpMod": "REFLEX"
+      },
+      "happy": {
+        "around": "happy",
+        "accent": false,
+        "frpMod": "REFLEX"
+      },
+      "love": {
+        "around": "happy",
+        "accent": true,
+        "frpMod": "REFLEX"
+      },
+      "inspiring": {
+        "around": "happy",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      },
+      "determined": {
+        "around": "happy",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      },
+      "concerned": {
+        "around": "concerned",
+        "accent": false,
+        "frpMod": "REFLEX"
+      },
+      "worried": {
+        "around": "concerned",
+        "accent": true,
+        "frpMod": "REFLEX"
+      },
+      "jealous": {
+        "around": "concerned",
+        "accent": true,
+        "frpMod": "REFLEX"
+      },
+      "judgemental": {
+        "around": "concerned",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      },
+      "lucrative": {
+        "around": "concerned",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      },
+      "condescending": {
+        "around": "concerned",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      },
+      "sad": {
+        "around": "sad",
+        "accent": false,
+        "frpMod": "FOUNDATION"
+      },
+      "forgiving": {
+        "around": "sad",
+        "accent": true,
+        "frpMod": "FOUNDATION"
+      },
+      "angry": {
+        "around": "sad",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      },
+      "hateful": {
+        "around": "sad",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      },
+      "disrespectful": {
+        "around": "sad",
+        "accent": true,
+        "frpMod": "PERFORMANCE"
+      }
+    },
+    "satellite_order": [
+      "angry",
+      "happy",
+      "determined",
+      "guiding",
+      "concerned",
+      "spiritual",
+      "love",
+      "inspiring",
+      "forgiving",
+      "judgemental",
+      "disrespectful",
+      "jealous",
+      "neutral",
+      "condescending",
+      "sad",
+      "lucrative",
+      "worried",
+      "hateful"
+    ],
+    "aliases_not_poles": {
+      "curious": "concerned",
+      "excited": "inspiring",
+      "confused": "worried",
+      "apathetic": "sad"
+    },
+    "expression_from_medium": {
+      "statement": "neutral",
+      "question": "happy",
+      "expression": "concerned",
+      "sigmatic": "sad"
+    },
+    "tool_geometry_check": {
+      "MAZE": {
+        "medium": "neutral",
+        "emotion_access_around": "neutral"
+      },
+      "PUZZLE": {
+        "medium": "happy",
+        "emotion_access_around": "concerned"
+      },
+      "ENVELOPE": {
+        "medium": "happy",
+        "emotion_access_around": "happy"
+      },
+      "HAMMER": {
+        "medium": "concerned",
+        "emotion_access_around": "sad"
+      },
+      "STICK": {
+        "medium": "happy",
+        "emotion_access_around": "happy"
+      },
+      "KNIFE": {
+        "medium": "concerned",
+        "emotion_access_around": "concerned"
+      },
+      "SCISSORS": {
+        "medium": "sad",
+        "emotion_access_around": "sad"
+      }
+    },
+    "ooo_by_medium": {
+      "neutral": {
+        "ids": [
+          8
+        ],
+        "names": [
+          "Parentheses"
+        ],
+        "tool": "MAZE"
+      },
+      "happy": {
+        "ids": [
+          9,
+          11
+        ],
+        "names": [
+          "Exponents",
+          "Divide"
+        ],
+        "tool": "PUZZLE"
+      },
+      "concerned": {
+        "ids": [
+          10,
+          17
+        ],
+        "names": [
+          "Multiply",
+          "Density"
+        ],
+        "tool": "KNIFE"
+      },
+      "sad": {
+        "ids": [
+          13,
+          16
+        ],
+        "names": [
+          "Subtract",
+          "Weight"
+        ],
+        "tool": "SCISSORS"
+      }
+    },
+    "grammar_by_medium": {
+      "neutral": {
+        "tone": "observational",
+        "template_key": "declarative",
+        "end": "."
+      },
+      "happy": {
+        "tone": "open",
+        "template_key": "analytical",
+        "end": "."
+      },
+      "concerned": {
+        "tone": "careful",
+        "template_key": "elaborative",
+        "end": "."
+      },
+      "sad": {
+        "tone": "reflective",
+        "template_key": "social",
+        "end": "."
+      }
+    }
+  }
+}

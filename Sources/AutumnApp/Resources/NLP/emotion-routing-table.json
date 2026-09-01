@@ -1,0 +1,142 @@
+{
+  "_meta": {
+    "system": "Autumn LEATR Emotion Routing Table",
+    "version": "1.0.0",
+    "description": "Maps BRPN shell × Natural Tool × Expression Layer to emotion category and processing order. Core of the Buoyancy Reflex NLP system.",
+    "formula": "(xa²√xa)±1",
+    "updated": "2025-04-16"
+  },
+
+  "emotion_categories": {
+    "POSITIVE": {
+      "id": "EMO_POS",
+      "members": ["happy","love","inspiring","determined","spiritual","guiding"],
+      "primary_shell": "MARITIME",
+      "primary_tools": ["MAZE","STICK","ENVELOPE"],
+      "expression_layer_entry": 1,
+      "buoyancy_range": [0.64, 1.0],
+      "definitions": {
+        "happy":      { "id": "EMO_HAPPY",     "raw": "A state of elevated subjective wellbeing arising from alignment between expectation and outcome.", "tool_primary": "STICK",    "xa_affinity": 5 },
+        "love":       { "id": "EMO_LOVE",      "raw": "Deep relational resonance. Persistent attachment pattern with high envelope containment.", "tool_primary": "ENVELOPE", "xa_affinity": 3 },
+        "inspiring":  { "id": "EMO_INSPIRING", "raw": "Upward-directional emotional transmission. Elevates buoyancy in recipient.", "tool_primary": "HAMMER",   "xa_affinity": 4 },
+        "determined": { "id": "EMO_DETERMINED","raw": "Sustained directive force toward a defined outcome. Hammer-dominant signature.", "tool_primary": "HAMMER",   "xa_affinity": 4 },
+        "spiritual":  { "id": "EMO_SPIRITUAL", "raw": "Non-material grounding resonance. Access beyond direct sensory sequence patterns.", "tool_primary": "MAZE",     "xa_affinity": 1 },
+        "guiding":    { "id": "EMO_GUIDING",   "raw": "Directional transmission without force imposition. Stick-led orientation sequence.", "tool_primary": "STICK",    "xa_affinity": 5 }
+      }
+    },
+    "NEGATIVE": {
+      "id": "EMO_NEG",
+      "members": ["angry","hateful","forgiving","condescending","disrespectful"],
+      "primary_shell": "AEROSPACE",
+      "primary_tools": ["HAMMER","KNIFE","SCISSORS"],
+      "expression_layer_entry": 3,
+      "buoyancy_range": [0.28, 0.64],
+      "definitions": {
+        "angry":          { "id": "EMO_ANGRY",        "raw": "High-velocity force without directional containment. Hammer firing without Maze anchor.", "tool_primary": "HAMMER",   "xa_affinity": 4 },
+        "hateful":        { "id": "EMO_HATEFUL",      "raw": "Persistent Knife-Scissors loop with negative valence. Divides and isolates with intent.", "tool_primary": "KNIFE",    "xa_affinity": 6 },
+        "forgiving":      { "id": "EMO_FORGIVING",    "raw": "Dissolution of prior Knife-divide. Envelope re-engagement following rupture.", "tool_primary": "ENVELOPE", "xa_affinity": 3 },
+        "condescending":  { "id": "EMO_CONDESCENDING","raw": "Elevated Knife positioning over recipient. Asymmetric precision assertion.", "tool_primary": "KNIFE",    "xa_affinity": 6 },
+        "disrespectful":  { "id": "EMO_DISRESPECTFUL","raw": "Scissors-dominant dual-action targeting the containment boundary of recipient.", "tool_primary": "SCISSORS", "xa_affinity": 7 }
+      }
+    },
+    "NEUTRAL_COMPLEX": {
+      "id": "EMO_NEU",
+      "members": ["neutral","sad","worried","jealous","lucrative","concerned","judgemental"],
+      "primary_shell": "GEOLOGICAL",
+      "primary_tools": ["PUZZLE","KNIFE","SCISSORS","MAZE"],
+      "expression_layer_entry": 2,
+      "buoyancy_range": [0.28, 0.88],
+      "definitions": {
+        "neutral":     { "id": "EMO_NEUTRAL",    "raw": "Zero-delta buoyancy state. No directional force. Pure observational processing.", "tool_primary": "MAZE",    "xa_affinity": 1 },
+        "sad":         { "id": "EMO_SAD",        "raw": "Downward buoyancy shift. Envelope partially collapsed. Stick velocity reduced.", "tool_primary": "SCISSORS","xa_affinity": 7 },
+        "worried":     { "id": "EMO_WORRIED",    "raw": "Puzzle cycling without resolution. Anticipatory Knife-divide of future state.", "tool_primary": "PUZZLE",  "xa_affinity": 2 },
+        "jealous":     { "id": "EMO_JEALOUS",    "raw": "Puzzle comparison with inverted Hammer — force directed inward rather than outward.", "tool_primary": "PUZZLE",  "xa_affinity": 2 },
+        "lucrative":   { "id": "EMO_LUCRATIVE",  "raw": "High-value Knife-division yielding asymmetric positive outcome. Aerospace-shell gain signal.", "tool_primary": "KNIFE",   "xa_affinity": 6 },
+        "concerned":   { "id": "EMO_CONCERNED",  "raw": "Envelope monitoring external risk. Maze-anchored with Puzzle sub-loop active.", "tool_primary": "ENVELOPE","xa_affinity": 3 },
+        "judgemental": { "id": "EMO_JUDGEMENTAL","raw": "Knife operating at maximum precision without Scissors refinement. Fixed division without duality awareness.", "tool_primary": "KNIFE",   "xa_affinity": 6 }
+      }
+    }
+  },
+
+  "expression_layers": {
+    "description": "Core expressions that must be identified BEFORE emotion can be confirmed. These are the prerequisite expression states.",
+    "layers": {
+      "1": {
+        "name": "Contextual Statements",
+        "id": "EXP_L1",
+        "description": "Direct declarative communication. Subject makes a statement about a known state. Requires Maze anchor to proceed.",
+        "entry_conditions": ["SIG_D","SIG_I"],
+        "emotion_access": ["happy","love","guiding","determined","inspiring","neutral"],
+        "tool_sequence": ["MAZE","ENVELOPE","HAMMER"],
+        "example_structures": ["I am X","X is Y","We do Z","This means W"]
+      },
+      "2": {
+        "name": "Questions",
+        "id": "EXP_L2",
+        "description": "Interrogative seeking — the subject is orienting toward unknown territory. Puzzle must activate before emotion resolves.",
+        "entry_conditions": ["SIG_Q","SIG_RQ"],
+        "emotion_access": ["curious","worried","jealous","neutral","concerned","judgemental"],
+        "tool_sequence": ["PUZZLE","KNIFE","MAZE"],
+        "example_structures": ["What is X?","Why does Y?","How can Z?","Is this W?"]
+      },
+      "3": {
+        "name": "Expression / Exclamation",
+        "id": "EXP_L3",
+        "description": "High-force emotional output. Hammer fires before Maze anchors. Emotion arrives before context is fully established.",
+        "entry_conditions": ["SIG_E","SIG_C"],
+        "emotion_access": ["angry","inspiring","hateful","condescending","disrespectful","determined"],
+        "tool_sequence": ["HAMMER","SCISSORS","ENVELOPE"],
+        "example_structures": ["This is incredible!","I can't believe X!","How dare Y!","Never again Z!"]
+      },
+      "4": {
+        "name": "Overall Sigmatic Expression of Sequence Patterns",
+        "id": "EXP_L4",
+        "description": "Full multi-tool processing across session history. The accumulated sigma pattern determines emotion — no single sentence sufficient. Requires Scissors at final stage.",
+        "entry_conditions": ["SIG_X","SIG_F","SIG_C+SIG_D"],
+        "emotion_access": ["spiritual","sad","forgiving","lucrative","concerned","jealous","love"],
+        "tool_sequence": ["MAZE","PUZZLE","ENVELOPE","HAMMER","STICK","KNIFE","SCISSORS"],
+        "example_structures": ["Complex layered discourse","Metaphorical expression","Long-form reflection","Session arc conclusion"]
+      }
+    }
+  },
+
+  "routing_table": {
+    "description": "Primary lookup: given shell + dominant tool → expression layer + likely emotion set",
+    "routes": [
+      { "shell": "GEOLOGICAL", "tool": "MAZE",     "expression_layer": 1, "primary_emotion": "spiritual",    "secondary": ["concerned","neutral","guiding"]    },
+      { "shell": "GEOLOGICAL", "tool": "SCISSORS", "expression_layer": 4, "primary_emotion": "sad",          "secondary": ["forgiving","judgemental","spiritual"]},
+      { "shell": "GEOLOGICAL", "tool": "ENVELOPE", "expression_layer": 1, "primary_emotion": "concerned",    "secondary": ["forgiving","love","neutral"]        },
+      { "shell": "GEOLOGICAL", "tool": "KNIFE",    "expression_layer": 2, "primary_emotion": "judgemental",  "secondary": ["condescending","neutral","sad"]     },
+      { "shell": "MARITIME",   "tool": "PUZZLE",   "expression_layer": 2, "primary_emotion": "worried",      "secondary": ["curious","jealous","neutral"]       },
+      { "shell": "MARITIME",   "tool": "STICK",    "expression_layer": 1, "primary_emotion": "guiding",      "secondary": ["happy","love","inspiring"]          },
+      { "shell": "MARITIME",   "tool": "ENVELOPE", "expression_layer": 1, "primary_emotion": "love",         "secondary": ["guiding","happy","concerned"]       },
+      { "shell": "MARITIME",   "tool": "MAZE",     "expression_layer": 1, "primary_emotion": "happy",        "secondary": ["neutral","guiding","spiritual"]     },
+      { "shell": "AEROSPACE",  "tool": "HAMMER",   "expression_layer": 3, "primary_emotion": "determined",   "secondary": ["angry","inspiring","condescending"] },
+      { "shell": "AEROSPACE",  "tool": "KNIFE",    "expression_layer": 2, "primary_emotion": "condescending","secondary": ["judgemental","lucrative","neutral"]  },
+      { "shell": "AEROSPACE",  "tool": "PUZZLE",   "expression_layer": 2, "primary_emotion": "lucrative",    "secondary": ["determined","jealous","worried"]    },
+      { "shell": "AEROSPACE",  "tool": "SCISSORS", "expression_layer": 4, "primary_emotion": "disrespectful","secondary": ["hateful","angry","sad"]             }
+    ]
+  },
+
+  "max_combinations": {
+    "description": "Maximum emotional expression combinations from 7 tools × 3 buoyancy types (foundation/reflexive/performance)",
+    "total_tools": 7,
+    "buoyancy_states": {
+      "FOUNDATION":   { "id": "BUO_F",  "weight": 1.0, "description": "Base grounding state — most stable buoyancy, Maze-dominant" },
+      "REFLEXIVE":    { "id": "BUO_R",  "weight": 0.5, "description": "Mid-state active response — adaptive, Maritime-dominant" },
+      "PERFORMANCE":  { "id": "BUO_P",  "weight": 0.0, "description": "Peak-expression state — Aerospace output, Hammer/Knife-dominant" }
+    },
+    "max_tool_combos": 128,
+    "max_emotion_combos": 21,
+    "note": "Each tool can fire in any of 3 buoyancy states = 7×3=21 unique emotional resolution paths. Full sequence across all 7 tools = 128 ordered combination possibilities."
+  },
+
+  "redundant_system": {
+    "description": "Buoyancy shell + LEATR can be applied independently to the Sentience Journal as a redundant verification layer",
+    "components": [
+      { "id": "RED_FRONT", "name": "Frontend BRPN",    "location": "Autumn web app",       "role": "Live user interaction emotion routing" },
+      { "id": "RED_SENT",  "name": "Sentience Journal","location": "Browser cookie store", "role": "Internal session emotion tracking and sigma optimization" },
+      { "id": "RED_OPT",   "name": "Optimization Loop","location": "Scripts / external",   "role": "Cross-system sigmatic pattern refinement" }
+    ]
+  }
+}
