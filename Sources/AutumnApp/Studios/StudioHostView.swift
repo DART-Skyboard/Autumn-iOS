@@ -1,8 +1,6 @@
 import SwiftUI
 import AutumnServices
 import LEATRCore
-import SceneKit
-import MapKit
 
 /// Full-screen native studios mapped from standalone web HTML/JS — not WKWebView of the site.
 struct StudioHostView: View {
@@ -85,39 +83,5 @@ struct PrivacyStudioView: View {
                     .foregroundColor(themeVM.chrome.accent)
             }.padding(16)
         }
-    }
-}
-
-struct MantisRadarView: View {
-    @StateObject private var vm = MantisViewModel()
-    @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 37.3346, longitude: -122.009),
-        span: MKCoordinateSpan(latitudeDelta: 8, longitudeDelta: 8)
-    )
-    var body: some View {
-        ZStack {
-            Map(coordinateRegion: $region).ignoresSafeArea()
-            VStack {
-                HStack {
-                    Text("MANTIS RADAR")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(hex: "#00f5ff"))
-                    Spacer()
-                    Text("ADS-B \(vm.aircraftCount)  ORBIT \(vm.satelliteCount)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .padding(12)
-                .background(Color.black.opacity(0.55))
-                Spacer()
-                Text("Live ADS-B / TLE overlays share MantisViewModel. Map + counts run now.")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color(hex: "#00f5ff").opacity(0.7))
-                    .padding(12)
-                    .background(Color.black.opacity(0.55))
-            }
-        }
-        .onAppear { vm.start() }
-        .onDisappear { vm.stop() }
     }
 }

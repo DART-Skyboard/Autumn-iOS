@@ -55,7 +55,7 @@
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Transcribe voice messages for the LEATR pipeline</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Used for contextual awareness in BRPN mapping</string>
+    <string>Used for Mantis Radar live ADS-B around you and contextual BRPN mapping</string>
     <key>NSContactsUsageDescription</key>
     <string>Optional — connect with MIST session peers</string>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
