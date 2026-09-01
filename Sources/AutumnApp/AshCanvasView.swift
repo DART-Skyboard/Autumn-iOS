@@ -7,46 +7,67 @@ import SwiftUI
 // The 7 natural tools (M/P/E/H/S/K/R), canvas with tap-to-place nodes,
 // link/connect, apply to network, save to GitHub
 
+// MARK: — Ash Canvas trigger
+// Web #ash-canvas-trigger: padding 3px 12px, font ~0.45rem, always visible.
+// Tap toggles AppNavigation.showAshCanvas. Stays visible when the drawer is open.
+struct AshCanvasTrigger: View {
+    @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var appNav: AppNavigation
+
+    private var ac: Color { Color(hex: "#a78bfa") }
+
+    var body: some View {
+        let chrome = themeVM.chrome
+        let open = appNav.showAshCanvas
+        Button {
+            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.35)) {
+                appNav.showAshCanvas.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(open ? ac : ac.opacity(0.4))
+                    .frame(width: 6, height: 6)
+                    .shadow(color: ac.opacity(open ? 0.7 : 0.3), radius: open ? 5 : 3)
+                Text("ASH CANVAS")
+                    .font(.system(size: 7.2, weight: .bold, design: .monospaced))
+                    .tracking(1.5)
+                    .foregroundColor(open ? ac : ac.opacity(0.55))
+                Text("NEURAL INFLUENCE")
+                    .font(.system(size: 6, design: .monospaced))
+                    .foregroundColor(ac.opacity(0.4))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(open ? ac.opacity(0.06) : chrome.surface.opacity(0.55))
+            .overlay(Rectangle().frame(height: 0.5)
+                .foregroundColor(ac.opacity(open ? 0.35 : 0.12)), alignment: .bottom)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: — Ash Canvas Drawer
+// Faithful port of the #ash-canvas-drawer from index.html
+// The 7 natural tools (M/P/E/H/S/K/R), canvas with tap-to-place nodes,
+// link/connect, apply to network, save to GitHub.
+// Collapse control is AshCanvasTrigger (no duplicate header). Expands DOWN over chat.
+
 public struct AshCanvasView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @StateObject private var vm = AshCanvasViewModel()
-    @Binding var isOpen: Bool
+
+    private var ac: Color { Color(hex: "#a78bfa") }
+    private var chrome: AutumnTheme { themeVM.chrome }
 
     public var body: some View {
         VStack(spacing: 0) {
-            // ── Header ───────────────────────────────────────────
-            HStack {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.purple.opacity(0.6))
-                        .frame(width: 7, height: 7)
-                        .overlay(Circle().stroke(Color.purple, lineWidth: 0.5))
-                    Text("ASH CANVAS")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color.purple.opacity(0.9))
-                        .tracking(2)
-                    Text("NEURAL INFLUENCE")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundColor(Color.purple.opacity(0.4))
-                }
-                Spacer()
-                Button { isOpen = false } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.4))
-                        .frame(width: 24, height: 24)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.black.opacity(0.6))
-            .overlay(Rectangle().frame(height: 0.5)
-                .foregroundColor(Color.purple.opacity(0.2)), alignment: .bottom)
-
             // ── Tool instructions ────────────────────────────────
             Text("NATURAL TOOLS — drag onto canvas or tap to place")
                 .font(.system(size: 8, design: .monospaced))
-                .foregroundColor(.white.opacity(0.3))
+                .foregroundColor(chrome.textSecondary.opacity(0.7))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.top, 8)
@@ -70,8 +91,8 @@ public struct AshCanvasView: View {
 
             // ── Action buttons ───────────────────────────────────
             HStack(spacing: 8) {
-                canvasActionBtn("↑ SAVE TO GITHUB", color: .cyan) { vm.saveToGitHub() }
-                canvasActionBtn("→ SEND TO AUTUMN", color: .purple) { vm.sendToAutumn() }
+                canvasActionBtn("↑ SAVE TO GITHUB", color: chrome.accent) { vm.saveToGitHub() }
+                canvasActionBtn("→ SEND TO AUTUMN", color: ac) { vm.sendToAutumn() }
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
@@ -79,7 +100,7 @@ public struct AshCanvasView: View {
             // ── Canvas label ─────────────────────────────────────
             Text("CANVAS — tap/click to place node · tap node then socket to connect")
                 .font(.system(size: 7, design: .monospaced))
-                .foregroundColor(.white.opacity(0.25))
+                .foregroundColor(chrome.textSecondary.opacity(0.5))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.top, 6)
@@ -87,40 +108,42 @@ public struct AshCanvasView: View {
             // ── Canvas area ──────────────────────────────────────
             AshCanvasBoard(vm: vm)
                 .frame(maxWidth: .infinity)
-                .frame(height: 200)
-                .background(Color.black.opacity(0.5))
+                .frame(minHeight: 80)
+                .frame(maxHeight: .infinity)
+                .background(chrome.base.opacity(0.72))
                 .overlay(RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.purple.opacity(0.2), lineWidth: 0.7))
+                    .stroke(ac.opacity(0.25), lineWidth: 0.7))
                 .padding(.horizontal, 14)
                 .padding(.top, 4)
 
             // ── Bottom action bar ────────────────────────────────
             HStack(spacing: 6) {
-                canvasActionBtn("↪ APPLY TO NETWORK", color: .cyan) { vm.applyToNetwork() }
-                canvasActionBtn("→ LINK", color: .cyan) {
+                canvasActionBtn("↪ APPLY TO NETWORK", color: chrome.accent) { vm.applyToNetwork() }
+                canvasActionBtn("→ LINK", color: chrome.accent) {
                     vm.isLinkMode.toggle()
                 }
                 .overlay(vm.isLinkMode ?
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.cyan, lineWidth: 1) : nil)
+                        .stroke(chrome.accent, lineWidth: 1) : nil)
                 canvasActionBtn("✕ DEL", color: .red) { vm.deleteSelected() }
-                canvasActionBtn("↺ RESET", color: .white.opacity(0.5)) { vm.reset() }
+                canvasActionBtn("↺ RESET", color: chrome.text.opacity(0.5)) { vm.reset() }
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
-            .padding(.bottom, 12)
+            .padding(.bottom, 8)
 
             if let status = vm.statusMessage {
                 Text(status)
                     .font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(.cyan.opacity(0.7))
+                    .foregroundColor(chrome.accent.opacity(0.8))
                     .padding(.horizontal, 14)
                     .padding(.bottom, 8)
             }
         }
-        .background(Color(red:0.04,green:0.05,blue:0.12).opacity(0.97))
-        .overlay(RoundedRectangle(cornerRadius: 0)
-            .stroke(Color.purple.opacity(0.15), lineWidth: 0.7), alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(chrome.surface.opacity(0.97))
+        .overlay(Rectangle().frame(height: 0.7)
+            .foregroundColor(ac.opacity(0.22)), alignment: .top)
     }
 
     private func toolBtn(_ tool: NaturalTool) -> some View {
@@ -131,19 +154,19 @@ public struct AshCanvasView: View {
             HStack(spacing: 3) {
                 Text(tool.prefix)
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .foregroundColor(.cyan)
+                    .foregroundColor(chrome.accent)
                 Text(tool.displayName.uppercased())
                     .font(.system(size: 8, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(chrome.text.opacity(0.7))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(vm.selectedTool == tool
-                ? Color.cyan.opacity(0.15) : Color.white.opacity(0.04))
+                ? chrome.accent.opacity(0.15) : chrome.text.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .overlay(RoundedRectangle(cornerRadius: 4)
                 .stroke(vm.selectedTool == tool
-                    ? Color.cyan.opacity(0.5) : Color.white.opacity(0.1), lineWidth: 0.7))
+                    ? chrome.accent.opacity(0.5) : chrome.text.opacity(0.12), lineWidth: 0.7))
         }
     }
 

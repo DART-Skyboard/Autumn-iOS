@@ -2,12 +2,18 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 57 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 58 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
 
 
+## Build 58
+
+1. **Ash Canvas drawer** matches web: scene → EmoHUD → `#ash-canvas-trigger` (always visible, padding 3×12, ~0.45rem) → drawer expands DOWN over chat (max-height 0→520, cubic-bezier). Trigger is the collapse control. Scene stays put. Themed chrome + `#a78bfa` ac accents. No overlay covering the 3D stage.
+2. **GitHub avatar** in the header chip, profile sheet, and account list. Single `GET /user` decodes `login` + `avatar_url` + `name`. Refresh on `applyOAuthToken`, `restoreSession`, and `switchGitHubAccount`. Persist URL in Keychain. `?s=128`. User-Agent on API calls. Letter fallback only if unsigned / fetch failed. No PAT.
+
 ## Build 57
+
 
 Native BRPN scene matches live leatr.xyz Three.js — same variables, math, logic.
 
@@ -46,7 +52,7 @@ VOID **overlay** hides video and shows the per-theme dark gradient (web `VOID_GR
 
 ## Layout
 
-- **Portrait:** top bar (theme / scrim / wordmark / profile) → BRPN stage (left GEO/MAR/AERO+ADMIN, right MIST/STAR/SHARD/SYS) → chat.
+- **Portrait:** top bar → BRPN stage (left GEO/MAR/AERO+ADMIN, right MIST/STAR/SHARD/SYS) → EmoHUD → Ash Canvas trigger → chat (drawer overlays chat when open).
 - **Landscape (`width > height`):** left drawer is the old top bar; scene + chat stack on the right, tall. Same idea as `css/desktop-layout.js` (`header` → nav column).
 
 ## Modules (honest)
@@ -59,7 +65,7 @@ VOID **overlay** hides video and shows the per-theme dark gradient (web `VOID_GR
 | SYS | `system-broadcast.json` | Public read; dartsolarpunk compose via GAS |
 | Mantis NAV | `mn.html` | Existing `MantisNavigationView` from HUD |
 | Mantis Radar | `mr.html` | MapKit + `MantisViewModel` ADS-B/orbit counts |
-| Ash Canvas | `#ash-canvas-drawer` | Existing `AshCanvasView` on the BRPN stage |
+| Ash Canvas | `#ash-canvas-drawer` | Trigger bar under EmoHUD; drawer expands down over chat |
 | ArcLake | `js/arclake_studio.js` | First-pass studio (atom + CFD sliders). **Not** a standalone App Store app. |
 | Arc Forge | `arc-forge.html` | Native first-pass gate sandbox |
 | World Studio | `worldstudio.html` | Native first-pass viewport HUD |

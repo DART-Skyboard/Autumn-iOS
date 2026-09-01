@@ -56,6 +56,7 @@ public struct AppShellView: View {
         .animation(.easeInOut(duration: 0.25), value: appNav.showAdmin)
         .animation(.easeInOut(duration: 0.25), value: appNav.rightTab)
         .animation(.easeInOut(duration: 0.2), value: appNav.showHUDTools)
+        .animation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.35), value: appNav.showAshCanvas)
         .onAppear { circuit.start() }
         .onChange(of: circuit.live) { _ in
             if !circuit.allows(authVM) { appNav.showAdmin = false }
@@ -65,15 +66,12 @@ public struct AppShellView: View {
         }
     }
 
-    // MARK: — Portrait: top bar / scene / chat
+    // MARK: — Portrait: top bar / scene / EmoHUD / ash trigger / chat
     private func portraitChrome(size: CGSize) -> some View {
         VStack(spacing: 0) {
             topBar
             sceneStage
-            ChatView()
-                .frame(maxHeight: min(320, max(220, size.height * 0.34)))
-                .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
-            footerBar
+            belowSceneStack(chatMax: min(320, max(220, size.height * 0.34)))
         }
     }
 
@@ -84,11 +82,30 @@ public struct AppShellView: View {
                 .frame(width: min(168, max(132, size.width * 0.22)))
             VStack(spacing: 0) {
                 sceneStage
-                ChatView()
-                    .frame(maxHeight: min(size.height * 0.42, 280))
-                    .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
-                footerBar
+                belowSceneStack(chatMax: min(size.height * 0.42, 280))
             }
+        }
+    }
+
+    /// Web order under #brpn-region: EmoHUD, ash-canvas-trigger, drawer (over chat).
+    /// Drawer expands DOWN and overlays chat; it does not push the 3D scene up.
+    private func belowSceneStack(chatMax: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            EmoHUD()
+            AshCanvasTrigger()
+            ZStack(alignment: .top) {
+                ChatView()
+                    .frame(maxHeight: .infinity)
+                    .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
+                AshCanvasView()
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .frame(height: appNav.showAshCanvas ? chatMax : 0, alignment: .top)
+                    .clipped()
+                    .opacity(appNav.showAshCanvas ? 1 : 0)
+                    .allowsHitTesting(appNav.showAshCanvas)
+            }
+            .frame(maxHeight: chatMax)
+            footerBar
         }
     }
 
@@ -262,23 +279,12 @@ public struct AppShellView: View {
     private var profileChip: some View {
         let chrome = themeVM.chrome
         return Button { appNav.showProfile = true } label: {
-            ZStack {
-                Circle().fill(chrome.accent.opacity(0.15)).frame(width: 34, height: 34)
-                Circle().stroke(chrome.accent.opacity(0.4), lineWidth: 1).frame(width: 34, height: 34)
-                if let url = authVM.githubAvatarURL {
-                    AsyncImage(url: url) { img in
-                        img.resizable().scaledToFill().frame(width: 34, height: 34).clipShape(Circle())
-                    } placeholder: {
-                        Text(authVM.username.prefix(1).uppercased())
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(chrome.accent)
-                    }
-                } else {
-                    Text(authVM.username.prefix(1).uppercased())
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundColor(chrome.accent)
-                }
-            }
+            GitHubAvatarView(
+                url: authVM.githubAvatarURL,
+                letter: authVM.username,
+                size: 34,
+                accent: chrome.accent
+            )
         }
     }
 

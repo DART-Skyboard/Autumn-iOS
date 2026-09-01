@@ -80,5 +80,20 @@
             </array>
         </dict>
     </array>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>avatars.githubusercontent.com</key>
+            <dict>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <false/>
+                <key>NSExceptionRequiresForwardSecrecy</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
 </dict>
 </plist>
