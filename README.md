@@ -1,93 +1,61 @@
 # Autumn iOS
 
-Native iOS app replicating the full [leatr.xyz](https://leatr.xyz) web app.  
-Built by DART Meadow LLC / Radical Deepscale · DART-Skyboard organization.
+Native SwiftUI port of [leatr.xyz](https://leatr.xyz) (DART-Skyboard/Autumn `main` @ c9e6512 + admin mailbox PR #29 / 52a42bc).
 
-## Architecture
+Not a WKWebView of the site. Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · build 53 / 1.0.2.
 
-```
-Autumn-iOS/
-├── Sources/
-│   ├── LEATRCore/           # Pure-Swift LEATR engine (zero deps)
-│   │   ├── LEATRIdentity.swift      — DOC=3.0, QS formula, derived name
-│   │   ├── LEATREngine.swift        — 25 orders, 7-panel pipeline, FRP/BRPN
-│   │   ├── LexicalAnalyzer.swift    — 7 tool arrays, backwards concat
-│   │   ├── EmotionClassifier.swift  — 21 emotions
-│   │   └── WordNetStore.swift       — 147k word lazy bucket loader
-│   ├── AutumnServices/      # GitHub, auth, TTS, memory
-│   │   ├── ReasoningProvider.swift  — Apple Intelligence / Claude / LEATR-only
-│   │   ├── GitHubClient.swift       — REST + 5-step git blob API
-│   │   ├── KeychainService.swift    — Secure credential storage
-│   │   └── AutumnTTS.swift          — AVSpeechSynthesizer + Personal Voice
-│   └── AutumnApp/           # SwiftUI views & view models
-│       ├── AutumnApp.swift          — @main entry
-│       ├── RootView.swift           — Tab nav + auth gate
-│       ├── WelcomeView.swift        — Sign in with Apple + GitHub
-│       ├── ChatView.swift           — Chat UI, EMO HUD, sentience state
-│       ├── BRPNSceneView.swift      — SceneKit 3-shell world
-│       ├── ToolsView.swift          — Arc Edge, ArcLake, CALC, EMO MAP
-│       ├── JournalAndSettings.swift — Journal browser + settings
-│       ├── AuthViewModel.swift      — Apple + GitHub device flow auth
-│       ├── ChatViewModel.swift      — LEATR pipeline + reasoning + TTS
-│       └── ThemeSystem.swift        — 5 themes, glassmorphism
-└── Package.swift
-```
+This pass lands **architecture + core loop**, not full web parity. Linux CI here cannot compile Xcode.
 
-## Running on iPhone (Swift Playgrounds)
+## What landed
 
-1. Clone or download this repo as a zip
-2. On your iPhone, open the Files app → unzip → tap `Autumn.swiftpm`
-3. Swift Playgrounds will open and resolve dependencies automatically
-4. Tap ▶ to run live on device
+1. **App shell** matching web layout: BRPN SceneKit on top, chat bottom, left GEO/MAR/AERO + gated ADMIN, right MIST/STAR/SHARD/SYS.
+2. **GitHub OAuth** via `ASWebAuthenticationSession` + device flow, same public client id `Ov23li2K0njEqO1WTSdD`. GAS `?action=exchange&code=` supported if `autumn://oauth?code=` lands. **No PAT paste. OAuth tokens in Keychain only.**
+3. **Chat + grammar engine** — local port of `js/autumn-grammar-engine.js` `processForChat` (tokenize, FRP, Core Cognition frozen True, reflex never loop, per-user memory). Replies locally; no side LLM required.
+4. **GAS journal write** — live `AUTUMN_GAS_URL` from Autumn `index.html`; `ashwrite` with `Content-Type: text/plain`, same body as `_ashFlushNow`.
+5. **Feedback submit** — GAS ashwrite path **`feedback/inbox.json`** append `{id,ts,cat,msg,user}`. Other apps depend on this path; it is unchanged.
+6. **Admin MSG mailbox** (web PR #29) — one mailbox for all types. Tabs **DATA / ASH / MSG** only. MSG folders **inbox / analysis / read / trash** (`feedback/inbox.json`, `feedback/analysis.json`, …). GAS `ashread` then GitHub Contents fallback. Move/delete via GAS replace-write. No FEED tab, no separate MSG overlay.
+7. **Theme + scrim** — VOID DAY NIGHT STEALTH DEPARTURE ASH TREE ARIEL AUTO; overlays FROST STEAM CLEAR HAZE DUSK DEEP VOID. Chrome implemented for VOID / DAY / ARIEL (and the rest as colorways). No 236MB theme videos in this pass.
+8. **Admin enable** — profile toggle gated to GitHub user `dartsolarpunk`, persisted as `_aut_admin_enabled` like the web flag.
+9. **Math OOO builtin** — parentheses/geometry first, then exponents, `*/`, `+-`.
+10. **Ash Star 3D** — SceneKit spawn on the BRPN scene, never a chat card. Full plasma-curve animation is TODO.
+11. **TTS** — existing `AVSpeechSynthesizer` path kept.
 
-## Running in Xcode (Mac)
+## Remaining (honest)
 
-```bash
-open Autumn.swiftpm
-# or
-swift build
-```
-
-## Auth Setup
-
-### Sign in with Apple
-Works out of the box — no config needed.
-
-### GitHub
-The app uses **device flow** (no client secret embedded).  
-Or paste a PAT in Settings → Authentication → GitHub.
-
-**Important:** Never commit tokens. All credentials live in Keychain.
-
-### Anthropic API (optional cloud reasoning)
-Add your key in Settings → AI Backend.  
-Without it, the app runs fully offline via the LEATR engine.  
-With it, Claude Sonnet augments responses.  
-On iOS 26+, Apple Intelligence is used as the primary on-device model.
-
-## LEATR Constants
-
-| Constant | Value | Purpose |
+| Module | Web source | Status |
 |---|---|---|
-| DOC | 3.0 | Replaces π in Arc Edge circumference: C = √(d×3)² |
-| σ formula | (xa²·√xa)±1 | Tool-shell sigma (xa = tool index 1–7) |
-| QS | (b·b)·(p·a²)/r | Quantum Socket — BRPN shell coupling |
-| DART Reflex | ((d×2)+1)/d | ArcLake collision physics |
+| MIST multiplayer overlay | `js/mist-module.js` | GameKit scaffold; GAS presence + maze overlay TODO |
+| Ash Star plasma curves | `js/ash-star-archive.js` | SceneKit spawn stub only |
+| Ash Shard | `js/ash-shard-module.js` | Stub sheet |
+| SYS broadcast compose | `index.html` SYSTEM BROADCAST + `system-broadcast.json` | Stub sheet |
+| ArcLake | `js/arclake_studio.js` | Legacy ToolsView panel unused in new shell |
+| Mantis / Radar | `index.html` MANTIS + `MantisNavigationView.swift` | Existing view unused in new shell |
+| Grammar Study train | `js/autumn-grammar-engine.js` Grammar Study | ASH tab stub + live admin chat |
+| WordNet buckets | `js/wordnet_loader.js` | `WordNetStore.swift` exists; no bundled JSON |
+| Theme videos | `assets/*.mp4` | Not bundled |
+| DATA console (users/ACL) | `index.html` `_admRenderData` | Contract readout only |
+| Full 337k grammar engine | `js/autumn-grammar-engine.js` | Enough of `processForChat` to reply; research/WordNet/habitat compile is partial |
+| Arc Forge / World Studio / Nate | `arc-forge.html` `worldstudio.html` `nate.html` | Not ported |
 
-## Credential Security
+## LEATR
 
-- Secrets stored in **Keychain** only
-- GitHub PATs stored as `KeychainService.shared.save(key: "github_pat", …)`  
-- Anthropic API key stored as `"anthropic_api_key"`
-- **Never hardcode tokens in source** — GitHub secret scanning will block pushes
+- Core Cognition always True (frozen).
+- Reflex never loops.
+- Never mix users (per-owner memory + journal uid).
+- No secrets in the client. Journal via GAS into `leatr-ash`.
 
-## Phased Roadmap
+## Auth
 
-- [x] Phase 1: LEATRCore engine + Chat + AVSpeechSynthesizer + Auth scaffold
-- [ ] Phase 2: Foundation Models (iOS 26) + SceneKit BRPN polish
-- [ ] Phase 3: CloudKit memory sync + leatr-ash journal parity
-- [ ] Phase 4: GameKit MIST multiplayer + BGTaskScheduler autonomy
-- [ ] Phase 5: App Store submission
+Guest-first (same as web). Connect GitHub from the profile chip. Device flow opens `github.com/login/device` in `ASWebAuthenticationSession`. Admin chrome only after Enable Admin as `dartsolarpunk`.
 
-## Bundle ID
-`DART-Meadow-LLC.Autumn` · Team `L7AHWS9Q6V`
+## Layout
+
+```
+Sources/
+  LEATRCore/           CoreCognition, GrammarEngine, MathOOO, existing LEATR/BRPN
+  AutumnServices/      GAS ashwrite/ashread, OAuth, mailbox, Keychain
+  AutumnApp/
+    Shell/             AppShell, Left HUD, Right rail, Profile
+    Admin/             DATA / ASH / MSG mailbox
+    Modules/           MIST STAR SHARD SYS stubs
+```

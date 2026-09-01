@@ -195,26 +195,26 @@ public struct SettingsView: View {
                 }
                 .listRowBackground(themeVM.current.surface)
 
-                // GitHub PAT
+                // GitHub OAuth (no PAT paste)
                 Section {
                     HStack {
-                        Text("GitHub PAT")
+                        Text("GitHub")
                             .foregroundColor(themeVM.current.textSecondary)
                         Spacer()
-                        if authVM.githubConnected {
-                            Text("Connected").foregroundColor(.green)
-                                .font(.system(size: 12, design: .monospaced))
-                        }
+                        Text(authVM.githubConnected ? authVM.githubUsername : "Not connected")
+                            .foregroundColor(authVM.githubConnected ? .green : themeVM.current.textSecondary)
+                            .font(.system(size: 12, design: .monospaced))
                     }
-                    SecureField("ghp_...", text: $apiKeyInput)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(.white)
-                    Button("Save & Connect PAT") {
-                        authVM.signInWithPAT(pat: apiKeyInput)
+                    Button(authVM.githubConnected ? "Reconnect GitHub" : "Connect GitHub") {
+                        Task { await authVM.startGitHubAuth() }
                     }
                     .foregroundColor(themeVM.current.accent)
+                    if authVM.githubConnected {
+                        Button("Disconnect GitHub", role: .destructive) { authVM.disconnectGitHub() }
+                    }
+                    Text("OAuth device flow only. Personal access tokens are not stored or accepted.")
+                        .font(.system(size: 10))
+                        .foregroundColor(themeVM.current.textSecondary)
                 } header: {
                     Text("GITHUB").settingsHeader(theme: themeVM.current)
                 }
