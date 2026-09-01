@@ -283,7 +283,3 @@ public final class AutumnAutonomy {
     }
 }
 
-// MARK: — BRPNSceneViewModel shared accessor for GameKit callbacks
-private extension BRPNSceneViewModel {
-    static weak var shared: BRPNSceneViewModel?
-}

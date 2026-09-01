@@ -53,6 +53,18 @@ public struct ProfileSheet: View {
                 Button { appNav.showFeedback = true; appNav.showProfile = false } label: {
                     labelRow("◇ SUBMIT FEEDBACK")
                 }
+                Button { appNav.studio = .help; appNav.showProfile = false } label: {
+                    labelRow("? HELP")
+                }
+                Button { appNav.studio = .privacy; appNav.showProfile = false } label: {
+                    labelRow("PRIVACY")
+                }
+                Button { appNav.studio = .worldStudio; appNav.showProfile = false } label: {
+                    labelRow("WORLD STUDIO")
+                }
+                Button { appNav.studio = .arcForge; appNav.showProfile = false } label: {
+                    labelRow("ARC FORGE")
+                }
 
                 if authVM.adminAllowed {
                     Button { authVM.toggleAdminFlag() } label: {

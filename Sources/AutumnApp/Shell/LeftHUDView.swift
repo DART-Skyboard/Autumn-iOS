@@ -39,7 +39,7 @@ public struct LeftHUDView: View {
             }
             Spacer()
         }
-        .padding(.top, 48)
+        .padding(.top, 4)
     }
 
     private func pill(_ title: String, sub: String, color: Color, action: @escaping () -> Void) -> some View {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Theme engine matching web THEMES in index.html:
 /// VOID DAY NIGHT STEALTH DEPARTURE ASH TREE ARIEL AUTO
@@ -92,6 +93,58 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
 
     public var gradient: LinearGradient {
         LinearGradient(colors: [base, surface], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    /// Bundle resource name (no extension). VOID and unresolved AUTO have none.
+    public var videoResourceName: String? {
+        switch resolved {
+        case .void: return nil
+        case .day: return "autumnanimation"
+        case .night: return "autumnnight"
+        case .stealth: return "dartalley"
+        case .departure: return "autumndeparture"
+        case .ashTree: return "ashtree"
+        case .ariel: return "ariel"
+        case .auto: return "autumnanimation"
+        }
+    }
+
+    /// Web WASH_RGB for scrim tint on video.
+    public var washRGB: (r: Double, g: Double, b: Double) {
+        switch resolved {
+        case .void: return (0, 0, 0)
+        case .day, .auto: return (2/255.0, 10/255.0, 20/255.0)
+        case .night: return (4/255.0, 2/255.0, 12/255.0)
+        case .stealth: return (3/255.0, 5/255.0, 12/255.0)
+        case .departure: return (12/255.0, 5/255.0, 0)
+        case .ashTree: return (1/255.0, 10/255.0, 4/255.0)
+        case .ariel: return (8/255.0, 20/255.0, 36/255.0)
+        }
+    }
+
+    public var washColor: Color {
+        let w = washRGB
+        return Color(red: w.r, green: w.g, blue: w.b)
+    }
+
+    /// Per-theme VOID overlay gradient (web VOID_GRAD).
+    public var voidGradient: LinearGradient {
+        switch resolved {
+        case .ariel:
+            return LinearGradient(colors: [Color(hex: "#050c14"), Color(hex: "#0a1624"), Color(hex: "#0c1210")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .night:
+            return LinearGradient(colors: [Color(hex: "#05030c"), Color(hex: "#0a0618")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .stealth:
+            return LinearGradient(colors: [Color(hex: "#03050a"), Color(hex: "#070b12")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .departure:
+            return LinearGradient(colors: [Color(hex: "#080400"), Color(hex: "#120800")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .ashTree:
+            return LinearGradient(colors: [Color(hex: "#010604"), Color(hex: "#041208")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .day, .auto:
+            return LinearGradient(colors: [Color(hex: "#020814"), Color(hex: "#061018")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .void:
+            return LinearGradient(colors: [Color(hex: "#000000"), Color(hex: "#0c0c0e")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
     }
 }
 
@@ -209,5 +262,16 @@ extension Color {
         let g = Double((int >> 8) & 0xFF) / 255
         let b = Double(int & 0xFF) / 255
         self.init(red: r, green: g, blue: b)
+    }
+}
+
+
+extension UIColor {
+    /// iOS 16-safe Color → UIColor (UIColor(Color) is iOS 17+).
+    static func fromSwiftUI(_ color: Color) -> UIColor {
+        if #available(iOS 17.0, *) {
+            return UIColor(color)
+        }
+        return UIColor.cyan
     }
 }

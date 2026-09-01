@@ -29,6 +29,10 @@ public final class BRPNSceneViewModel: ObservableObject {
     private var particleData: [(r:Float,spd:Float,off:Float,yOff:Float)] = []
     private var sessionGroupNodes: [String: SCNNode] = [:]
     public var pathMeshNodes: [SCNNode] = []
+    public static weak var shared: BRPNSceneViewModel?
+    private var splineGroup: SCNNode?
+    private var splineSamples: [[SCNVector3]] = []
+    private var mistParticleNodes: [SCNNode] = []
     private var bouncyNodes: [SCNNode] = []
     private var solveStep = 0
     private var frameCount = 0
@@ -47,6 +51,7 @@ public final class BRPNSceneViewModel: ObservableObject {
 
     // MARK: — Setup
     public func setupScene() {
+        Self.shared = self
         scene.background.contents = UIColor.clear
 
         // Physics world for bouncy orbs
@@ -383,6 +388,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     public func addRemoteNode(uid:String,emotion:String="neutral") {
+        if sessionGroupNodes[uid] != nil { return }
         let pos=nodeBasePosition(uid:uid)
         let group=SCNNode(); group.name="session_\(uid)"
         let colors=uidShellColors(uid:uid)
@@ -412,27 +418,160 @@ public final class BRPNSceneViewModel: ObservableObject {
 
 
     /// Ash Star is a 3D wireframe on the live BRPN scene — never a chat card.
-    /// TODO: ride plasma curves like js/ash-star-archive.js. This spawn is the native hook.
+    /// Rides a plasma Catmull-Rom like js/ash-star-archive.js / mist-module.js.
     public func spawnAshStar(color: UIColor = UIColor(red: 1, green: 0.87, blue: 0, alpha: 1), target: String = "all") {
-        let star = SCNNode(geometry: SCNSphere(radius: 0.08))
-        star.geometry?.firstMaterial?.diffuse.contents = UIColor.clear
-        star.geometry?.firstMaterial?.emission.contents = color
-        star.geometry?.firstMaterial?.fillMode = .lines
+        rebuildSplines()
+        let geo = SCNSphere(radius: 0.09); geo.segmentCount = 6
+        let mat = SCNMaterial()
+        mat.diffuse.contents = UIColor.clear
+        mat.emission.contents = color
+        mat.fillMode = .lines
+        mat.isDoubleSided = true
+        geo.materials = [mat]
+        let star = SCNNode(geometry: geo)
         star.name = "ashstar"
-        star.position = SCNVector3(0, 0.2, 0)
+        star.position = SCNVector3(0, 0, 0)
         scene.rootNode.addChildNode(star)
-        let spin = SCNAction.repeatForever(SCNAction.rotateBy(x: 0.4, y: 1.2, z: 0.2, duration: 4))
-        let fly = SCNAction.sequence([
-            SCNAction.moveBy(x: 0, y: 1.6, z: 0, duration: 2.4),
-            SCNAction.fadeOut(duration: 0.6),
-            SCNAction.removeFromParentNode()
-        ])
-        star.runAction(SCNAction.group([spin, fly]))
+        let path = sampledSpline(from: SCNVector3(0,0,0), to: SCNVector3(0.4, 1.8, -0.3))
+        var actions: [SCNAction] = []
+        for i in 1..<path.count {
+            let p = path[i]
+            actions.append(SCNAction.move(to: p, duration: 0.12))
+        }
+        actions.append(SCNAction.fadeOut(duration: 0.4))
+        actions.append(SCNAction.removeFromParentNode())
+        star.runAction(SCNAction.group([
+            SCNAction.repeatForever(SCNAction.rotateBy(x: 0.5, y: 1.4, z: 0.3, duration: 3.2)),
+            SCNAction.sequence(actions)
+        ]))
+        emitMist(fromLocal: true)
         pulseShells(0.6)
     }
 
-    public func teardown() { presenceTimer?.invalidate() }
-    private func pollPresence() async {}
+    public func spawnShard(color: UIColor) {
+        rebuildSplines()
+        let geo = SCNBox(width: 0.08, height: 0.11, length: 0.04, chamferRadius: 0.012)
+        let mat = SCNMaterial()
+        mat.emission.contents = color
+        mat.transparency = 0.55
+        mat.lightingModel = .constant
+        geo.materials = [mat]
+        let node = SCNNode(geometry: geo)
+        node.name = "shard"
+        node.position = SCNVector3(0, 0, 0)
+        scene.rootNode.addChildNode(node)
+        let dest: SCNVector3
+        if let last = sessionGroupNodes.values.last {
+            dest = last.position
+        } else {
+            dest = SCNVector3(1.6, 0.9, -1.1)
+        }
+        let path = sampledSpline(from: SCNVector3(0,0,0), to: dest)
+        var actions: [SCNAction] = []
+        for i in 1..<path.count {
+            actions.append(SCNAction.move(to: path[i], duration: 0.1))
+        }
+        actions.append(SCNAction.fadeOut(duration: 0.35))
+        actions.append(SCNAction.removeFromParentNode())
+        node.runAction(SCNAction.group([
+            SCNAction.repeatForever(SCNAction.rotateBy(x: 1, y: 0.4, z: 0.8, duration: 1.6)),
+            SCNAction.sequence(actions)
+        ]))
+        pulseShells(0.45)
+    }
+
+    public func rebuildSplines() {
+        splineGroup?.removeFromParentNode()
+        let g = SCNNode(); g.name = "splines"
+        splineSamples.removeAll()
+        var targets: [SCNVector3] = sessionGroupNodes.values.map { $0.position }
+        if targets.isEmpty {
+            targets = [SCNVector3(2.2, 0.8, -1.2), SCNVector3(-1.8, 1.1, 1.4)]
+        }
+        let origin = SCNVector3(0, 0, 0)
+        for t in targets {
+            let samples = sampledSpline(from: origin, to: t)
+            splineSamples.append(samples)
+            if let line = polyline(samples, color: UIColor(red: 0, green: 0.9, blue: 1, alpha: 0.35)) {
+                g.addChildNode(line)
+            }
+        }
+        scene.rootNode.addChildNode(g)
+        splineGroup = g
+    }
+
+    public func emitMist(fromLocal: Bool) {
+        rebuildSplines()
+        let curves = splineSamples.isEmpty ? [sampledSpline(from: SCNVector3(0,0,0), to: SCNVector3(1.5, 1.0, -1.0))] : splineSamples
+        for samples in curves.prefix(6) {
+            let n = SCNNode(geometry: {
+                let s = SCNSphere(radius: 0.03); s.segmentCount = 6
+                let m = SCNMaterial(); m.emission.contents = UIColor(red: 0, green: 0.9, blue: 1, alpha: 0.9); m.lightingModel = .constant; s.materials = [m]
+                return s
+            }())
+            n.position = samples.first ?? SCNVector3(0,0,0)
+            scene.rootNode.addChildNode(n)
+            var acts: [SCNAction] = []
+            let seq = fromLocal ? samples : samples.reversed()
+            for p in seq.dropFirst() {
+                acts.append(SCNAction.move(to: p, duration: 0.08))
+            }
+            acts.append(SCNAction.fadeOut(duration: 0.3))
+            acts.append(SCNAction.removeFromParentNode())
+            n.runAction(SCNAction.sequence(acts))
+        }
+        pulseShells(0.35)
+    }
+
+    private func sampledSpline(from a: SCNVector3, to b: SCNVector3, steps: Int = 12) -> [SCNVector3] {
+        let mid = SCNVector3(
+            (a.x + b.x) * 0.5 + Float.random(in: -0.4...0.4),
+            (a.y + b.y) * 0.5 + 0.8 + Float.random(in: 0...0.4),
+            (a.z + b.z) * 0.5 + Float.random(in: -0.4...0.4)
+        )
+        // Quadratic Bezier sample (Catmull-style arc between nodes)
+        var out: [SCNVector3] = []
+        for i in 0...steps {
+            let t = Float(i) / Float(steps)
+            let omt = 1 - t
+            let x = omt*omt*a.x + 2*omt*t*mid.x + t*t*b.x
+            let y = omt*omt*a.y + 2*omt*t*mid.y + t*t*b.y
+            let z = omt*omt*a.z + 2*omt*t*mid.z + t*t*b.z
+            out.append(SCNVector3(x, y, z))
+        }
+        return out
+    }
+
+    private func polyline(_ pts: [SCNVector3], color: UIColor) -> SCNNode? {
+        guard pts.count >= 2 else { return nil }
+        var floats: [Float] = []
+        for i in 0..<(pts.count-1) {
+            floats += [pts[i].x, pts[i].y, pts[i].z, pts[i+1].x, pts[i+1].y, pts[i+1].z]
+        }
+        let data = floats.withUnsafeBufferPointer { Data(buffer: $0) }
+        let src = SCNGeometrySource(data: data, semantic: .vertex, vectorCount: floats.count/3,
+            usesFloatComponents: true, componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12)
+        var idx = (0..<Int32(floats.count/3)).map { $0 }
+        let idxData = idx.withUnsafeMutableBufferPointer { Data(buffer: $0) }
+        let elem = SCNGeometryElement(data: idxData, primitiveType: .line, primitiveCount: idx.count/2, bytesPerIndex: 4)
+        let geo = SCNGeometry(sources: [src], elements: [elem])
+        geo.firstMaterial = { let m = SCNMaterial(); m.emission.contents = color; m.lightingModel = .constant; return m }()
+        return SCNNode(geometry: geo)
+    }
+
+    public func teardown() { presenceTimer?.invalidate(); Self.shared = nil }
+
+    private func pollPresence() async {
+        await MISTModule.shared.refresh()
+        let signals = MISTModule.shared.activeSignals
+        for sig in signals {
+            let uid = sig.uid
+            if sessionGroupNodes[uid] == nil {
+                addRemoteNode(uid: uid, emotion: sig.isAsh ? "inspiring" : "neutral")
+            }
+        }
+        rebuildSplines()
+    }
 
     private func nodeBasePosition(uid:String) -> (x:Float,y:Float,z:Float) {
         let h=Float(uid.hashValue & 0xFFFF)/65535.0
