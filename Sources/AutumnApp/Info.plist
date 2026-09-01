@@ -69,5 +69,16 @@
         <string>fetch</string>
         <string>processing</string>
     </array>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.dartmeadow.autumn.oauth</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>autumn</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

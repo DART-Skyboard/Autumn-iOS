@@ -17,11 +17,12 @@ public actor GitHubClient {
 
     public func setToken(_ token: String) {
         _token = token
-        KeychainService.shared.save(key: "github_pat", value: token)
+        KeychainService.shared.save(key: "github_oauth_token", value: token)
     }
 
     public func loadToken() {
-        _token = KeychainService.shared.load(key: "github_pat")
+        _token = KeychainService.shared.load(key: "github_oauth_token")
+            ?? KeychainService.shared.load(key: "github_pat")
     }
 
     private var token: String? { _token }
@@ -40,7 +41,7 @@ public actor GitHubClient {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        req.httpBody = "client_id=\(clientId)&scope=repo".data(using: .utf8)
+        req.httpBody = "client_id=\(clientId)&scope=repo%2Cread%3Auser".data(using: .utf8)
         let (data, _) = try await session.data(for: req)
         return try JSONDecoder().decode(DeviceFlowStart.self, from: data)
     }
@@ -68,6 +69,13 @@ public actor GitHubClient {
         struct GHUser: Decodable { let login: String }
         let data = try await get("/user")
         return try JSONDecoder().decode(GHUser.self, from: data).login
+    }
+
+    public func fetchAvatarURL() async throws -> URL? {
+        struct GHUser: Decodable { let avatar_url: String? }
+        let data = try await get("/user")
+        guard let s = try JSONDecoder().decode(GHUser.self, from: data).avatar_url else { return nil }
+        return URL(string: s)
     }
 
     public func createRepo(name: String, isPrivate: Bool = true, description: String = "") async throws -> GitHubRepo {

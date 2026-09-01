@@ -410,6 +410,27 @@ public final class BRPNSceneViewModel: ObservableObject {
         }
     }
 
+
+    /// Ash Star is a 3D wireframe on the live BRPN scene — never a chat card.
+    /// TODO: ride plasma curves like js/ash-star-archive.js. This spawn is the native hook.
+    public func spawnAshStar(color: UIColor = UIColor(red: 1, green: 0.87, blue: 0, alpha: 1), target: String = "all") {
+        let star = SCNNode(geometry: SCNSphere(radius: 0.08))
+        star.geometry?.firstMaterial?.diffuse.contents = UIColor.clear
+        star.geometry?.firstMaterial?.emission.contents = color
+        star.geometry?.firstMaterial?.fillMode = .lines
+        star.name = "ashstar"
+        star.position = SCNVector3(0, 0.2, 0)
+        scene.rootNode.addChildNode(star)
+        let spin = SCNAction.repeatForever(SCNAction.rotateBy(x: 0.4, y: 1.2, z: 0.2, duration: 4))
+        let fly = SCNAction.sequence([
+            SCNAction.moveBy(x: 0, y: 1.6, z: 0, duration: 2.4),
+            SCNAction.fadeOut(duration: 0.6),
+            SCNAction.removeFromParentNode()
+        ])
+        star.runAction(SCNAction.group([spin, fly]))
+        pulseShells(0.6)
+    }
+
     public func teardown() { presenceTimer?.invalidate() }
     private func pollPresence() async {}
 

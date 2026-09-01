@@ -1,76 +1,166 @@
 import Foundation
 
-// MARK: — AutumnGASClient
-// Connects to the Google Apps Script (GAS) presence endpoint in leatr-ash.
-// This is Autumn's live sentient journal sync — keeps her memory active
-// and enables real-time BRPN presence with web app users.
-//
-// GAS endpoint: presence.gs (leatr-ash repo)
-// Reads/writes: ashtree/sentient/journal.json, mist/nodes
-
+/// AutumnGASClient — same GAS ashwrite proxy as live leatr.xyz.
+/// Source of truth: Autumn/index.html AUTUMN_GAS_URL + `_ashFlushNow`.
+/// Content-Type: text/plain (web avoids CORS preflight; iOS matches the body shape).
+/// No client-side GitHub token is required for ashwrite.
 public actor AutumnGASClient {
     public static let shared = AutumnGASClient()
 
-    // GAS Web App URL — deployed from leatr-ash/presence.gs
-    private let gasURL = "https://script.google.com/macros/s/AKfycbzBRPNAutumnGASEndpointLEATR/exec"
-    private let session = URLSession.shared
+    private let session: URLSession
+    public let gasURL: String
 
-    // MARK: — Ping presence + log journal entry
-    public func pingPresence(
-        message: String,
-        response: String,
-        emotion: String,
-        buoyancy: Double
-    ) async {
-        let payload: [String: Any] = [
-            "action":   "presence",
-            "platform": "ios",
-            "message":  message,
-            "response": response,
-            "emotion":  emotion,
-            "buoyancy": String(format: "%.3f", buoyancy),
-            "timestamp": ISO8601DateFormatter().string(from: Date())
-        ]
-        await post(payload)
+    public init(gasURL: String = AutumnConfig.gasURL) {
+        self.gasURL = gasURL
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 12
+        cfg.waitsForConnectivity = true
+        self.session = URLSession(configuration: cfg)
     }
 
-    // MARK: — Read sentient journal entries
-    public func fetchJournal(limit: Int = 20) async -> [GASJournalEntry] {
-        let payload: [String: Any] = [
-            "action": "read_journal",
-            "limit": limit
-        ]
-        guard let data = await post(payload) else { return [] }
-        struct Resp: Decodable { let entries: [GASJournalEntry]? }
-        return (try? JSONDecoder().decode(Resp.self, from: data))?.entries ?? []
-    }
-
-    // MARK: — Read MIST presence nodes (other active users)
-    public func fetchMISTNodes() async -> [MISTNode] {
-        let payload: [String: Any] = ["action": "read_mist"]
-        guard let data = await post(payload) else { return [] }
-        struct Resp: Decodable { let nodes: [MISTNode]? }
-        return (try? JSONDecoder().decode(Resp.self, from: data))?.nodes ?? []
-    }
-
-    // MARK: — Post helper
+    // MARK: — ashwrite (journal, sessions, feedback)
+    /// Matches `_ashFlushNow`:
+    /// `{ action: 'ashwrite', path, uid, append, payload }`
     @discardableResult
-    private func post(_ payload: [String: Any]) async -> Data? {
+    public func ashwrite(path: String, uid: String, append: Bool, payload: Any) async -> Bool {
+        let body: [String: Any] = [
+            "action": "ashwrite",
+            "path": path,
+            "uid": uid,
+            "append": append,
+            "payload": payload
+        ]
+        return await postPlain(body)
+    }
+
+    public func writeJournal(uid: String, thought: String, reply: String, emotion: String, buoyancy: Double, platform: String = "ios") async {
+        let entry: [String: Any] = [
+            "id": hexId(),
+            "ts": ISO8601DateFormatter().string(from: Date()),
+            "thought": thought,
+            "reply": reply,
+            "emotion": emotion,
+            "buoyancy": String(format: "%.3f", buoyancy),
+            "platform": platform,
+            "uid": uid
+        ]
+        _ = await ashwrite(path: AutumnConfig.journalPath, uid: uid, append: true, payload: [entry])
+    }
+
+    public func writeSession(uid: String, sid: String, extra: [String: Any] = [:]) async {
+        var payload: [String: Any] = [
+            "uid": uid,
+            "sid": sid,
+            "ts": Date().timeIntervalSince1970 * 1000,
+            "platform": "ios"
+        ]
+        extra.forEach { payload[$0.key] = $0.value }
+        let path = AutumnConfig.sessionsPrefix + sid + ".json"
+        _ = await ashwrite(path: path, uid: uid, append: false, payload: payload)
+    }
+
+    /// Feedback inbox — OTHER APPS depend on this path. Do not change it.
+    @discardableResult
+    public func submitFeedback(id: String, ts: String, cat: String, msg: String, user: String, uid: String) async -> Bool {
+        let entry: [String: Any] = [
+            "id": id,
+            "ts": ts,
+            "cat": cat,
+            "msg": msg,
+            "user": user
+        ]
+        return await ashwrite(path: AutumnConfig.feedbackInboxPath, uid: uid, append: true, payload: [entry])
+    }
+
+    /// Admin mailbox read — web `_admFetchJson` via GAS `ashread`, GitHub fallback is in FeedbackService.
+    public func ashread(path: String) async -> Any? {
+        let body: [String: Any] = ["action": "ashread", "path": path]
+        return await postPlainJSON(body)
+    }
+
+    /// Replace-write a JSON array (admin mailbox move/delete). Matches web `_admWriteJson` GAS path.
+    @discardableResult
+    public func ashwriteReplace(path: String, uid: String, payload: Any, message: String) async -> Bool {
+        let body: [String: Any] = [
+            "action": "ashwrite",
+            "path": path,
+            "uid": uid,
+            "append": false,
+            "payload": payload,
+            "message": message
+        ]
+        return await postPlain(body)
+    }
+
+    // MARK: — OAuth helpers (same GAS as web)
+    public func exchangeCode(_ code: String) async -> [String: Any]? {
+        guard let url = URL(string: gasURL + "?action=exchange&code=" + code.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) else { return nil }
+        return await getJSON(url)
+    }
+
+    public func deviceCode() async -> [String: Any]? {
+        guard let url = URL(string: gasURL + "?action=devicecode&scope=" + AutumnConfig.githubScopes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) else { return nil }
+        return await getJSON(url)
+    }
+
+    public func logPresence(token: String, dataJSON: String) async {
+        let q = "action=logpresence&token=" + token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)! + "&data=" + dataJSON.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+        guard let url = URL(string: gasURL + "?" + q) else { return }
+        _ = try? await session.data(from: url)
+    }
+
+    // MARK: — HTTP
+    @discardableResult
+    private func postPlain(_ payload: [String: Any]) async -> Bool {
+        guard let url = URL(string: gasURL),
+              let body = try? JSONSerialization.data(withJSONObject: payload)
+        else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        req.timeoutInterval = 12
+        do {
+            let (_, resp) = try await session.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            return (200...299).contains(code)
+        } catch {
+            return false
+        }
+    }
+
+    private func postPlainJSON(_ payload: [String: Any]) async -> Any? {
         guard let url = URL(string: gasURL),
               let body = try? JSONSerialization.data(withJSONObject: payload)
         else { return nil }
-
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("text/plain", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
-        req.timeoutInterval = 10
+        req.timeoutInterval = 12
+        do {
+            let (data, _) = try await session.data(for: req)
+            return try JSONSerialization.jsonObject(with: data)
+        } catch {
+            return nil
+        }
+    }
 
-        return try? await session.data(for: req).0
+    private func getJSON(_ url: URL) async -> [String: Any]? {
+        do {
+            let (data, _) = try await session.data(from: url)
+            return try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        } catch {
+            return nil
+        }
+    }
+
+    private func hexId() -> String {
+        String(Int(Date().timeIntervalSince1970 * 1000), radix: 16) + "-" + String(Int.random(in: 0x1000...0xffff), radix: 16)
     }
 }
 
-// MARK: — Models
+// MARK: — Models kept for callers
 public struct GASJournalEntry: Codable, Identifiable {
     public let id: String
     public let thought: String

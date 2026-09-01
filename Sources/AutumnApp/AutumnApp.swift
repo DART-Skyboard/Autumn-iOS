@@ -13,6 +13,7 @@ struct AutumnApp: App {
     @StateObject private var sceneVM   = BRPNSceneViewModel()
     @StateObject private var journalVM = JournalViewModel()
     @StateObject private var mistVM    = MISTSession.shared
+    @StateObject private var appNav    = AppNavigation()
 
     let persistence = PersistenceController.shared
 
@@ -37,14 +38,22 @@ struct AutumnApp: App {
                 .environmentObject(journalVM)
                 .environmentObject(themeVM)
                 .environmentObject(mistVM)
+                .environmentObject(appNav)
                 .preferredColorScheme(.dark)
                 .environment(\.managedObjectContext, persistence.context)
                 .onAppear {
+                    chatVM.memoryOwner = authVM.sessionUID
                     Task {
                         await mistVM.authenticateLocalPlayer()
                         await journalVM.loadFromCoreData()
                         AutumnAutonomy.shared.scheduleAll()
                     }
+                }
+                .onChange(of: authVM.githubUsername) { _ in
+                    chatVM.memoryOwner = authVM.sessionUID
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .autumnAshStar)) { _ in
+                    sceneVM.spawnAshStar()
                 }
         }
     }

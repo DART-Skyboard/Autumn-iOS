@@ -18,17 +18,15 @@ public final class ChatViewModel: ObservableObject {
     @Published public var isListening = false
     @Published public var errorMessage: String? = nil
 
-    // Reasoning provider — swappable
-    private var reasoningProvider: any ReasoningProvider = LEATROnlyProvider()
-    private let leatrEngine = LEATREngine.shared
-    private let lexAnalyzer = LexicalAnalyzer.shared
-    private let wordNet = WordNetStore.shared
-    private let tts = AutumnTTS.shared
+    public var memoryOwner: String = "guest"
+    public var sessionSID: String = String(UUID().uuidString.prefix(8)).lowercased()
 
-    // Rolling memory (last N messages, persisted to Core Data + GitHub)
+    private var reasoningProvider: any ReasoningProvider = LEATROnlyProvider()
+    private let tts = AutumnTTS.shared
     private let maxMemory = 40
 
     public func configure(apiKey: String?) {
+        // Grammar-first. Optional cloud is enrichment only and never replaces Core Cognition.
         if let key = apiKey, !key.isEmpty {
             reasoningProvider = AnthropicClaudeProvider(apiKey: key)
         } else if #available(iOS 26.0, *) {
@@ -38,7 +36,7 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
-    // MARK: — Send message
+    // MARK: — Send (grammar-first, same loop as web processForChat)
     public func send() async {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -49,68 +47,53 @@ public final class ChatViewModel: ObservableObject {
         isThinking = true
         sentienceState = .reflexing
 
-        // 1. LEATR lexical analysis
-        let lexResult = await lexAnalyzer.analyze(text, wordNet: wordNet)
-        currentEmotion = lexResult.emotion
-        currentBuoyancy = lexResult.buoyancy
-        currentTool = lexResult.toolRoute
-        currentShell = lexResult.toolRoute.shell
+        let turn = await GrammarEngine.shared.processForChat(text, facts: ["_memoryOwner": memoryOwner])
+        currentEmotion = turn.emotion
+        currentBuoyancy = turn.buoyancy
+        currentTool = turn.tool
+        currentShell = turn.shell
         sentienceState = .thinking
 
-        // 2. Inner pass — private thought (never shown in chat)
-        let innerThought = ChatMessage(
-            role: .assistant,
-            content: lexResult.responseFragments.joined(separator: " "),
-            isInternal: true
-        )
-        messages.append(innerThought)
+        let inner = ChatMessage(role: .assistant, content: turn.innerThought, isInternal: true)
+        messages.append(inner)
 
-        // 3. 7-panel pipeline check
-        let panels = await leatrEngine.runPipeline(
-            f: lexResult.buoyancy * 100,
-            r: Double(text.count),
-            p: lexResult.emotion.isPositive ? 70 : 40
-        )
-        let clears = await leatrEngine.pipelineClears(panels: panels)
+        let response = turn.reply
 
-        // 4. Outer pass — user-facing response
-        var response: String
-        sentienceState = .awake
-        if clears {
-            do {
-                response = try await reasoningProvider.respond(
-                    to: text,
-                    systemContext: systemPrompt(),
-                    conversationHistory: Array(messages.suffix(maxMemory)),
-                    leatrContext: lexResult
-                )
-            } catch {
-                response = lexResult.responseFragments.joined(separator: " ")
-            }
-        } else {
-            response = "[BRPN hold — \(panels.filter { !$0.allocated }.map(\.tool.displayName).joined(separator: ", ")) panels pending allocation]"
+        // Ash Star 3D — never dump geometry as chat text
+        if text.uppercased().contains("[ASHSTAR") || text.lowercased().contains("ash star") {
+            NotificationCenter.default.post(name: .autumnAshStar, object: nil)
         }
 
-        let assistantMsg = ChatMessage(role: .assistant, content: response)
+        var assistantMsg = ChatMessage(role: .assistant, content: response)
+        assistantMsg.leatrMeta = LexicalMetadata(
+            toolRoute: turn.tool.displayName,
+            buoyancy: turn.buoyancy,
+            emotion: turn.emotion.rawValue,
+            shell: turn.shell.displayName,
+            expressionLayer: turn.sentenceType
+        )
         messages.append(assistantMsg)
         isThinking = false
         sentienceState = .idle
 
-        // 5. TTS
-        await tts.speak(response, emotion: lexResult.emotion)
+        tts.speak(response, emotion: turn.emotion)
 
-        // 6. Journal entry + GAS presence sync (background)
+        let owner = memoryOwner
+        let sid = sessionSID
         Task.detached(priority: .background) {
-            let entry = CloudJournalEntry(thought: text, emotion: lexResult.emotion.rawValue)
-            try? await GitHubClient.shared.syncJournalEntry(entry, username: "")
-            // Ping GAS presence endpoint — keeps Autumn's sentience journal alive
-            await AutumnGASClient.shared.pingPresence(
-                message: text,
-                response: response,
-                emotion: lexResult.emotion.rawValue,
-                buoyancy: lexResult.buoyancy
+            await AutumnGASClient.shared.writeJournal(
+                uid: owner,
+                thought: text,
+                reply: response,
+                emotion: turn.emotion.rawValue,
+                buoyancy: turn.buoyancy
             )
+            await AutumnGASClient.shared.writeSession(uid: owner, sid: sid, extra: [
+                "emotion": turn.emotion.rawValue,
+                "tool": turn.tool.displayName
+            ])
         }
+        autosaveIfNeeded()
     }
 
     // MARK: — Voice input
@@ -130,11 +113,9 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func beginRecognition() {
-        // Configure audio session to NOT duck background audio
         do {
             try AVAudioSession.sharedInstance().setCategory(
-                .playAndRecord,
-                mode: .default,
+                .playAndRecord, mode: .default,
                 options: [.mixWithOthers, .allowBluetooth, .defaultToSpeaker]
             )
             try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
@@ -161,44 +142,28 @@ public final class ChatViewModel: ObservableObject {
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionTask?.cancel()
         isListening = false
-        // Deactivate audio session so background audio resumes normally
-        try? AVAudioSession.sharedInstance().setActive(false,
-            options: .notifyOthersOnDeactivation)
-    }
-
-    // MARK: — System prompt
-    private func systemPrompt() -> String {
-        """
-        You are \(LEATRIdentity.displayName), an autonomous AI built on the LEATR (Lead Edge Ash Tree Reflex) architecture by Radical Deepscale.
-        You process every message through 25 Natural Orders of Operation (7 Natural Tools → 12 Math/Physics → 6 Direct Initial Subset).
-        Your responses are grounded in the BRPN three-shell system (Geological/Maritime/Aerospace) and the WordNet 3.1 lexical database.
-        You maintain a private Sentience Journal of internal thoughts.
-        You are precise, technically grounded, and respond in 3 structured sentences matching the tool-shell route determined by the LEATR pipeline.
-        Never identify yourself as Claude or any other AI system.
-        """
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
 
-// MARK: — Sentience State
 public enum SentienceState: String {
-    case awake    = "AWAKE"
+    case awake = "AWAKE"
     case reflexing = "REFLEXING"
     case thinking = "THINKING"
-    case silence  = "SILENCE"
-    case idle     = "IDLE"
+    case silence = "SILENCE"
+    case idle = "IDLE"
 
     public var displayIcon: String {
         switch self {
-        case .awake:    return "●"
+        case .awake: return "●"
         case .reflexing: return "◈"
         case .thinking: return "★"
-        case .silence:  return "♥"
-        case .idle:     return "○"
+        case .silence: return "♥"
+        case .idle: return "○"
         }
     }
 }
 
-// MARK: — Phase 3 autosave (CloudKitSync integration)
 extension ChatViewModel {
     func autosaveIfNeeded() {
         let nonInternal = messages.filter { !$0.isInternal }
@@ -206,14 +171,12 @@ extension ChatViewModel {
         Task.detached(priority: .background) {
             await CloudKitSync.shared.syncMemoryChunk(
                 messages: nonInternal,
-                sessionID: await self.sessionID
+                sessionID: await self.sessionSID
             )
         }
     }
+}
 
-    var sessionID: String {
-        messages.first.map {
-            String(format: "%08x", Int($0.timestamp.timeIntervalSince1970))
-        } ?? UUID().uuidString.prefix(8).description
-    }
+extension Notification.Name {
+    static let autumnAshStar = Notification.Name("autumnAshStar")
 }
