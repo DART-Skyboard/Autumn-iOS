@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import SceneKit
 import LEATRCore
 import AutumnServices
 
@@ -138,6 +140,13 @@ struct ArcLakePanel: View {
                     .font(.custom("Orbitron-Bold", size: 16))
                     .foregroundColor(themeVM.current.accent)
                     .padding(.horizontal, 16)
+                Text("Native first pass of js/arclake_studio.js — not a standalone App Store app.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.horizontal, 16)
+                ArcLakeAtomView(preset: selectedPreset, temperature: temperature)
+                    .frame(height: 180)
+                    .padding(.horizontal, 16)
 
                 // Preset selector
                 Picker("Preset", selection: $selectedPreset) {
@@ -197,11 +206,32 @@ struct CalcPanel: View {
 
             Divider().background(themeVM.current.accent.opacity(0.3))
 
-            // Keypad (placeholder)
-            Text("Calculator — math.js integration")
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(themeVM.current.textSecondary)
-                .padding(40)
+            let keys = [["7","8","9","/"],["4","5","6","*"],["1","2","3","-"],["0",".","^","+"],["(",")","C","="]]
+            VStack(spacing: 8) {
+                ForEach(keys, id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(row, id: \.self) { k in
+                            Button(k) {
+                                if k == "C" { display = "0"; expression = "" }
+                                else if k == "=" {
+                                    if let v = MathOOO.evaluate(expression.isEmpty ? display : expression) {
+                                        display = String(format: "%g", v)
+                                    } else { display = "ERR" }
+                                } else {
+                                    if display == "0" && k != "." { display = k } else { display += k }
+                                    expression = display
+                                }
+                            }
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundColor(themeVM.current.accent)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(themeVM.current.surface)
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+            }
+            .padding(16)
         }
     }
 }
@@ -263,5 +293,41 @@ struct SliderControl: View {
             Slider(value: $value, in: range)
                 .tint(themeVM.current.accent)
         }
+    }
+}
+
+/// Compact SceneKit nucleus + electron shells for ArcLake first pass.
+struct ArcLakeAtomView: UIViewRepresentable {
+    var preset: String
+    var temperature: Double
+    func makeUIView(context: Context) -> SCNView {
+        let v = SCNView()
+        v.scene = SCNScene()
+        v.backgroundColor = .clear
+        v.allowsCameraControl = true
+        v.autoenablesDefaultLighting = true
+        let cam = SCNNode()
+        cam.camera = SCNCamera()
+        cam.position = SCNVector3(0, 0, 4)
+        v.scene?.rootNode.addChildNode(cam)
+        return v
+    }
+    func updateUIView(_ v: SCNView, context: Context) {
+        guard let root = v.scene?.rootNode else { return }
+        root.childNodes.filter { $0.name == "atom" }.forEach { $0.removeFromParentNode() }
+        let g = SCNNode(); g.name = "atom"
+        let proton = SCNSphere(radius: 0.18)
+        proton.firstMaterial?.emission.contents = UIColor.orange
+        g.addChildNode(SCNNode(geometry: proton))
+        let shells = temperature > 1000 ? 3 : 2
+        for i in 1...shells {
+            let ring = SCNTorus(ringRadius: CGFloat(0.45 * Double(i)), pipeRadius: 0.012)
+            ring.firstMaterial?.emission.contents = UIColor.cyan
+            let n = SCNNode(geometry: ring)
+            n.eulerAngles.x = Float.pi / 2 + Float(i) * 0.3
+            n.runAction(SCNAction.repeatForever(SCNAction.rotateBy(x: 0, y: CGFloat(i % 2 == 0 ? 1 : -1), z: 0.2, duration: 4)))
+            g.addChildNode(n)
+        }
+        root.addChildNode(g)
     }
 }

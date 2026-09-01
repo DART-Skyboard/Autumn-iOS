@@ -47,6 +47,7 @@ struct AutumnApp: App {
                         await mistVM.authenticateLocalPlayer()
                         await journalVM.loadFromCoreData()
                         AutumnAutonomy.shared.scheduleAll()
+                        await MISTModule.shared.refresh()
                     }
                 }
                 .onChange(of: authVM.githubUsername) { _ in

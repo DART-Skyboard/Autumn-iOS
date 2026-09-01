@@ -71,7 +71,13 @@ public actor GitHubClient {
         return try JSONDecoder().decode(GHUser.self, from: data).login
     }
 
+    public func fetchFollowing() async throws -> [GitHubFollowUser] {
+        let data = try await get("/user/following?per_page=100")
+        return try JSONDecoder().decode([GitHubFollowUser].self, from: data)
+    }
+
     public func fetchAvatarURL() async throws -> URL? {
+
         struct GHUser: Decodable { let avatar_url: String? }
         let data = try await get("/user")
         guard let s = try JSONDecoder().decode(GHUser.self, from: data).avatar_url else { return nil }
@@ -243,5 +249,14 @@ public struct DeviceFlowStart: Decodable, Sendable {
         case verificationUri = "verification_uri"
         case expiresIn = "expires_in"
         case interval
+    }
+}
+public struct GitHubFollowUser: Decodable, Sendable, Identifiable {
+    public var id: String { login }
+    public let login: String
+    public let avatarURL: String?
+    enum CodingKeys: String, CodingKey {
+        case login
+        case avatarURL = "avatar_url"
     }
 }

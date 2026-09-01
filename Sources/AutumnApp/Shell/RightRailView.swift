@@ -1,13 +1,12 @@
 import SwiftUI
 import AutumnServices
 
-/// Right tabs matching web: MIST, STAR, SHARD, SYS.
+/// Right tabs matching web: MIST, STAR, SHARD, SYS — overlays, not stub sheets.
 public struct RightRailView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
 
     public var body: some View {
-        let chrome = themeVM.chrome
         VStack(spacing: 8) {
             rail("MIST", selected: appNav.rightTab == .mist) { toggle(.mist) }
             rail("STAR", selected: appNav.rightTab == .star) { toggle(.star) }
@@ -15,14 +14,7 @@ public struct RightRailView: View {
             rail("SYS", selected: appNav.rightTab == .sys) { toggle(.sys) }
             Spacer()
         }
-        .padding(.top, 48)
-        .sheet(isPresented: Binding(
-            get: { appNav.rightTab != .none },
-            set: { if !$0 { appNav.rightTab = .none } }
-        )) {
-            ModuleStubSheet(tab: appNav.rightTab)
-                .environmentObject(themeVM)
-        }
+        .padding(.top, 4)
     }
 
     private func toggle(_ t: AppNavigation.RightTab) {
@@ -40,5 +32,29 @@ public struct RightRailView: View {
                 .background(selected ? chrome.accent.opacity(0.15) : chrome.surface.opacity(0.7))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(chrome.accent.opacity(selected ? 0.5 : 0.2), lineWidth: 1))
         }
+    }
+}
+
+/// Hosts MIST/STAR/SHARD/SYS overlays on the BRPN scene (web right-edge drawers).
+struct ModuleOverlayHost: View {
+    @EnvironmentObject var appNav: AppNavigation
+    var body: some View {
+        HStack {
+            Spacer()
+            Group {
+                switch appNav.rightTab {
+                case .mist: MISTOverlay()
+                case .star: StarOverlay()
+                case .shard: ShardOverlay()
+                case .sys: SYSOverlay()
+                case .none: EmptyView()
+                }
+            }
+            .frame(width: 300)
+            .padding(.trailing, 46)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+        }
+        .allowsHitTesting(appNav.rightTab != .none)
     }
 }
