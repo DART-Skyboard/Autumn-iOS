@@ -36,6 +36,11 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
+    public func injectAndSend(_ text: String) async {
+        inputText = text
+        await send()
+    }
+
     // MARK: — Send (grammar-first, same loop as web processForChat)
     public func send() async {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)

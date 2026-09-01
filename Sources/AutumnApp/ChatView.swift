@@ -30,12 +30,19 @@ public struct ChatView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                     }
-                    // Tap anywhere in the scroll area to dismiss keyboard
+                    .scrollDismissesKeyboard(.interactively)
                     .onTapGesture {
                         inputFocused = false
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
                             to: nil, from: nil, for: nil)
                     }
+                    .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { value in
+                        if value.translation.height > 40 {
+                            inputFocused = false
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                to: nil, from: nil, for: nil)
+                        }
+                    })
                     .onChange(of: chatVM.messages.count) { newValue in
                         withAnimation { proxy.scrollTo(bottomID) }
                     }
