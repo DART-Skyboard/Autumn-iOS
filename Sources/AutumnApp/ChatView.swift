@@ -203,7 +203,7 @@ struct InputBar: View {
                     .cornerRadius(18)
             }
 
-            TextField("Message \(LEATRIdentity.displayName)…", text: $chatVM.inputText, axis: .vertical)
+            TextField("Ask Autumn...", text: $chatVM.inputText, axis: .vertical)
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)

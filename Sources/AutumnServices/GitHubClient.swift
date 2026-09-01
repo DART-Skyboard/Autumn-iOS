@@ -170,11 +170,38 @@ public actor GitHubClient {
                             content: content, message: "journal update", sha: sha)
     }
 
+
+    public func listDirectory(owner: String, repo: String, path: String) async throws -> [GitHubDirEntry] {
+        let data = try await get("/repos/\(owner)/\(repo)/contents/\(path)")
+        if let arr = try? JSONDecoder().decode([GitHubDirEntry].self, from: data) {
+            return arr
+        }
+        // Single file response
+        if let one = try? JSONDecoder().decode(GitHubDirEntry.self, from: data) {
+            return [one]
+        }
+        return []
+    }
+
+    public func readJSON(owner: String, repo: String, path: String) async throws -> Any {
+        let file = try await readFile(owner: owner, repo: repo, path: path)
+        guard let raw = file.decodedContent, let data = raw.data(using: .utf8) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        return try JSONSerialization.jsonObject(with: data)
+    }
+
     // MARK: — HTTP helpers
     private func get(_ path: String) async throws -> Data {
         var req = URLRequest(url: URL(string: base + path)!)
         headers().forEach { req.setValue($1, forHTTPHeaderField: $0) }
-        let (data, _) = try await session.data(for: req)
+        let (data, resp) = try await session.data(for: req)
+        if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let msg = (obj?["message"] as? String) ?? "HTTP \(http.statusCode)"
+            throw NSError(domain: "GitHub", code: http.statusCode,
+                          userInfo: [NSLocalizedDescriptionKey: msg])
+        }
         return data
     }
 
@@ -259,4 +286,14 @@ public struct GitHubFollowUser: Decodable, Sendable, Identifiable {
         case login
         case avatarURL = "avatar_url"
     }
+}
+
+
+public struct GitHubDirEntry: Decodable, Sendable, Identifiable {
+    public var id: String { path }
+    public let name: String
+    public let path: String
+    public let type: String
+    public let sha: String?
+    public let size: Int?
 }

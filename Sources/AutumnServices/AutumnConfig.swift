@@ -31,4 +31,14 @@ public enum AutumnConfig {
 
     public static let oauthCallbackScheme = "autumn"
     public static let bundleId = "com.dartmeadow.autumn"
+
+    /// Admin ACL file in leatr-ash (web `_grantRole` / `_admRenderData`).
+    public static let circuitPath = "admin/circuit.json"
+    public static let aclPath = "admin/acl.json"
+    public static let usersPrefix = "ashtree/users"
+    public static let grammarStudyPath = "ashtree/grammar-study/index.json"
+
+    /// Public Movement quote proxy already published on movement-conjecture.html (not a secret).
+    public static let movementQuoteGAS = "https://script.google.com/macros/s/AKfycbwTBiGJ3YTibAGAsrC5sZMuQO-PqY0yK8gmmc7zvp1zXnaWQJvaZoRFCi2xLiI7QgSwfA/exec"
 }
+

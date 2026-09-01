@@ -58,18 +58,7 @@ public struct AdminDrawerView: View {
     }
 
     private var dataTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("DATA").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundColor(themeVM.chrome.accent)
-                Text("TODO: full DATA console from index.html `_admRenderData` (users/sharing/ACL). This pass lists live contracts only.")
-                    .font(.system(size: 11)).foregroundColor(.white.opacity(0.7))
-                kv("GAS", String(AutumnConfig.gasURL.suffix(32)))
-                kv("ASH REPO", "\(AutumnConfig.ashOwner)/\(AutumnConfig.ashRepo)")
-                kv("JOURNAL", AutumnConfig.journalPath)
-                kv("MAILBOX", AutumnConfig.feedbackInboxPath)
-                kv("USER", authVM.githubUsername)
-            }.padding(14)
-        }
+        AdminDataConsole()
     }
 
     private var ashTab: some View {
@@ -79,9 +68,7 @@ public struct AdminDrawerView: View {
                 .foregroundColor(themeVM.chrome.accent)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
-            Text("TODO: chunked self-talk dictionary + first-train from js/autumn-grammar-engine.js Grammar Study. Admin chat below is live grammar-first.")
-                .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.55))
+            GrammarStudyButton(adminLog: $adminLog)
                 .padding(.horizontal, 12)
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
@@ -139,6 +126,9 @@ public struct AdminMailboxView: View {
             HStack(spacing: 6) {
                 mini("ALL") { selected = Set(entries.map(\.id)) }
                 mini("NONE") { selected = [] }
+                if folder != .inbox {
+                    mini("UNREAD", warn: true) { Task { await moveSel(.inbox) } }
+                }
                 mini("→ ANAL", warn: true) { Task { await moveSel(.analysis) } }
                 mini("→ READ", warn: true) { Task { await moveSel(.read) } }
                 mini("→ TRASH", warn: true) { Task { await moveSel(.trash) } }
@@ -228,6 +218,7 @@ public struct AdminMailboxView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(e.msg).font(.system(size: 12)).foregroundColor(.white).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
+                        if folder != .inbox { mini("UNREAD") { Task { await moveOne(e, to: .inbox) } } }
                         if folder != .analysis { mini("ANALYSIS") { Task { await moveOne(e, to: .analysis) } } }
                         if folder != .read { mini("READ") { Task { await moveOne(e, to: .read) } } }
                         if folder != .trash { mini("TRASH") { Task { await moveOne(e, to: .trash) } } }
@@ -303,8 +294,12 @@ public struct AdminMailboxView: View {
     }
 
     private func deleteOne(_ e: FeedbackEntry) async {
+        if folder != .trash {
+            await moveOne(e, to: .trash)
+            return
+        }
         let remaining = entries.filter { $0.id != e.id }
-        busy = true; status = "Deleting..."
+        busy = true; status = "Deleting permanently from trash..."
         do {
             try await FeedbackService.shared.delete(remaining: remaining, folder: folder, uid: uid(), count: 1)
             await load()
@@ -315,8 +310,12 @@ public struct AdminMailboxView: View {
     private func deleteSel() async {
         let n = selected.count
         guard n > 0 else { status = "No entries selected"; return }
+        if folder != .trash {
+            await moveSel(.trash)
+            return
+        }
         let remaining = entries.filter { !selected.contains($0.id) }
-        busy = true; status = "Deleting..."
+        busy = true; status = "Deleting permanently from trash..."
         do {
             try await FeedbackService.shared.delete(remaining: remaining, folder: folder, uid: uid(), count: n)
             await load()

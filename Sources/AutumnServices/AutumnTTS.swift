@@ -4,6 +4,38 @@ import LEATRCore
 /// AutumnTTS — Text-to-speech for Autumn iOS
 /// Uses Apple's neural AVSpeechSynthesizer with best available voice
 /// Falls back gracefully across iOS versions
+
+/// N.A.T.E voice graph applied to Autumn TTS (nate.html APPLY TO AUTUMN).
+public struct NateVoiceParams: Codable, Sendable, Equatable {
+    public var pitch: Double
+    public var speed: Double
+    public var formant: Double
+    public var resonance: Double
+    public var warmth: Double
+    public var clarity: Double
+    public var vibrato: Double
+    public var applied: Bool
+
+    public static let baseline = NateVoiceParams(
+        pitch: 1.0, speed: 1.0, formant: 1.0, resonance: 0.3,
+        warmth: 0.5, clarity: 0.6, vibrato: 0.08, applied: false
+    )
+
+    public static func load() -> NateVoiceParams {
+        guard let data = UserDefaults.standard.data(forKey: "nate_voice_params_v1"),
+              let p = try? JSONDecoder().decode(NateVoiceParams.self, from: data) else {
+            return .baseline
+        }
+        return p
+    }
+
+    public func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: "nate_voice_params_v1")
+        }
+    }
+}
+
 public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
     public static let shared = AutumnTTS()
     private let synthesizer  = AVSpeechSynthesizer()
@@ -30,8 +62,15 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
         synthesizer.stopSpeaking(at: .immediate)
         let utterance        = AVSpeechUtterance(string: text)
         utterance.voice      = bestVoice(for: emotion)
-        utterance.rate       = rateFor(emotion: emotion)
-        utterance.pitchMultiplier = pitchFor(emotion: emotion)
+        let nate = NateVoiceParams.load()
+        if nate.applied {
+            let baseRate = rateFor(emotion: emotion)
+            utterance.rate = Float(min(0.6, max(0.3, Double(baseRate) * nate.speed)))
+            utterance.pitchMultiplier = Float(min(2.0, max(0.5, Double(pitchFor(emotion: emotion)) * nate.pitch * (0.85 + 0.15 * nate.formant))))
+        } else {
+            utterance.rate       = rateFor(emotion: emotion)
+            utterance.pitchMultiplier = pitchFor(emotion: emotion)
+        }
         utterance.volume     = 1.0
         utterance.postUtteranceDelay = 0.1
         synthesizer.speak(utterance)

@@ -14,6 +14,7 @@ struct AutumnApp: App {
     @StateObject private var journalVM = JournalViewModel()
     @StateObject private var mistVM    = MISTSession.shared
     @StateObject private var appNav    = AppNavigation()
+    @StateObject private var circuit   = AdminCircuitMonitor.shared
 
     let persistence = PersistenceController.shared
 
@@ -39,6 +40,7 @@ struct AutumnApp: App {
                 .environmentObject(themeVM)
                 .environmentObject(mistVM)
                 .environmentObject(appNav)
+                .environmentObject(circuit)
                 .preferredColorScheme(.dark)
                 .environment(\.managedObjectContext, persistence.context)
                 .onAppear {
