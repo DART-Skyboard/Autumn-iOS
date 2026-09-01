@@ -24,6 +24,7 @@ public struct OrbMazeCell {
     public var front = true
     public var back = true
     public var visited = false
+    public init() {}
 
     /// JS: `grid[z][y][x][dir]`
     public subscript(_ dir: String) -> Bool {
@@ -73,6 +74,7 @@ public struct MazeOrbState {
     public var regenTimer: Int = 0
     /// JS: cell size `u=0.065` — fits inside core sphere (~0.18 radius)
     public static let u: Float = 0.065
+    public init() {}
 }
 
 public enum MazeEngine {
@@ -210,6 +212,7 @@ public enum MazeEngine {
         public var e: Int = 1
         public var w: Int = 1
         public var v: Bool = false
+        public init() {}
         public subscript(_ dir: String) -> Int {
             get {
                 switch dir {
@@ -248,6 +251,12 @@ public enum MazeEngine {
         public var exitSide: String
         public var solution: [MistPt]?
         public var solved: Bool = false
+        public init(grid: [[MistCell]], w: Int, h: Int, entry: MistPt, exit: MistPt, entrySide: String, exitSide: String, solution: [MistPt]?, solved: Bool = false) {
+            self.grid = grid; self.w = w; self.h = h
+            self.entry = entry; self.exit = exit
+            self.entrySide = entrySide; self.exitSide = exitSide
+            self.solution = solution; self.solved = solved
+        }
     }
 
     /// JS: `var DIFF = {1:{w:5,h:5},2:{w:9,h:9},3:{w:13,h:13}};`
@@ -371,12 +380,14 @@ public enum LEMACEngineASH {
         public var x: Int
         public var y: Int
         public var face: String
+        public init(x: Int, y: Int, face: String) { self.x = x; self.y = y; self.face = face }
     }
     public struct Perimeter3D {
         public var x: Int
         public var y: Int
         public var z: Int
         public var face: String
+        public init(x: Int, y: Int, z: Int, face: String) { self.x = x; self.y = y; self.z = z; self.face = face }
     }
     public struct PlanarResult {
         public var grid: [[OrbMazeCell]]
@@ -384,6 +395,9 @@ public enum LEMACEngineASH {
         public var end: Perimeter2D
         public var w: Int
         public var h: Int
+        public init(grid: [[OrbMazeCell]], start: Perimeter2D, end: Perimeter2D, w: Int, h: Int) {
+            self.grid = grid; self.start = start; self.end = end; self.w = w; self.h = h
+        }
     }
     public struct CubicResult {
         public var grid: [[[OrbMazeCell]]]
@@ -392,6 +406,9 @@ public enum LEMACEngineASH {
         public var w: Int
         public var h: Int
         public var d: Int
+        public init(grid: [[[OrbMazeCell]]], start: Perimeter3D, end: Perimeter3D, w: Int, h: Int, d: Int) {
+            self.grid = grid; self.start = start; self.end = end; self.w = w; self.h = h; self.d = d
+        }
     }
 
     // MARK: — generatePlanar(w,h)  index.html 17818–17845
