@@ -10,6 +10,16 @@ public struct ACLUser: Identifiable, Sendable, Hashable {
     public var grantedBy: String
     public var grantedAt: String
     public var expires: String?
+
+    public init(username: String, role: String, active: Bool, grantedBy: String,
+                grantedAt: String, expires: String? = nil) {
+        self.username = username
+        self.role = role
+        self.active = active
+        self.grantedBy = grantedBy
+        self.grantedAt = grantedAt
+        self.expires = expires
+    }
 }
 
 public struct AdminUserRow: Identifiable, Sendable, Hashable {
@@ -18,6 +28,13 @@ public struct AdminUserRow: Identifiable, Sendable, Hashable {
     public var cats: [String]
     public var updated: String
     public var registered: String
+
+    public init(userId: String, cats: [String], updated: String, registered: String) {
+        self.userId = userId
+        self.cats = cats
+        self.updated = updated
+        self.registered = registered
+    }
 }
 
 public actor AdminDataService {

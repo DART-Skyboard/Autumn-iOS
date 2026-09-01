@@ -461,7 +461,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         node.position = SCNVector3(0, 0, 0)
         scene.rootNode.addChildNode(node)
         let dest: SCNVector3
-        if let last = sessionGroupNodes.values.last {
+        if let last = sessionGroupNodes.values.first {
             dest = last.position
         } else {
             dest = SCNVector3(1.6, 0.9, -1.1)
