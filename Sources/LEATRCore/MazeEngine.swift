@@ -512,7 +512,7 @@ public enum LEMACEngineASH {
     }
 
     // MARK: — solvePlanar  two-branch degree-map sigma  index.html 17914–17973
-    public static func solvePlanar(_ mazeResult: PlanarResult) -> [MistPt] {
+    public static func solvePlanar(_ mazeResult: PlanarResult) -> [MazeEngine.MistPt] {
         let grid = mazeResult.grid
         let start = mazeResult.start
         let end = mazeResult.end
@@ -571,7 +571,7 @@ public enum LEMACEngineASH {
 
         let pathCells = allCells.filter { !pruned.contains("\($0.x),\($0.y)") }
         let pathSet = Set(pathCells.map { "\($0.x),\($0.y)" })
-        var ordered: [MistPt] = []
+        var ordered: [MazeEngine.MistPt] = []
         var visited = Set<String>()
         var stack: [(x: Int, y: Int)] = [(start.x, start.y)]
         while !stack.isEmpty {
@@ -579,7 +579,7 @@ public enum LEMACEngineASH {
             let key = "\(p.x),\(p.y)"
             if visited.contains(key) { continue }
             visited.insert(key)
-            ordered.append(MistPt(x: p.x, y: p.y))
+            ordered.append(MazeEngine.MistPt(x: p.x, y: p.y))
             let c = grid[p.y][p.x]
             if !c.top && p.y > 0 && pathSet.contains("\(p.x),\(p.y - 1)") { stack.append((p.x, p.y - 1)) }
             if !c.bottom && p.y < h - 1 && pathSet.contains("\(p.x),\(p.y + 1)") { stack.append((p.x, p.y + 1)) }
