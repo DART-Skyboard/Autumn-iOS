@@ -16,6 +16,18 @@ public struct NateVoiceParams: Codable, Sendable, Equatable {
     public var vibrato: Double
     public var applied: Bool
 
+    public init(pitch: Double, speed: Double, formant: Double, resonance: Double,
+                warmth: Double, clarity: Double, vibrato: Double, applied: Bool) {
+        self.pitch = pitch
+        self.speed = speed
+        self.formant = formant
+        self.resonance = resonance
+        self.warmth = warmth
+        self.clarity = clarity
+        self.vibrato = vibrato
+        self.applied = applied
+    }
+
     public static let baseline = NateVoiceParams(
         pitch: 1.0, speed: 1.0, formant: 1.0, resonance: 0.3,
         warmth: 0.5, clarity: 0.6, vibrato: 0.08, applied: false
