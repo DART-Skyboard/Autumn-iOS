@@ -45,7 +45,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
         adminEnabled = UserDefaults.standard.bool(forKey: "_aut_admin_enabled") && adminAllowed
         if let urlStr = KeychainService.shared.load(key: "github_avatar_url"),
            let url = URL(string: urlStr) {
-            githubAvatarURL = url
+            githubAvatarURL = GitHubClient.sizedAvatarURL(from: url.absoluteString) ?? url
         }
 
         // OAuth token only — never read a user-pasted PAT field.
@@ -57,7 +57,6 @@ public final class AuthViewModel: NSObject, ObservableObject {
                 KeychainService.shared.save(key: oauthTokenKey, value: token)
                 KeychainService.shared.delete(key: "github_pat")
             }
-            Task { await GitHubClient.shared.setToken(token) }
             let ghUser = KeychainService.shared.load(key: oauthUserKey) ?? ""
             if !ghUser.isEmpty {
                 githubConnected = true
@@ -65,6 +64,11 @@ public final class AuthViewModel: NSObject, ObservableObject {
                 isGuest = false
                 if username == "Guest" || username.isEmpty { username = ghUser }
                 restoreAdminFlag()
+            }
+            // Always refresh login + avatar from GET /user when a token is present.
+            Task {
+                await GitHubClient.shared.setToken(token)
+                await applyGitHubProfile()
             }
         }
 
@@ -179,35 +183,48 @@ public final class AuthViewModel: NSObject, ObservableObject {
         KeychainService.shared.save(key: oauthTokenKey, value: token)
         KeychainService.shared.delete(key: "github_pat")
         await GitHubClient.shared.setToken(token)
-        var ghUser = (try? await GitHubClient.shared.fetchAuthenticatedUser()) ?? "GitHub User"
-        if ghUser.isEmpty { ghUser = "GitHub User" }
-        KeychainService.shared.save(key: oauthUserKey, value: ghUser)
-        if let avatar = try? await GitHubClient.shared.fetchAvatarURL() {
-            githubAvatarURL = avatar
-            KeychainService.shared.save(key: "github_avatar_url", value: avatar.absoluteString)
-        }
-        githubConnected = true
-        githubUsername  = ghUser
+        await applyGitHubProfile()
         deviceFlowCode  = nil
         isAuthenticating = false
         isSignedIn = true
         isGuest = false
-        username = ghUser
-        saveGitHubAccount(id: ghUser, displayName: ghUser)
-        restoreAdminFlag()
         GitHubOAuth.shared.cancel()
-        Task { await UserVaultService.shared.setup(githubUsername: ghUser) }
+        Task { await UserVaultService.shared.setup(githubUsername: githubUsername) }
+    }
+
+    /// One GET /user. Persists login + avatar URL. Letter fallback only if this fails.
+    private func applyGitHubProfile() async {
+        guard let profile = try? await GitHubClient.shared.fetchAuthenticatedProfile() else { return }
+        let ghUser = profile.login.isEmpty ? "GitHub User" : profile.login
+        KeychainService.shared.save(key: oauthUserKey, value: ghUser)
+        githubConnected = true
+        githubUsername  = ghUser
+        username = ghUser
+        if let avatar = profile.avatarURL {
+            githubAvatarURL = avatar
+            KeychainService.shared.save(key: "github_avatar_url", value: avatar.absoluteString)
+        }
+        saveGitHubAccount(id: ghUser, displayName: ghUser, avatarURL: profile.avatarURL?.absoluteString)
+        restoreAdminFlag()
     }
 
     public func switchGitHubAccount(to account: SavedAccount) {
         guard let token = KeychainService.shared.load(key: "github_oauth_\(account.id)") else { return }
         KeychainService.shared.save(key: oauthTokenKey, value: token)
-        Task { await GitHubClient.shared.setToken(token) }
-        githubUsername = account.displayName; githubConnected = true
+        githubUsername = account.displayName
+        githubConnected = true
         username = account.displayName
         isGuest = false
+        if let s = account.avatarURL, let url = URL(string: s) {
+            githubAvatarURL = url
+            KeychainService.shared.save(key: "github_avatar_url", value: s)
+        }
         restoreAdminFlag()
-        Task { await UserVaultService.shared.setup(githubUsername: account.displayName) }
+        Task {
+            await GitHubClient.shared.setToken(token)
+            await applyGitHubProfile()
+            await UserVaultService.shared.setup(githubUsername: account.displayName)
+        }
     }
 
     public func disconnectGitHub() {
@@ -257,11 +274,13 @@ public final class AuthViewModel: NSObject, ObservableObject {
     @AppStorage("policy_accepted_v1") public var hasAcceptedPolicy = false
     public func acceptPolicy() { hasAcceptedPolicy = true }
 
-    private func saveGitHubAccount(id: String, displayName: String) {
-        if !savedGitHubAccounts.contains(where: { $0.id == id }) {
-            savedGitHubAccounts.append(SavedAccount(id: id, displayName: displayName))
-            persistAccounts()
+    private func saveGitHubAccount(id: String, displayName: String, avatarURL: String? = nil) {
+        if let idx = savedGitHubAccounts.firstIndex(where: { $0.id == id }) {
+            if let avatarURL { savedGitHubAccounts[idx].avatarURL = avatarURL }
+        } else {
+            savedGitHubAccounts.append(SavedAccount(id: id, displayName: displayName, avatarURL: avatarURL))
         }
+        persistAccounts()
         if let token = KeychainService.shared.load(key: oauthTokenKey) {
             KeychainService.shared.save(key: "github_oauth_\(id)", value: token)
         }
@@ -354,4 +373,5 @@ public struct DeviceFlowDisplay {
 public struct SavedAccount: Codable, Identifiable {
     public let id: String
     public let displayName: String
+    public var avatarURL: String? = nil
 }

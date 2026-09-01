@@ -13,8 +13,7 @@ public struct ChatView: View {
         ZStack {
             // Chrome panel only — no extra dark wash over the BRPN/video (web #vid-scrim owns overlay).
             VStack(spacing: 0) {
-                // MARK: — EMO HUD
-                EmoHUD()
+                // EmoHUD lives in AppShellView under the 3D scene (web order).
 
                 // MARK: — Message list
                 ScrollViewReader { proxy in
@@ -94,7 +93,7 @@ struct EmoHUD: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 6)
         .background(.ultraThinMaterial)
         .overlay(
             Rectangle().frame(height: 1).foregroundColor(themeVM.current.accent.opacity(0.2)),

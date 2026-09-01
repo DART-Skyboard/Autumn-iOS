@@ -21,11 +21,12 @@ public struct ProfileSheet: View {
                 }.padding(14)
 
                 HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(chrome.accent.opacity(0.12)).frame(width: 52, height: 52)
-                        Text(authVM.username.prefix(1).uppercased())
-                            .font(.system(size: 20, weight: .bold, design: .monospaced)).foregroundColor(chrome.accent)
-                    }
+                    GitHubAvatarView(
+                        url: authVM.githubAvatarURL,
+                        letter: authVM.username,
+                        size: 52,
+                        accent: chrome.accent
+                    )
                     VStack(alignment: .leading, spacing: 2) {
                         Text(authVM.username).font(.system(size: 15, weight: .bold)).foregroundColor(.white)
                         Text(authVM.githubConnected ? "GitHub Connected" : (authVM.isGuest ? "Guest" : "Signed in"))
@@ -33,6 +34,36 @@ public struct ProfileSheet: View {
                             .foregroundColor(authVM.githubConnected ? .green : chrome.textSecondary)
                     }
                 }.padding(.horizontal, 14).padding(.bottom, 12)
+
+                if !authVM.savedGitHubAccounts.isEmpty {
+                    Text("ACCOUNTS")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .tracking(1.5)
+                        .foregroundColor(chrome.accent.opacity(0.55))
+                        .padding(.horizontal, 14).padding(.bottom, 4)
+                    ForEach(authVM.savedGitHubAccounts) { acct in
+                        Button { authVM.switchGitHubAccount(to: acct) } label: {
+                            HStack(spacing: 10) {
+                                GitHubAvatarView(
+                                    url: acct.avatarURL.flatMap { URL(string: $0) },
+                                    letter: acct.displayName,
+                                    size: 28,
+                                    accent: chrome.accent
+                                )
+                                Text(acct.displayName)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.9))
+                                Spacer()
+                                if acct.id == authVM.githubUsername {
+                                    Text("LIVE")
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                        .foregroundColor(Color(hex: "#00ff88"))
+                                }
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 6)
+                        }
+                    }
+                }
 
                 row("Apple ID", authVM.appleUserId.isEmpty ? "Not signed in" : authVM.username) { authVM.signInWithApple() }
                 row("GitHub", authVM.githubConnected ? authVM.githubUsername : "Tap to connect") {
@@ -115,3 +146,40 @@ public struct ProfileSheet: View {
             .padding(.horizontal, 14).padding(.vertical, 10)
     }
 }
+
+/// Shared GitHub avatar. Letter fallback only when unsigned or the image fetch failed.
+struct GitHubAvatarView: View {
+    let url: URL?
+    let letter: String
+    var size: CGFloat = 34
+    let accent: Color
+
+    var body: some View {
+        ZStack {
+            Circle().fill(accent.opacity(0.15)).frame(width: size, height: size)
+            Circle().stroke(accent.opacity(0.4), lineWidth: 1).frame(width: size, height: size)
+            if let url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                            .frame(width: size, height: size)
+                            .clipShape(Circle())
+                    default:
+                        letterGlyph
+                    }
+                }
+            } else {
+                letterGlyph
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    private var letterGlyph: some View {
+        Text(letter.prefix(1).uppercased())
+            .font(.system(size: max(11, size * 0.38), weight: .bold, design: .monospaced))
+            .foregroundColor(accent)
+    }
+}
+

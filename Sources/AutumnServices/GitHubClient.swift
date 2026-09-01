@@ -27,11 +27,24 @@ public actor GitHubClient {
 
     private var token: String? { _token }
 
+    /// GitHub 403s requests with no User-Agent.
+    private let userAgent = "Autumn-iOS/1.0.2 (com.dartmeadow.autumn; +https://leatr.xyz)"
+
     private func headers() -> [String: String] {
         var h = ["Accept": "application/vnd.github+json",
-                 "X-GitHub-Api-Version": "2022-11-28"]
+                 "X-GitHub-Api-Version": "2022-11-28",
+                 "User-Agent": userAgent]
         if let t = token { h["Authorization"] = "Bearer \(t)" }
         return h
+    }
+
+    /// GitHub avatar CDN: https://avatars.githubusercontent.com/u/ID?v=4 — pin s=128.
+    nonisolated public static func sizedAvatarURL(from string: String?) -> URL? {
+        guard var s = string, !s.isEmpty else { return nil }
+        if !s.contains("s=") {
+            s += s.contains("?") ? "&s=128" : "?s=128"
+        }
+        return URL(string: s)
     }
 
     // MARK: — Device Flow OAuth (zero client-secret path)
@@ -41,7 +54,9 @@ public actor GitHubClient {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        req.httpBody = "client_id=\(clientId)&scope=repo%2Cread%3Auser".data(using: .utf8)
+        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        let scope = AutumnConfig.githubScopes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "repo%2Cread%3Auser"
+        req.httpBody = "client_id=\(clientId)&scope=\(scope)".data(using: .utf8)
         let (data, _) = try await session.data(for: req)
         return try JSONDecoder().decode(DeviceFlowStart.self, from: data)
     }
@@ -52,6 +67,7 @@ public actor GitHubClient {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         req.httpBody = "client_id=\(clientId)&device_code=\(deviceCode)&grant_type=urn:ietf:params:oauth:grant-type:device_code".data(using: .utf8)
         let (data, _) = try await session.data(for: req)
         struct Poll: Decodable { let access_token: String?; let error: String? }
@@ -65,10 +81,24 @@ public actor GitHubClient {
         return try JSONDecoder().decode([GitHubRepo].self, from: data)
     }
 
-    public func fetchAuthenticatedUser() async throws -> String {
-        struct GHUser: Decodable { let login: String }
+    /// Single GET /user — login + avatar_url + name. Do not split into two requests.
+    public func fetchAuthenticatedProfile() async throws -> GitHubUserProfile {
+        struct GHUser: Decodable {
+            let login: String
+            let name: String?
+            let avatar_url: String?
+        }
         let data = try await get("/user")
-        return try JSONDecoder().decode(GHUser.self, from: data).login
+        let u = try JSONDecoder().decode(GHUser.self, from: data)
+        return GitHubUserProfile(
+            login: u.login,
+            name: u.name,
+            avatarURL: Self.sizedAvatarURL(from: u.avatar_url)
+        )
+    }
+
+    public func fetchAuthenticatedUser() async throws -> String {
+        try await fetchAuthenticatedProfile().login
     }
 
     public func fetchFollowing() async throws -> [GitHubFollowUser] {
@@ -77,11 +107,7 @@ public actor GitHubClient {
     }
 
     public func fetchAvatarURL() async throws -> URL? {
-
-        struct GHUser: Decodable { let avatar_url: String? }
-        let data = try await get("/user")
-        guard let s = try JSONDecoder().decode(GHUser.self, from: data).avatar_url else { return nil }
-        return URL(string: s)
+        try await fetchAuthenticatedProfile().avatarURL
     }
 
     public func createRepo(name: String, isPrivate: Bool = true, description: String = "") async throws -> GitHubRepo {
@@ -278,6 +304,12 @@ public struct DeviceFlowStart: Decodable, Sendable {
         case interval
     }
 }
+public struct GitHubUserProfile: Sendable {
+    public let login: String
+    public let name: String?
+    public let avatarURL: URL?
+}
+
 public struct GitHubFollowUser: Decodable, Sendable, Identifiable {
     public var id: String { login }
     public let login: String
