@@ -53,8 +53,17 @@ targets:
       - path: Sources/AutumnApp/PrivacyInfo.xcprivacy
         type: file
       - Sources/AutumnApp/Assets.xcassets
-      - path: Sources/AutumnApp/Resources
+      # Copy Themes/NLP as named folders at the .app root — never a folder
+      # named Resources (iOS treats the .app as Resources; a nested Resources
+      # dir makes codesign treat AppIcon PNGs as unsigned nested code).
+      - path: Sources/AutumnApp/Resources/Themes
         type: folder
+        buildPhase: resources
+      - path: Sources/AutumnApp/Resources/NLP
+        type: folder
+        buildPhase: resources
+      - path: Sources/AutumnApp/Resources/elements.json
+        type: file
         buildPhase: resources
     info:
       path: Sources/AutumnApp/Info.plist
