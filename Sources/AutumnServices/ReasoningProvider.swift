@@ -42,6 +42,14 @@ public struct LexicalMetadata: Sendable, Codable {
     public let emotion: String
     public let shell: String
     public let expressionLayer: String
+
+    public init(toolRoute: String, buoyancy: Double, emotion: String, shell: String, expressionLayer: String) {
+        self.toolRoute = toolRoute
+        self.buoyancy = buoyancy
+        self.emotion = emotion
+        self.shell = shell
+        self.expressionLayer = expressionLayer
+    }
 }
 
 // MARK: — Apple Foundation Models Provider

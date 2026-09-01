@@ -79,6 +79,29 @@ public actor AutumnGASClient {
     }
 
     /// Replace-write a JSON array (admin mailbox move/delete). Matches web `_admWriteJson` GAS path.
+    /// Canvas / presence ping. Same GAS as web logpresence plus a session node.
+    public func pingPresence(message: String, response: String, emotion: String, buoyancy: Double, uid: String = "ios-guest") async {
+        await writeSession(uid: uid, sid: "presence-" + hexId(), extra: [
+            "message": message,
+            "response": response,
+            "emotion": emotion,
+            "buoyancy": String(format: "%.3f", buoyancy)
+        ])
+        let data: [String: Any] = [
+            "platform": "ios",
+            "message": message,
+            "response": response,
+            "emotion": emotion,
+            "buoyancy": String(format: "%.3f", buoyancy),
+            "ts": ISO8601DateFormatter().string(from: Date()),
+            "uid": uid
+        ]
+        if let raw = try? JSONSerialization.data(withJSONObject: data),
+           let json = String(data: raw, encoding: .utf8) {
+            await logPresence(token: "", dataJSON: json)
+        }
+    }
+
     @discardableResult
     public func ashwriteReplace(path: String, uid: String, payload: Any, message: String) async -> Bool {
         let body: [String: Any] = [
