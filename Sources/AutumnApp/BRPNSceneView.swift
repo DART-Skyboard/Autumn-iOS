@@ -181,17 +181,21 @@ struct BRPNSceneKitView: UIViewRepresentable {
         context.coordinator.vm = vm
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(vm: vm) }
+    func makeCoordinator() -> Coordinator { Coordinator(vm: vm, animator: vm.animator) }
 
     class Coordinator: NSObject, SCNSceneRendererDelegate {
         var vm: BRPNSceneViewModel
+        let animator: BRPNAnimator
         private var lastPan = CGPoint.zero
         private var pinch0: Float = 5
-        init(vm: BRPNSceneViewModel) { self.vm = vm }
+        init(vm: BRPNSceneViewModel, animator: BRPNAnimator) {
+            self.vm = vm
+            self.animator = animator
+        }
 
         func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
             // Tick on the render thread — matches JS RAF. Do not hop to main.
-            vm.animator.tick()
+            animator.tick()
         }
 
         @objc func pan(_ g: UIPanGestureRecognizer) {
@@ -200,17 +204,21 @@ struct BRPNSceneKitView: UIViewRepresentable {
             let dx = Float(p.x - lastPan.x)
             let dy = Float(p.y - lastPan.y)
             lastPan = p
-            vm.applyDrag(dx: dx, dy: dy)
+            // JS: rotY+=(e.clientX-prevX)*0.005; rotX+=(e.clientY-prevY)*0.005; clamp rotX ±1.2
+            animator.rotY += dx * 0.005
+            animator.rotX += dy * 0.005
+            animator.rotX = max(-1.2, min(1.2, animator.rotX))
+            if animator.looking { animator.camIdle = 0 }
         }
 
         @objc func pinch(_ g: UIPinchGestureRecognizer) {
             if g.state == .began {
-                pinch0 = vm.cameraNode?.position.z ?? 5
+                pinch0 = animator.camera?.position.z ?? 5
             }
             // JS wheel: camera.position.z += deltaY*0.005; pinch scale maps similarly
             let z = pinch0 / Float(max(0.2, g.scale))
-            let minZ: Float = vm.animator.looking ? 0.85 : 2.5
-            vm.cameraNode?.position.z = max(minZ, min(10, z))
+            let minZ: Float = animator.looking ? 0.85 : 2.5
+            animator.camera?.position.z = max(minZ, min(10, z))
         }
     }
 }
