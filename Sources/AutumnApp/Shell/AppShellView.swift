@@ -146,8 +146,9 @@ public struct AppShellView: View {
         return HStack(spacing: 8) {
             Image("AutumnLogo")
                 .resizable()
-                .scaledToFit()
+                .scaledToFill()
                 .frame(width: 28, height: 28)
+                .clipShape(Circle())
             VStack(alignment: .leading, spacing: 0) {
                 Text("Autumn")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
@@ -173,7 +174,7 @@ public struct AppShellView: View {
         let chrome = themeVM.chrome
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image("AutumnLogo").resizable().scaledToFit().frame(width: 22, height: 22)
+                Image("AutumnLogo").resizable().scaledToFill().frame(width: 22, height: 22).clipShape(Circle())
                 Text("Autumn")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundColor(chrome.accent)

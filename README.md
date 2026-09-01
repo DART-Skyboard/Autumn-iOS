@@ -11,6 +11,9 @@ Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/tes
 
 1. **Ash Canvas drawer** matches web: scene → EmoHUD → `#ash-canvas-trigger` (always visible, padding 3×12, ~0.45rem) → drawer expands DOWN over chat (max-height 0→520, cubic-bezier). Trigger is the collapse control. Scene stays put. Themed chrome + `#a78bfa` ac accents. No overlay covering the 3D stage.
 2. **GitHub avatar** in the header chip, profile sheet, and account list. Single `GET /user` decodes `login` + `avatar_url` + `name`. Refresh on `applyOAuthToken`, `restoreSession`, and `switchGitHubAccount`. Persist URL in Keychain. `?s=128`. User-Agent on API calls. Letter fallback only if unsigned / fetch failed. No PAT.
+3. **Mantis Radar** native 2D MapKit + 3D globe (not WKWebView). Live ADS-B from adsb.lol / adsb.fi / OpenSky at device lat/lon. CelesTrak TLE on the globe. Dark tiles (CARTO when keyed, else ESRI World Dark Gray).
+4. **Theme videos** mute + autoplay + loop forever (`AVPlayerLooper` + end-of-item seek). New clip loops on theme change. VOID overlay hides; CLEAR still loops.
+5. **Header logo** is circular (`clipShape(Circle())`) in portrait topBar and landscape drawer.
 
 ## Build 57
 

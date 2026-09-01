@@ -255,104 +255,33 @@ public final class MantisViewModel: ObservableObject {
         }
     }
 
-    // MARK: — ADS-B (real aircraft via ADSB Exchange public API)
+    // MARK: — ADS-B / TLE counts (live feed; geospatial overlays live on MantisRadarView)
     private func startADSB() {
-        fetchADSB()
-        adsbTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            Task { await self?.fetchADSBAsync() }
+        RadarFeed.shared.start()
+        pollFeed()
+        adsbTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.pollFeed() }
         }
     }
 
-    private func fetchADSB() {
-        Task { await fetchADSBAsync() }
-    }
-
-    private func fetchADSBAsync() async {
-        // Using adsbexchange.com rapid API — public endpoint
-        guard let url = URL(string: "https://api.adsb.lol/v2/lat/25.77/lon/-80.19/dist/\(rangeNm)") else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            struct ADSBResponse: Decodable { let ac: [ADSBAircraft]? }
-            struct ADSBAircraft: Decodable { let flight: String?; let alt_baro: AnyCodable? }
-            struct AnyCodable: Decodable { init(from decoder: Decoder) throws {} }
-            if let resp = try? JSONDecoder().decode(ADSBResponse.self, from: data),
-               let ac = resp.ac {
-                await MainActor.run {
-                    self.aircraftCount = ac.count
-                    self.adsbActive = true
-                }
-                addAircraftNodes(count: ac.count)
-            }
-        } catch {
-            await MainActor.run { self.adsbActive = false }
-        }
-    }
-
-    private func addAircraftNodes(count: Int) {
-        // Remove old
-        scene.rootNode.childNodes.filter{$0.name=="aircraft"}.forEach{$0.removeFromParentNode()}
-        // Add simplified markers
-        let geo = SCNSphere(radius: 0.15)
-        geo.firstMaterial?.diffuse.contents = UIColor.orange.withAlphaComponent(0.8)
-        geo.firstMaterial?.emission.contents = UIColor.orange.withAlphaComponent(0.4)
-        geo.firstMaterial?.lightingModel = .constant
-        for _ in 0..<min(count, 30) {
-            let n = SCNNode(geometry: geo)
-            n.name = "aircraft"
-            n.position = SCNVector3(
-                Float.random(in:-80...80),
-                Float.random(in:20...60),
-                Float.random(in:-80...80))
-            scene.rootNode.addChildNode(n)
-        }
-    }
-
-    // MARK: — TLE / Orbital (CelesTrak)
     private func startTLE() {
-        fetchTLE()
-        tleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { await self?.fetchTLEAsync() }
+        RadarFeed.shared.start()
+        pollFeed()
+        tleTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.pollFeed() }
         }
     }
 
-    private func fetchTLE() { Task { await fetchTLEAsync() } }
-
-    private func fetchTLEAsync() async {
-        guard let url = URL(string: "https://celestrak.org/SOCRATES/query.php?CODE=ISS&FORMAT=JSON") else { return }
-        // Simpler: ISS TLE from CelesTrak
-        guard let tleURL = URL(string: "https://celestrak.org/satcat/tle.php?CATNR=25544") else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: tleURL)
-            let lines = String(data: data, encoding: .utf8)?.components(separatedBy: .newlines) ?? []
-            let count = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count / 3
-            await MainActor.run {
-                self.satelliteCount = max(1, count)
-                self.orbitalActive = true
-            }
-            addSatelliteNodes(count: max(1, count))
-        } catch {
-            // Fallback — use known satellite count
-            await MainActor.run { self.orbitalActive = false }
-        }
+    private func pollFeed() {
+        let f = RadarFeed.shared
+        aircraftCount = f.aircraft.count
+        adsbActive = f.adsbStatus.contains("LIVE")
+        satelliteCount = f.satellites.count
+        orbitalActive = f.orbitStatus.contains("LIVE")
     }
 
-    private func addSatelliteNodes(count: Int) {
-        scene.rootNode.childNodes.filter{$0.name=="satellite"}.forEach{$0.removeFromParentNode()}
-        let geo = SCNSphere(radius:0.2)
-        geo.firstMaterial?.diffuse.contents = UIColor.purple.withAlphaComponent(0.8)
-        geo.firstMaterial?.emission.contents = UIColor.purple.withAlphaComponent(0.5)
-        geo.firstMaterial?.lightingModel = .constant
-        for _ in 0..<min(count, 20) {
-            let n = SCNNode(geometry:geo)
-            n.name = "satellite"
-            let r: Float = 200
-            n.position = SCNVector3(
-                Float.random(in:-r...r),
-                Float.random(in:100...300),
-                Float.random(in:-r...r))
-            scene.rootNode.addChildNode(n)
-        }
-    }
+    private func fetchADSB() { pollFeed() }
+    private func fetchTLE() { pollFeed() }
 
     private func log(_ msg:String) {
         print("[Mantis] \(msg)")
