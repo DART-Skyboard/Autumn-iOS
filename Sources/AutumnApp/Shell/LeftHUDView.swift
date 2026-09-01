@@ -23,6 +23,10 @@ public struct LeftHUDView: View {
                 appNav.leftTab = appNav.leftTab == .aero ? .none : .aero
             }
             Button {
+                appNav.rightTab = .none
+                appNav.showMantis = false
+                appNav.studio = nil
+                appNav.showHUDTools = false
                 appNav.showRadar = true
             } label: {
                 VStack(spacing: 2) {
@@ -32,10 +36,10 @@ public struct LeftHUDView: View {
                 }
                 .foregroundColor(Color(hex: "#00ff88"))
                 .padding(.horizontal, 8).padding(.vertical, 8)
-                .background(Color(hex: "#00ff88").opacity(0.10))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: "#00ff88").opacity(0.35), lineWidth: 1))
+                .moduleFrost(stroke: Color(hex: "#00ff88").opacity(appNav.showRadar ? 0.7 : 0.35), fill: appNav.showRadar ? 0.14 : 0.08)
             }
             Button {
+                appNav.showRadar = false
                 appNav.studio = .alc
             } label: {
                 VStack(spacing: 2) {
@@ -45,8 +49,7 @@ public struct LeftHUDView: View {
                 }
                 .foregroundColor(Color(hex: "#a050ff"))
                 .padding(.horizontal, 8).padding(.vertical, 8)
-                .background(Color(hex: "#a050ff").opacity(0.10))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: "#a050ff").opacity(0.35), lineWidth: 1))
+                .moduleFrost(stroke: Color(hex: "#a050ff").opacity(appNav.studio == .alc ? 0.7 : 0.35), fill: appNav.studio == .alc ? 0.14 : 0.08)
             }
             if circuit.allows(authVM) {
                 Button {
@@ -60,8 +63,7 @@ public struct LeftHUDView: View {
                     }
                     .foregroundColor(Color(hex: "#ffb347"))
                     .padding(.horizontal, 8).padding(.vertical, 8)
-                    .background(Color(hex: "#ffb347").opacity(0.12))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: "#ffb347").opacity(0.4), lineWidth: 1))
+                    .moduleFrost(stroke: Color(hex: "#ffb347").opacity(0.4), fill: 0.10)
                 }
             }
             Spacer()
@@ -81,8 +83,7 @@ public struct LeftHUDView: View {
             }
             .foregroundColor(color)
             .padding(.horizontal, 8).padding(.vertical, 8)
-            .background(color.opacity(0.10))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(color.opacity(0.35), lineWidth: 1))
+            .moduleFrost(stroke: color.opacity(0.35), fill: 0.08)
         }
     }
 }

@@ -2,12 +2,23 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 58 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 59 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
 
 
+## Build 59
+
+1. **Keyboard:** Ask Autumn lifts the whole bottom (mic / field / send) onto the system keyboard. Removed `AppShellView.ignoresSafeArea(.keyboard)`. Swipe down on the transcript dismisses; keyboard toolbar chevron stays.
+2. **Ash Canvas** when OPEN is unclipped: tools, SAVE/SEND, 200px canvas, G/M/A sockets, APPLY/LINK/DEL/RESET. `acConnectSocket` + `acApplyToNetwork` (TOOL_WEIGHTS, GEO/MAR/AERO influence, BRPN pulse, APPLIED status, journal, close drawer).
+3. **Side HUD frost** on GEO/MAR/AERO/RADAR/ALC/TOOLS and MIST/STAR/SHARD/SYS drawers — ultraThinMaterial glass, not opaque slabs.
+4. **Mantis Radar** explicit **2D / 3D** toggle. 2D = MapKit + live ADS-B. 3D = SceneKit globe (rotating earth, ADS-B, CelesTrak TLE). RADAR opens this studio, not MIST.
+5. **Afterlife Crossing** full web port: ALC + NAMO tabs, harpmaker quote, age calculator, NYC namography, export to Ash.
+6. **Profile** is a frosted card only — no full-screen dim. Tint from GitHub avatar.
+7. **Header logo** circular (`AutumnLogoMark`). Maze 57 math unchanged.
+
 ## Build 58
+
 
 1. **Ash Canvas drawer** matches web: scene → EmoHUD → `#ash-canvas-trigger` (always visible, padding 3×12, ~0.45rem) → drawer expands DOWN over chat (max-height 0→520, cubic-bezier). Trigger is the collapse control. Scene stays put. Themed chrome + `#a78bfa` ac accents. No overlay covering the 3D stage.
 2. **GitHub avatar** in the header chip, profile sheet, and account list. Single `GET /user` decodes `login` + `avatar_url` + `name`. Refresh on `applyOAuthToken`, `restoreSession`, and `switchGitHubAccount`. Persist URL in Keychain. `?s=128`. User-Agent on API calls. Letter fallback only if unsigned / fetch failed. No PAT.

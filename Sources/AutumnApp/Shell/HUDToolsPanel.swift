@@ -13,8 +13,7 @@ struct HUDToolsTab: View {
                 .tracking(1.4)
                 .foregroundColor(Color(hex: "#00e5ff").opacity(0.75))
                 .padding(.horizontal, 6).padding(.vertical, 10)
-                .background(Color.white.opacity(0.05))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(hex: "#00e5ff").opacity(0.25), lineWidth: 1))
+                .moduleFrost(stroke: Color(hex: "#00e5ff").opacity(0.25), corner: 6, fill: 0.05)
         }
     }
 }
@@ -40,7 +39,7 @@ struct HUDToolsPanel: View {
             tool("WORLD", key: .worldStudio)
             tool("N.A.T.E", key: .nate)
             Button { appNav.showMantis = true; appNav.showHUDTools = false } label: { row("MANTIS NAV") }
-            Button { appNav.showRadar = true; appNav.showHUDTools = false } label: { row("RADAR") }
+            Button { appNav.rightTab = .none; appNav.showMantis = false; appNav.studio = nil; appNav.showRadar = true; appNav.showHUDTools = false } label: { row("RADAR") }
             tool("ALC", key: .alc)
             tool("MOVEMENT", key: .movement)
             tool("HELP", key: .help)
@@ -49,9 +48,10 @@ struct HUDToolsPanel: View {
             }
         }
         .padding(10)
-        .background(chrome.surface.opacity(0.92))
+        .background(.ultraThinMaterial)
+        .background(Color.white.opacity(0.08))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.22), lineWidth: 1))
-        .cornerRadius(10)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func tool(_ title: String, key: AppNavigation.StudioKind) -> some View {

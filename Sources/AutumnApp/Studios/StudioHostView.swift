@@ -10,6 +10,9 @@ struct StudioHostView: View {
     @EnvironmentObject var chatVM: ChatViewModel
 
     var body: some View {
+        if kind == .alc {
+            ALCStudioView()
+        } else {
         ZStack(alignment: .topTrailing) {
             themeVM.chrome.base.ignoresSafeArea()
             VStack(spacing: 0) {
@@ -43,6 +46,7 @@ struct StudioHostView: View {
             }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 }
 

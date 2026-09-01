@@ -307,6 +307,16 @@ public final class BRPNSceneViewModel: ObservableObject {
         }
     }
 
+    /// JS getAshCanvasInfluence + _acShellBoost
+    public func applyAshInfluence(geo: Double, mar: Double, aero: Double) {
+        animator.acInfluence = (Float(geo), Float(mar), Float(aero))
+        pulseShells(1.3)
+    }
+
+    public func clearAshInfluence() {
+        animator.acInfluence = nil
+    }
+
     public func updateFrame() {
         animator.tick()
     }
@@ -591,6 +601,8 @@ final class BRPNAnimator {
     var rotY: Float = 0
     var orbFrame = 0
     var shellPulse: Float = 0
+    var acInfluence: (geo: Float, mar: Float, aero: Float)? = nil
+    var acShellBoost: [Float] = [0, 0, 0]
     var orbThinking = false
     var mazeOrbState = MazeOrbState()
     var looking = false
@@ -628,6 +640,15 @@ final class BRPNAnimator {
         let isThinking = orbThinking
         let thinkBoost: Float = isThinking ? 1.0 : 0.0
 
+        // Ash Canvas boost — JS _acShellBoost from getAshCanvasInfluence
+        if let inf = acInfluence {
+            acShellBoost[0] = min(0.14, inf.geo * 0.035)
+            if acShellBoost.count > 1 { acShellBoost[1] = min(0.10, inf.mar * 0.028) }
+            if acShellBoost.count > 2 { acShellBoost[2] = min(0.08, inf.aero * 0.022) }
+        } else {
+            for i in 0..<acShellBoost.count { acShellBoost[i] *= 0.92 }
+        }
+
         // Shells — JS: rot x=rotX+f*0.0015*(i+1) y=rotY+f*0.002*(i+1) scale 1+sin(f*0.03+i)*0.03
         for (i, m) in shells.enumerated() {
             m.eulerAngles.x = rotX + f * 0.0015 * Float(i + 1)
@@ -640,7 +661,8 @@ final class BRPNAnimator {
             let baseOp = 0.15 + Float(i) * 0.06
             let pulseOp = shellPulse * 0.04 * sin(f * 0.04 + Float(i))
             let thinkOp: Float = isThinking ? 0.06 * sin(f * 0.08 + Float(i)) : 0
-            let op = max(0.05, min(0.7, baseOp + pulseOp + thinkOp))
+            let acBoost = i < acShellBoost.count ? acShellBoost[i] : 0
+            let op = max(0.05, min(0.7, baseOp + pulseOp + thinkOp + acBoost))
             if i < shellColors.count {
                 let col = shellColors[i].withAlphaComponent(CGFloat(op))
                 m.geometry?.firstMaterial?.emission.contents = col

@@ -29,8 +29,7 @@ public struct RightRailView: View {
                 .tracking(1.2)
                 .foregroundColor(selected ? chrome.accent : chrome.textSecondary)
                 .padding(.horizontal, 8).padding(.vertical, 10)
-                .background(selected ? chrome.accent.opacity(0.15) : chrome.surface.opacity(0.7))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(chrome.accent.opacity(selected ? 0.5 : 0.2), lineWidth: 1))
+                .moduleFrost(stroke: chrome.accent.opacity(selected ? 0.55 : 0.22), fill: selected ? 0.14 : 0.08)
         }
     }
 }

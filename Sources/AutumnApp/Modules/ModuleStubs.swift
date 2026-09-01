@@ -33,10 +33,11 @@ struct OverlayPanel<Content: View>: View {
             .background(chrome.accent.opacity(0.06))
             content
         }
-        .background(chrome.base.opacity(0.92))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.25), lineWidth: 1))
-        .cornerRadius(10)
-        .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
+        .background(.ultraThinMaterial)
+        .background(Color.white.opacity(0.08))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.28), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
     }
 }
 

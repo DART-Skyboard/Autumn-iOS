@@ -1,18 +1,26 @@
 import SwiftUI
+import UIKit
 import AuthenticationServices
 import AutumnServices
 
 /// Profile: GitHub login, Enable/Disable Admin (dartsolarpunk only). Matches web gh-user-menu.
+/// Frosted card only — NO full-screen dim. Tap outside the card still dismisses.
 public struct ProfileSheet: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
     @EnvironmentObject var circuit: AdminCircuitMonitor
+    @StateObject private var tint = AvatarTintSampler()
 
     public var body: some View {
         let chrome = themeVM.chrome
         ZStack(alignment: .topTrailing) {
-            Color.black.opacity(0.5).ignoresSafeArea().onTapGesture { appNav.showProfile = false }
+            // Transparent hit target only — never a black dim wash.
+            Color.clear
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .onTapGesture { appNav.showProfile = false }
+
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("PROFILE").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(2).foregroundColor(chrome.accent)
@@ -119,14 +127,23 @@ public struct ProfileSheet: View {
                         .frame(maxWidth: .infinity).padding(14)
                 }
             }
-            .frame(width: 300)
-            .background(Color(hex: "#040c16").opacity(0.97))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.25), lineWidth: 1))
-            .cornerRadius(10)
+            .frame(width: min(320, UIScreen.main.bounds.width - 32))
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 14).fill(tint.tint.opacity(0.82))
+                    RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.28))
+                }
+            }
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(chrome.accent.opacity(0.35), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
             .padding(.top, 56)
             .padding(.trailing, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         }
+        .onAppear { tint.sample(url: authVM.githubAvatarURL) }
+        .onChange(of: authVM.githubAvatarURL) { u in tint.sample(url: u) }
     }
 
     private func row(_ k: String, _ v: String, action: @escaping () -> Void) -> some View {

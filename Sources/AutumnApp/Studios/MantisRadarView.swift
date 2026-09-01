@@ -20,8 +20,8 @@ struct MantisRadarView: View {
                     .foregroundColor(cyan)
                 Spacer()
                 HStack(spacing: 0) {
-                    tab("AERIAL", on: aerial) { aerial = true }
-                    tab("ORBITAL", on: !aerial) { aerial = false }
+                    tab("2D", on: aerial) { aerial = true }
+                    tab("3D", on: !aerial) { aerial = false }
                 }
                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(cyan.opacity(0.25), lineWidth: 1))
             }
@@ -38,7 +38,7 @@ struct MantisRadarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack {
-                Text(aerial ? feed.adsbStatus : feed.orbitStatus)
+                Text(aerial ? "2D AERIAL  \(feed.adsbStatus)" : "3D ORBITAL  \(feed.orbitStatus)")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(cyan)
                 Spacer()
@@ -180,11 +180,13 @@ struct RadarGlobeView: UIViewRepresentable {
         v.allowsCameraControl = true
         v.antialiasingMode = .multisampling4X
         v.autoenablesDefaultLighting = false
+        let spin = SCNAction.repeatForever(SCNAction.rotateBy(x: 0, y: CGFloat.pi * 2, z: 0, duration: 80))
+        context.coordinator.root.runAction(spin)
         return v
     }
 
     func updateUIView(_ v: SCNView, context: Context) {
-        context.coordinator.sync(sats: feed.satellites, userLat: feed.userLat, userLon: feed.userLon)
+        context.coordinator.sync(sats: feed.satellites, aircraft: feed.aircraft, userLat: feed.userLat, userLon: feed.userLon)
     }
 
     func makeCoordinator() -> Globe { Globe() }
@@ -192,19 +194,23 @@ struct RadarGlobeView: UIViewRepresentable {
     final class Globe {
         let root = SCNNode()
         let satRoot = SCNNode()
+        let acRoot = SCNNode()
         let userNode = SCNNode()
         let earthR: Float = 1.0
 
         func buildScene() -> SCNScene {
             let scene = SCNScene()
             let earth = SCNSphere(radius: CGFloat(earthR))
-            earth.segmentCount = 48
+            earth.segmentCount = 64
             let mat = SCNMaterial()
-            mat.diffuse.contents = UIColor(red: 0.04, green: 0.12, blue: 0.16, alpha: 1)
-            mat.emission.contents = UIColor(red: 0, green: 0.4, blue: 0.45, alpha: 0.25)
-            mat.multiply.contents = UIColor(red: 0.05, green: 0.18, blue: 0.22, alpha: 1)
+            mat.diffuse.contents = Self.earthTexture()
+            mat.emission.contents = UIColor(red: 0, green: 0.25, blue: 0.35, alpha: 0.18)
+            mat.lightingModel = .phong
+            mat.locksAmbientWithDiffuse = true
+            mat.specular.contents = UIColor(white: 0.25, alpha: 1)
             earth.firstMaterial = mat
             let earthNode = SCNNode(geometry: earth)
+            earthNode.name = "earth"
             root.addChildNode(earthNode)
 
             let grid = SCNSphere(radius: CGFloat(earthR) * 1.002)
@@ -224,6 +230,7 @@ struct RadarGlobeView: UIViewRepresentable {
             userNode.geometry = userGeo
             root.addChildNode(userNode)
             root.addChildNode(satRoot)
+            root.addChildNode(acRoot)
 
             let amb = SCNNode()
             amb.light = { let l = SCNLight(); l.type = .ambient; l.intensity = 400; l.color = UIColor.white; return l }()
@@ -242,9 +249,10 @@ struct RadarGlobeView: UIViewRepresentable {
             return scene
         }
 
-        func sync(sats: [RadarSat], userLat: Double, userLon: Double) {
+        func sync(sats: [RadarSat], aircraft: [RadarAircraft], userLat: Double, userLon: Double) {
             userNode.position = xyz(lat: userLat, lon: userLon, altKm: 0)
             satRoot.childNodes.forEach { $0.removeFromParentNode() }
+            acRoot.childNodes.forEach { $0.removeFromParentNode() }
             let geo = SCNSphere(radius: 0.012)
             geo.firstMaterial?.diffuse.contents = UIColor.orange
             geo.firstMaterial?.emission.contents = UIColor.orange.withAlphaComponent(0.8)
@@ -254,6 +262,41 @@ struct RadarGlobeView: UIViewRepresentable {
                 n.position = xyz(lat: s.lat, lon: s.lon, altKm: max(200, s.altKm))
                 n.name = s.name
                 satRoot.addChildNode(n)
+            }
+            let acg = SCNSphere(radius: 0.01)
+            acg.firstMaterial?.diffuse.contents = UIColor.cyan
+            acg.firstMaterial?.emission.contents = UIColor.cyan
+            acg.firstMaterial?.lightingModel = .constant
+            for a in aircraft.prefix(80) {
+                let n = SCNNode(geometry: acg)
+                let altKm = (a.altitude ?? 30000) * 0.0003048
+                n.position = xyz(lat: a.lat, lon: a.lon, altKm: max(8, altKm))
+                n.name = a.callsign
+                acRoot.addChildNode(n)
+            }
+        }
+
+        static func earthTexture() -> UIImage {
+            let s: CGFloat = 512
+            let r = UIGraphicsImageRenderer(size: CGSize(width: s, height: s))
+            return r.image { ctx in
+                UIColor(red: 0.02, green: 0.08, blue: 0.16, alpha: 1).setFill()
+                ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
+                let c = ctx.cgContext
+                // land blobs
+                UIColor(red: 0.12, green: 0.32, blue: 0.22, alpha: 1).setFill()
+                let lands: [(CGFloat,CGFloat,CGFloat,CGFloat)] = [
+                    (40,90,130,90),(200,70,90,70),(320,110,140,80),(80,250,160,70),
+                    (280,280,120,90),(420,160,70,110),(10,360,180,80),(250,380,160,60)
+                ]
+                for (x,y,w,h) in lands {
+                    c.fillEllipse(in: CGRect(x: x, y: y, width: w, height: h))
+                }
+                // night terminator wash
+                let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                   colors: [UIColor.clear.cgColor, UIColor(white: 0, alpha: 0.45).cgColor] as CFArray,
+                                   locations: [0,1])!
+                c.drawLinearGradient(g, start: CGPoint(x: s*0.35, y: 0), end: CGPoint(x: s, y: 0), options: [])
             }
         }
 

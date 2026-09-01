@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import AutumnServices
 import LEATRCore
 
@@ -15,6 +16,7 @@ public struct AppShellView: View {
     @EnvironmentObject var appNav: AppNavigation
     @EnvironmentObject var circuit: AdminCircuitMonitor
     @EnvironmentObject var journalVM: JournalViewModel
+    @State private var keyboardUp = false
 
     public var body: some View {
         GeometryReader { geo in
@@ -50,8 +52,15 @@ public struct AppShellView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
+        // Chat/input stack must NOT ignore the keyboard. Removing this lets the
+        // Ask Autumn bar rest directly above the system keyboard.
         .preferredColorScheme(themeVM.current == .day ? .light : .dark)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardUp = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardUp = false
+        }
         .animation(.easeInOut(duration: 0.25), value: appNav.showProfile)
         .animation(.easeInOut(duration: 0.25), value: appNav.showAdmin)
         .animation(.easeInOut(duration: 0.25), value: appNav.rightTab)
@@ -97,15 +106,15 @@ public struct AppShellView: View {
                 ChatView()
                     .frame(maxHeight: .infinity)
                     .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
-                AshCanvasView()
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .frame(height: appNav.showAshCanvas ? chatMax : 0, alignment: .top)
-                    .clipped()
-                    .opacity(appNav.showAshCanvas ? 1 : 0)
-                    .allowsHitTesting(appNav.showAshCanvas)
+                if appNav.showAshCanvas {
+                    AshCanvasView()
+                        .frame(maxWidth: .infinity, alignment: .top)
+                }
             }
-            .frame(maxHeight: chatMax)
-            footerBar
+            .frame(maxHeight: appNav.showAshCanvas ? 520 : chatMax)
+            if !keyboardUp {
+                footerBar
+            }
         }
     }
 
@@ -144,11 +153,7 @@ public struct AppShellView: View {
     private var topBar: some View {
         let chrome = themeVM.chrome
         return HStack(spacing: 8) {
-            Image("AutumnLogo")
-                .resizable()
-                .scaledToFill()
-                .frame(width: 28, height: 28)
-                .clipShape(Circle())
+            AutumnLogoMark(size: 28)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Autumn")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
@@ -174,7 +179,7 @@ public struct AppShellView: View {
         let chrome = themeVM.chrome
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image("AutumnLogo").resizable().scaledToFill().frame(width: 22, height: 22).clipShape(Circle())
+                AutumnLogoMark(size: 22)
                 Text("Autumn")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundColor(chrome.accent)
@@ -348,6 +353,8 @@ public final class AppNavigation: ObservableObject {
     @Published public var showMantis = false
     @Published public var showRadar = false
     @Published public var showAshCanvas = false
+    @Published public var ashApplied = false
+    @Published public var ashStatusLabel = "NEURAL INFLUENCE"
     @Published public var studio: StudioKind? = nil
 
     public enum LeftTab { case none, geo, mar, aero }
