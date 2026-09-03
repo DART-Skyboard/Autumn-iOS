@@ -70,7 +70,7 @@ struct ModuleOverlayHost: View {
                             }
                         }
                         .frame(width: land ? min(geo.size.width - 24, 520) : min(300, geo.size.width - 52))
-                        .frame(maxHeight: land ? geo.size.height - 16 : min(geo.size.height - 16, 520))
+                        .frame(maxHeight: land ? geo.size.height - 16 : min(geo.size.height - 16, appNav.rightTab == .shard ? 780 : 640))
                         .padding(.trailing, land ? 10 : 46)
                         .padding(.leading, land ? 10 : 0)
                         .padding(.top, 8)

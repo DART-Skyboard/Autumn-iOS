@@ -20,6 +20,7 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var adsbStatus = "ADS-B OFFLINE"
     @Published var orbitStatus = "ORBITAL OFFLINE"
     @Published var rangeKm: Double = 50
+    @Published var selectedSat: RadarSat? = nil
 
     private let loc = CLLocationManager()
     private var adsbTimer: Timer?
@@ -133,9 +134,17 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
         let now = Date()
         satellites = parsed.compactMap { body in
             let p = body.geodetic(at: now)
-            return RadarSat(id: body.id, name: body.name, lat: p.lat, lon: p.lon, altKm: p.altKm)
+            return RadarSat(
+                id: body.id, name: body.name,
+                lat: p.lat, lon: p.lon, altKm: p.altKm,
+                inc: body.inc, raan: body.raan, ecc: body.ecc,
+                argp: body.argp, m0: body.m0, n: body.n, epoch: body.epoch
+            )
         }
         if satellites.count > 220 { satellites = Array(satellites.prefix(220)) }
+        if let sel = selectedSat, let updated = satellites.first(where: { $0.id == sel.id }) {
+            selectedSat = updated
+        }
         orbitStatus = "ORBITAL LIVE (\(satellites.count))"
     }
 
@@ -165,7 +174,13 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
             let cs = ((s[1] as? String) ?? icao).trimmingCharacters(in: .whitespaces)
             let alt = s[7] as? Double
             let track = s[10] as? Double
-            return RadarAircraft(id: icao, callsign: cs, lat: la, lon: lo, altitude: alt, track: track)
+            let onGround = (s.count > 8) && ((s[8] as? Bool) == true || (s[8] as? NSNumber)?.boolValue == true)
+            var cat = 0
+            if s.count > 17 {
+                if let n = s[17] as? Int { cat = n }
+                else if let n = s[17] as? NSNumber { cat = n.intValue }
+            }
+            return RadarAircraft(id: icao, callsign: cs, lat: la, lon: lo, altitude: alt, track: track, category: cat, typeCode: "", onGround: onGround)
         }
         return mapped.isEmpty ? nil : mapped
     }
@@ -194,11 +209,23 @@ struct RadarAircraft: Identifiable {
     let lon: Double
     let altitude: Double?
     let track: Double?
+    let category: Int
+    let typeCode: String
+    let onGround: Bool
+    let icon: String
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: lat, longitude: lon) }
+    var rotatesWithTrack: Bool {
+        switch icon {
+        case "✈", "🛩", "🚁", "🛸", "🚀": return true
+        default: return false
+        }
+    }
 
-    init(id: String, callsign: String, lat: Double, lon: Double, altitude: Double?, track: Double?) {
+    init(id: String, callsign: String, lat: Double, lon: Double, altitude: Double?, track: Double?, category: Int = 0, typeCode: String = "", onGround: Bool = false) {
         self.id = id; self.callsign = callsign; self.lat = lat; self.lon = lon
         self.altitude = altitude; self.track = track
+        self.category = category; self.typeCode = typeCode; self.onGround = onGround
+        self.icon = RadarAircraft.resolveIcon(callsign: callsign, category: category, typeCode: typeCode, onGround: onGround)
     }
 
     init?(ac: [String: Any]) {
@@ -212,7 +239,103 @@ struct RadarAircraft: Identifiable {
         if let n = ac["alt_baro"] as? NSNumber { alt = n.doubleValue }
         else if let d = ac["alt_baro"] as? Double { alt = d }
         let track = (ac["track"] as? NSNumber)?.doubleValue ?? (ac["track"] as? Double)
-        self.init(id: hex, callsign: cs, lat: lat, lon: lon, altitude: alt, track: track)
+        let typeCode = ((ac["t"] as? String) ?? (ac["type"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
+        self.init(
+            id: hex, callsign: cs, lat: lat, lon: lon, altitude: alt, track: track,
+            category: Self.parseCategory(ac["category"]),
+            typeCode: typeCode,
+            onGround: Self.parseOnGround(ac)
+        )
+    }
+
+    /// mr.html getAircraftIcon + ADS-B hex categories + ICAO type `t`.
+    static func resolveIcon(callsign: String, category: Int, typeCode: String, onGround: Bool) -> String {
+        let cs = callsign.uppercased().trimmingCharacters(in: .whitespaces)
+        if onGround {
+            if cs.range(of: "^(LIFE|MED|HEMS|AIR1|RESCUE|STARS)", options: .regularExpression) != nil { return "🚑" }
+            return "🚗"
+        }
+        if cs.range(of: "^(AF\\d|RCH|REACH|EVAC|PAT\\d|GHOST|BONE|COBRA|HAWK|EAGLE|BUCK|KNIFE|VIPER|JOLLY|PEDRO|RANGER|VIKING|SWORD|LANCE|ARROW|TALON|FURY|BRONCO|RAVEN|STORM|GRIM|REAPER|DEATH|SKULL|DARK|SPECTRE|SPOOKY|SHADOW|NIGHT|WRATH|OMEN|ABYSS)", options: .regularExpression) != nil {
+            return "🪖"
+        }
+        if cs.range(of: "^(N\\d.*P$|USAF|NASA\\d)", options: .regularExpression) != nil { return "🛩" }
+        if cs.range(of: "^(LIFE|MED|HEMS|AIR1|RESCUE|STARS|FLIGHT FOR LIFE)", options: .regularExpression) != nil { return "🚑" }
+
+        switch category {
+        case 2, 9, 12: return "🛩"
+        case 8: return "🚁"
+        case 10: return "🎈"
+        case 11: return "🪂"
+        case 13: return "🛸"
+        case 14: return "🚀"
+        case 15: return "🚑"
+        case 16: return "🚗"
+        case 1, 3, 4, 5, 6, 7: return "✈"
+        default: break
+        }
+        // ADS-B emitter category hex (A0–A7 = 160–167, B0–B7 = 176–183)
+        switch category {
+        case 161: return "🛩"   // A1 light
+        case 167: return "🚁"   // A7 rotorcraft
+        case 176: return "🛩"   // B0 glider
+        case 177: return "🎈"   // B1 LTA
+        case 178: return "🪂"   // B2 parachute
+        case 179: return "🛩"   // B3 ultralight
+        case 180: return "🛸"   // B4 UAV
+        case 181: return "🚀"   // B5 space
+        case 182: return "🚑"   // B6 emergency
+        case 183: return "🚗"   // B7 service
+        default: break
+        }
+
+        if let fromType = iconFromTypeCode(typeCode) { return fromType }
+
+        if cs.range(of: "^[0-9A-F]{6}$", options: .regularExpression) != nil { return "✈" }
+        if cs.range(of: "DRONE|UAV|UAS", options: .regularExpression) != nil { return "🛸" }
+        if cs.range(of: "HELI|CHOP|ROTOR", options: .regularExpression) != nil { return "🚁" }
+        if cs.range(of: "BALLOON|BLIMP|AIRSHIP", options: .regularExpression) != nil { return "🎈" }
+        if cs.range(of: "CARGO|ATLAS|FDX|UPS|DHL|ABX|GTI|SKW", options: .regularExpression) != nil { return "📦" }
+        return "✈"
+    }
+
+    static func iconFromTypeCode(_ t: String) -> String? {
+        let u = t.uppercased().trimmingCharacters(in: .whitespaces)
+        guard !u.isEmpty else { return nil }
+        let heli: Set<String> = [
+            "R22", "R44", "R66", "B06", "B47", "B407", "B429", "B212", "B412",
+            "EC20", "EC25", "EC30", "EC35", "EC45", "EC55", "EC75",
+            "AS50", "AS55", "AS65", "A109", "A119", "A139", "A169",
+            "S76", "S92", "H60", "H64", "UH1", "AH64", "CH47",
+            "MD50", "MD52", "MD60", "H500"
+        ]
+        if heli.contains(u) { return "🚁" }
+        if u.hasPrefix("EC") || u.hasPrefix("UH") || u.hasPrefix("AH") || u.hasPrefix("MH") || u.hasPrefix("CH") { return "🚁" }
+        if u.hasPrefix("R2") || u.hasPrefix("R4") || u.hasPrefix("R6") { return "🚁" }
+        if u.hasPrefix("Q") || u.hasPrefix("MQ") || u.hasPrefix("RQ") || u.contains("UAV") { return "🛸" }
+        if u.hasPrefix("BALL") || u == "BIMP" { return "🎈" }
+        if u.hasPrefix("GLID") || u.hasPrefix("ASK") { return "🛩" }
+        return nil
+    }
+
+    static func parseCategory(_ raw: Any?) -> Int {
+        if let n = raw as? Int { return n }
+        if let n = raw as? NSNumber { return n.intValue }
+        if let s = raw as? String {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return 0 }
+            let hexChars = CharacterSet(charactersIn: "ABCDEFabcdef")
+            if t.rangeOfCharacter(from: hexChars) != nil { return Int(t, radix: 16) ?? 0 }
+            return Int(t) ?? 0
+        }
+        return 0
+    }
+
+    static func parseOnGround(_ ac: [String: Any]) -> Bool {
+        if let b = ac["on_ground"] as? Bool { return b }
+        if let n = ac["on_ground"] as? NSNumber { return n.boolValue }
+        if let s = ac["alt_baro"] as? String, s.lowercased() == "ground" { return true }
+        if let s = ac["alt_geom"] as? String, s.lowercased() == "ground" { return true }
+        return false
     }
 }
 
@@ -222,6 +345,53 @@ struct RadarSat: Identifiable {
     let lat: Double
     let lon: Double
     let altKm: Double
+    let inc: Double
+    let raan: Double
+    let ecc: Double
+    let argp: Double
+    let m0: Double
+    let n: Double
+    let epoch: Date
+
+    var orbitClass: String {
+        if altKm < 2000 { return "LEO" }
+        if altKm < 35000 { return "MEO" }
+        return "GEO"
+    }
+
+    var periodMin: Double {
+        guard n > 1e-9 else { return 90 }
+        return min(max(1440.0 / n, 80), 1440)
+    }
+
+    var objectType: String { Self.classify(name) }
+
+    func keplerBody() -> TLEKepler.Body {
+        TLEKepler.Body(name: name, id: id, inc: inc, raan: raan, ecc: ecc, argp: argp, m0: m0, n: n, epoch: epoch)
+    }
+
+    func markerColor() -> (r: Double, g: Double, b: Double) {
+        let u = name.uppercased()
+        if u.contains("ISS") || u.contains("ZARYA") || u.contains("TIANGONG") || u.contains("CSS") {
+            return (0, 1, 0.4)
+        }
+        if u.contains("STARLINK") { return (0, 0.8, 1) }
+        if altKm < 2000 { return (0, 0.96, 1) }
+        if altKm < 35000 { return (1, 0.84, 0) }
+        return (1, 0.53, 0)
+    }
+
+    static func classify(_ name: String) -> String {
+        let u = name.uppercased()
+        if u.contains("DEB") { return "space debris" }
+        if u.contains("R/B") || u.contains("ROCKET BODY") { return "rocket body" }
+        if u.contains("ISS") || u.contains("ZARYA") || u.contains("TIANGONG") || u.contains("CSS") { return "space station" }
+        if u.contains("STARLINK") { return "Starlink satellite" }
+        let spy = ["NROL", "NOSS", "INTRUDER", "LACROSSE", "ONYX", "KEYHOLE", "CRYSTAL", "MENTOR", "ADVANCED ORION", "CLIO", "MERCURY"]
+        if u.hasPrefix("USA") || u.contains(" USA") || spy.contains(where: { u.contains($0) }) { return "spy satellite" }
+        if u == "PAN" || u.hasPrefix("PAN ") || u.contains(" PAN ") { return "spy satellite" }
+        return "satellite"
+    }
 }
 
 private extension Double {
