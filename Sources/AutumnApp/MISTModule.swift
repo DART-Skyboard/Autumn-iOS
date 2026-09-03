@@ -49,6 +49,7 @@ public final class MISTModule: ObservableObject {
         // GAS ashread of mist events
         if let gas = await AutumnGASClient.shared.ashread(path: "ashtree/mist/events.json") {
             collected.append(contentsOf: parse(gas))
+            ingestAshStars(gas)
         }
         let now = Date().timeIntervalSince1970 * 1000
         let fresh = collected.filter { now - ($0.timestamp.timeIntervalSince1970 * 1000) < STALE_MS }
@@ -89,6 +90,29 @@ public final class MISTModule: ObservableObject {
         }
     }
 
+    private func ingestAshStars(_ json: Any) {
+        var arr: [[String: Any]] = []
+        if let a = json as? [[String: Any]] { arr = a }
+        else if let d = json as? [String: Any] { arr = [d] }
+        for node in arr {
+            let type = (node["type"] as? String) ?? ""
+            guard type == "ashstar" else { continue }
+            let uid = (node["uid"] as? String) ?? "autumn"
+            let ts: Any = node["ts"] ?? node["timestamp"] ?? ""
+            let key = "\(uid)-\(ts)"
+            if seenStarKeys.contains(key) { continue }
+            seenStarKeys.insert(key)
+            if seenStarKeys.count > 200 { seenStarKeys = Set(seenStarKeys.suffix(120)) }
+            let thought = AshStarThought.sanitize((node["thought"] as? String) ?? "")
+            let color = (node["color"] as? String) ?? "#00d4ff"
+            NotificationCenter.default.post(
+                name: .autumnIncomingAshStar,
+                object: nil,
+                userInfo: ["thought": thought, "color": color, "uid": uid]
+            )
+        }
+    }
+
     private func floatVal(_ any: Any?) -> Float? {
         if let f = any as? Float { return f }
         if let d = any as? Double { return Float(d) }
@@ -122,8 +146,10 @@ public final class MISTModule: ObservableObject {
         }
     }
 
+    private var seenStarKeys: Set<String> = []
+
     public func emitAshStar(at position: SIMD3<Float>) {
-        emitAshStarPacket(thought: AshStarThought.capabilityLine(), toUids: ["all"], uid: "autumn")
+        emitAshStarPacket(thought: "", toUids: ["all"], uid: "autumn")
         ashStarActive = true
         Task { await MainActor.run { self.ashStarActive = false } }
         _ = position

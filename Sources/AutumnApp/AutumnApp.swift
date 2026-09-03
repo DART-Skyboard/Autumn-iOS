@@ -56,10 +56,14 @@ struct AutumnApp: App {
                     chatVM.memoryOwner = authVM.sessionUID
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .autumnAshStar)) { _ in
-                    let thought = AshStarThought.capabilityLine()
-                    _ = sceneVM.fireAshStar(thought: thought, force: true)
-                    AshStarArchive.push(AshStarCard(thought: thought, color: "#00d4ff", from: "autumn", uid: "autumn"))
-                    MISTModule.shared.emitAshStarPacket(thought: thought, toUids: sceneVM.connectedUids, uid: "autumn")
+                    _ = sceneVM.fireAshStar(thought: "", force: true)
+                    MISTModule.shared.emitAshStarPacket(thought: "", toUids: sceneVM.connectedUids, uid: "autumn")
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .autumnIncomingAshStar)) { note in
+                    let thought = (note.userInfo?["thought"] as? String) ?? ""
+                    let color = (note.userInfo?["color"] as? String) ?? "#00d4ff"
+                    let uid = (note.userInfo?["uid"] as? String) ?? "autumn"
+                    sceneVM.receiveIncomingStar(thought: thought, colorHex: color, uid: uid)
                 }
         }
     }
