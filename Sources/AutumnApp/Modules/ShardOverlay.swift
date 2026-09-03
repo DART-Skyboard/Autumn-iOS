@@ -251,10 +251,19 @@ public struct ShardOverlay: View {
         guard !localOnly, authVM.githubConnected, !authVM.githubUsername.isEmpty else { return }
         let user = authVM.githubUsername
         let json = String(data: (try? JSONEncoder().encode(arr)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+        let index: [[String: Any]] = contacts.map { c in
+            ["login": c.login, "avatar_url": c.avatarURL ?? "", "starred": starred.contains(c.login)]
+        }
         Task {
             await UserVaultService.shared.write(
                 folder: .shard, filename: "starred.json",
                 content: json, githubUsername: user
+            )
+            _ = await AutumnGASClient.shared.ashwrite(
+                path: "ashtree/contacts/index.json",
+                uid: user,
+                append: false,
+                payload: index
             )
         }
     }

@@ -19,7 +19,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     @Published public var mazeCanSolve = false
     @Published public var isSolving = false
     /// JS: `_mantisNodeMax` default 100 — node cap HUD 10/50/100/300/1200/2e6
-    @Published public var mantisNodeMax: Int = 300
+    @Published public var mantisNodeMax: Int = 100
     private var lastAshFire: Date = .distantPast
     private var lastJournalStar: Date = .distantPast
     private var ashStarBroadcastIds: Set<String> = []
