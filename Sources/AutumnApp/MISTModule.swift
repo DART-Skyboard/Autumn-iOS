@@ -123,19 +123,39 @@ public final class MISTModule: ObservableObject {
     }
 
     public func emitAshStar(at position: SIMD3<Float>) {
+        emitAshStarPacket(thought: AshStarThought.capabilityLine(), toUids: ["all"], uid: "autumn")
         ashStarActive = true
+        Task { await MainActor.run { self.ashStarActive = false } }
+        _ = position
+    }
+
+    /// js fireAshStar payload — type ashstar, thought capped 120, no user chat.
+    public func emitAshStarPacket(thought: String, toUids: [String], uid: String) {
+        ashStarActive = true
+        let t = AshStarThought.sanitize(thought)
         let payload: [String: Any] = [
-            "id": "autumn",
-            "x": position.x, "y": position.y, "z": position.z,
-            "timestamp": Date().timeIntervalSince1970 * 1000,
-            "type": "ash"
+            "type": "ashstar",
+            "uid": uid,
+            "from": "autumn",
+            "toUids": toUids.isEmpty ? ["all"] : toUids,
+            "color": "#00d4ff",
+            "thought": String(t.prefix(120)),
+            "ts": Date().timeIntervalSince1970 * 1000,
+            "platform": "ios"
         ]
         Task {
             _ = await AutumnGASClient.shared.ashwrite(
                 path: "ashtree/mist/events.json",
-                uid: "autumn",
+                uid: uid,
                 append: true,
                 payload: [payload]
+            )
+            await AutumnGASClient.shared.pingPresence(
+                message: "ashstar",
+                response: "star",
+                emotion: "inspiring",
+                buoyancy: 0.8,
+                uid: uid
             )
             await MainActor.run { self.ashStarActive = false }
         }

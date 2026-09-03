@@ -19,6 +19,9 @@ public final class BRPNSceneViewModel: ObservableObject {
     @Published public var isSolving = false
     /// JS: `_mantisNodeMax` default 100 — node cap HUD 10/50/100/300/1200/2e6
     @Published public var mantisNodeMax: Int = 100
+    private var lastAshFire: Date = .distantPast
+    private var lastJournalStar: Date = .distantPast
+    public var connectedUids: [String] { Array(sessionGroupNodes.keys) }
 
     public let scene = SCNScene()
     public var shells: [SCNNode] = []
@@ -360,6 +363,14 @@ public final class BRPNSceneViewModel: ObservableObject {
     // MARK: — Remote session icosahedrons  JS _makeSessionGroup IcosahedronGeometry(r,1)
     public func addRemoteNode(uid: String, emotion: String = "neutral") {
         if sessionGroupNodes[uid] != nil { return }
+        // Node-cap HUD: drop oldest live orbs so weaker devices stay fluid.
+        while sessionGroupNodes.count >= max(1, min(mantisNodeMax, 400)) {
+            if let k = sessionGroupNodes.keys.first {
+                sessionGroupNodes[k]?.removeFromParentNode()
+                sessionGroupNodes.removeValue(forKey: k)
+                activeNodes = max(1, activeNodes - 1)
+            } else { break }
+        }
         let pos = nodeBasePosition(uid: uid)
         let group = SCNNode(); group.name = "session_\(uid)"
         let colors = uidShellColors(uid: uid)
@@ -428,23 +439,50 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     public func spawnAshStar(color: UIColor = UIColor(red: 1, green: 0.87, blue: 0, alpha: 1), target: String = "all") {
+        _ = fireAshStar(thought: AshStarThought.capabilityLine(), color: color, toUids: target == "all" ? nil : [target], force: true)
+    }
+
+    /// js/mist-module.js fireAshStar — ride plasma to chosen live orbs. 8s cooldown unless force.
+    @discardableResult
+    public func fireAshStar(thought: String, color: UIColor = UIColor(red: 0, green: 0.83, blue: 1, alpha: 1), toUids: [String]? = nil, force: Bool = false) -> Bool {
+        let now = Date()
+        if !force && now.timeIntervalSince(lastAshFire) < 8 { return false }
+        lastAshFire = now
         rebuildSplines()
-        let geo = ThreeJSGeometry.icosahedron(radius: 0.09, detail: 0)
-        geo.materials = [ThreeJSGeometry.wireMat(color, opacity: 1)]
-        let star = SCNNode(geometry: geo)
-        star.name = "ashstar"
-        scene.rootNode.addChildNode(star)
-        let path = sampledSpline(from: SCNVector3(0, 0, 0), to: SCNVector3(0.4, 1.8, -0.3))
-        var actions: [SCNAction] = []
-        for i in 1..<path.count { actions.append(SCNAction.move(to: path[i], duration: 0.12)) }
-        actions.append(SCNAction.fadeOut(duration: 0.4))
-        actions.append(SCNAction.removeFromParentNode())
-        star.runAction(SCNAction.group([
-            SCNAction.repeatForever(SCNAction.rotateBy(x: 0.5, y: 1.4, z: 0.3, duration: 3.2)),
-            SCNAction.sequence(actions)
-        ]))
+        let live = connectedUids
+        let targets: [String]
+        if let toUids, !toUids.isEmpty {
+            targets = toUids.filter { live.contains($0) }
+        } else {
+            // Autumn's will: all live nodes, or a random subset if many.
+            if live.count > 6 {
+                targets = Array(live.shuffled().prefix(Int.random(in: 2...min(6, live.count))))
+            } else {
+                targets = live
+            }
+        }
+        var dests: [SCNVector3] = targets.compactMap { sessionGroupNodes[$0]?.position }
+        if dests.isEmpty { dests = [SCNVector3(0.4, 1.8, -0.3)] }
+        for dest in dests.prefix(8) {
+            let geo = ThreeJSGeometry.icosahedron(radius: 0.09, detail: 0)
+            geo.materials = [ThreeJSGeometry.wireMat(color, opacity: 1)]
+            let star = SCNNode(geometry: geo)
+            star.name = "ashstar"
+            scene.rootNode.addChildNode(star)
+            let path = sampledSpline(from: SCNVector3(0, 0, 0), to: dest)
+            var actions: [SCNAction] = []
+            for i in 1..<path.count { actions.append(SCNAction.move(to: path[i], duration: 0.12)) }
+            actions.append(SCNAction.fadeOut(duration: 0.4))
+            actions.append(SCNAction.removeFromParentNode())
+            star.runAction(SCNAction.group([
+                SCNAction.repeatForever(SCNAction.rotateBy(x: 0.5, y: 1.4, z: 0.3, duration: 3.2)),
+                SCNAction.sequence(actions)
+            ]))
+        }
         emitMist(fromLocal: true)
         pulseShells(0.6)
+        let _ = thought // thought is archived by the caller; network packet is capability-only
+        return true
     }
 
     public func spawnShard(color: UIColor) {
@@ -546,6 +584,23 @@ public final class BRPNSceneViewModel: ObservableObject {
             }
         }
         rebuildSplines()
+        maybeAutumnStar()
+    }
+
+    /// js _autumnJournalWatch — unprompted star from Autumn's capability lines, never user chat.
+    private func maybeAutumnStar() {
+        let now = Date()
+        if now.timeIntervalSince(lastJournalStar) < 20 { return }
+        lastJournalStar = now
+        guard !connectedUids.isEmpty else { return }
+        // Sparse will: not every poll, and not every connected orb.
+        guard Int.random(in: 0..<4) == 0 else { return }
+        let pick = Array(connectedUids.shuffled().prefix(max(1, connectedUids.count / 3)))
+        let thought = AshStarThought.capabilityLine()
+        if fireAshStar(thought: thought, toUids: pick, force: false) {
+            AshStarArchive.push(AshStarCard(thought: thought, color: "#00d4ff", from: "autumn", uid: "autumn"))
+            MISTModule.shared.emitAshStarPacket(thought: String(thought.prefix(120)), toUids: pick, uid: "autumn")
+        }
     }
 
     /// JS: _nodeBasePos / _uidHash

@@ -103,8 +103,9 @@ public final class ChatViewModel: ObservableObject {
 
         let response = turn.reply
 
-        // Ash Star 3D — never dump geometry as chat text
-        if text.uppercased().contains("[ASHSTAR") || text.lowercased().contains("ash star") {
+        // Ash Star 3D — never dump geometry or user chat as the star thought.
+        let low = (text + " " + response).lowercased()
+        if text.uppercased().contains("[ASHSTAR") || low.contains("ash star") || low.contains("send me a star") || low.contains("send a star") {
             NotificationCenter.default.post(name: .autumnAshStar, object: nil)
         }
 
