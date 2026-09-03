@@ -77,6 +77,7 @@ public struct ShardOverlay: View {
                                 ForEach(contacts.prefix(20)) { c in
                                     Button {
                                         if starred.contains(c.login) { starred.remove(c.login) } else { starred.insert(c.login) }
+                                        persistStarred()
                                     } label: {
                                         HStack {
                                             Text(starred.contains(c.login) ? "★" : "☆").foregroundColor(Color(hex: "#ffdd00"))
@@ -95,6 +96,7 @@ public struct ShardOverlay: View {
             }
         }
         .task { await loadContacts() }
+        .onAppear { restoreStarred() }
     }
 
     private var textileCanvas: some View {
@@ -216,11 +218,44 @@ public struct ShardOverlay: View {
     }
 
     private func loadContacts() async {
+        restoreStarred()
         guard authVM.githubConnected else { return }
         do {
             contacts = try await GitHubClient.shared.fetchFollowing()
         } catch {
             status = "CONTACTS: \(error.localizedDescription)"
+        }
+        // Restore from the user's Autumn-Ash repo if local cache is empty.
+        if starred.isEmpty, let user = authVM.githubUsername.isEmpty ? nil : authVM.githubUsername {
+            if let raw = await UserVaultService.shared.readRemote(folder: .shard, filename: "starred.json", githubUsername: user),
+               let data = raw.data(using: .utf8),
+               let arr = try? JSONDecoder().decode([String].self, from: data) {
+                starred = Set(arr)
+                persistStarred(localOnly: true)
+            }
+        }
+    }
+
+    private func restoreStarred() {
+        if let data = UserDefaults.standard.data(forKey: "_as_starred"),
+           let arr = try? JSONDecoder().decode([String].self, from: data) {
+            starred = Set(arr)
+        }
+    }
+
+    private func persistStarred(localOnly: Bool = false) {
+        let arr = Array(starred).sorted()
+        if let data = try? JSONEncoder().encode(arr) {
+            UserDefaults.standard.set(data, forKey: "_as_starred")
+        }
+        guard !localOnly, authVM.githubConnected, !authVM.githubUsername.isEmpty else { return }
+        let user = authVM.githubUsername
+        let json = String(data: (try? JSONEncoder().encode(arr)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+        Task {
+            await UserVaultService.shared.write(
+                folder: .shard, filename: "starred.json",
+                content: json, githubUsername: user
+            )
         }
     }
 }

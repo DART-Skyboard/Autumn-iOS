@@ -10,6 +10,7 @@ public struct ProfileSheet: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
     @EnvironmentObject var circuit: AdminCircuitMonitor
+    @EnvironmentObject var chatVM: ChatViewModel
     @StateObject private var tint = AvatarTintSampler()
 
     public var body: some View {
@@ -90,6 +91,17 @@ public struct ProfileSheet: View {
                     Text(err).font(.system(size: 10)).foregroundColor(.red).padding(.horizontal, 14)
                 }
 
+                Button {
+                    Task {
+                        await AutumnMemorySync.saveNow(
+                            username: authVM.githubUsername,
+                            sessionUID: authVM.sessionUID,
+                            messages: chatVM.messages
+                        )
+                    }
+                } label: {
+                    labelRow(authVM.githubConnected ? "⬡ SAVE DATA" : "⬡ SAVE DATA (CONNECT GITHUB)")
+                }
                 Button { appNav.showFeedback = true; appNav.showProfile = false } label: {
                     labelRow("◇ SUBMIT FEEDBACK")
                 }

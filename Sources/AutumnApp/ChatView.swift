@@ -244,6 +244,7 @@ struct InputBar: View {
                         .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
                 )
                 .focused($inputFocused)
+                .onTapGesture { inputFocused = true }
                 .onSubmit {
                     Task { await chatVM.send() }
                 }

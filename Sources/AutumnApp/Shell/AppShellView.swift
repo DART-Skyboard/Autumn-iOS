@@ -42,7 +42,6 @@ public struct AppShellView: View {
                         portraitChrome(size: geo.size)
                     }
                 }
-                ModuleOverlayHost()
 
                 if appNav.showProfile { ProfileSheet().transition(.move(edge: .trailing)) }
                 if appNav.showFeedback { FeedbackSheet().transition(.opacity) }
@@ -178,6 +177,9 @@ public struct AppShellView: View {
                 .padding(.top, 6)
                 .padding(.bottom, 8)
             }
+
+            // Drawers sit on the 3D scene only — never cover Ask Autumn / the keyboard.
+            ModuleOverlayHost()
 
             if appNav.showHUDTools {
                 HUDToolsPanel()
