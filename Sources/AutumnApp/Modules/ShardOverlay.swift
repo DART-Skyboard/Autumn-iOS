@@ -24,7 +24,15 @@ public struct ShardOverlay: View {
     public var body: some View {
         OverlayPanel(title: "ASH SHARD", onClose: { appNav.rightTab = .none }) {
             GeometryReader { geo in
-                let canvasH = max(140, min(geo.size.height * 0.42, 280))
+                // Square canvas from leftover height, never a wide squat bar.
+                // Contacts get the remaining column so many names show (~180pt floor).
+                let pad: CGFloat = 12
+                let innerW = max(80, geo.size.width - pad * 2)
+                let chrome: CGFloat = 214
+                let contactsFloor: CGFloat = 180
+                let canvasBudget = max(110, geo.size.height - chrome - contactsFloor)
+                let side = min(innerW, canvasBudget)
+                let leftover = max(80, geo.size.height - chrome - side)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Build a textile, pick contacts, send along plasma curves.")
                         .font(.system(size: 11))
@@ -38,10 +46,14 @@ public struct ShardOverlay: View {
                                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(themeVM.chrome.accent.opacity(tool == t ? 0.6 : 0.15), lineWidth: 1))
                         }
                     }
-                    textileCanvas
-                        .frame(height: canvasH)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(themeVM.chrome.accent.opacity(0.2), lineWidth: 1))
-                        .cornerRadius(6)
+                    HStack {
+                        Spacer(minLength: 0)
+                        textileCanvas
+                            .frame(width: side, height: side)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(themeVM.chrome.accent.opacity(0.2), lineWidth: 1))
+                            .cornerRadius(6)
+                        Spacer(minLength: 0)
+                    }
 
                     HStack(spacing: 8) {
                         ColorPicker("", selection: $color).labelsHidden().frame(width: 32, height: 22)
@@ -74,7 +86,7 @@ public struct ShardOverlay: View {
                     } else {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 4) {
-                                ForEach(contacts.prefix(20)) { c in
+                                ForEach(contacts) { c in
                                     Button {
                                         if starred.contains(c.login) { starred.remove(c.login) } else { starred.insert(c.login) }
                                         persistStarred()
@@ -88,11 +100,12 @@ public struct ShardOverlay: View {
                                 }
                             }
                         }
-                        .frame(maxHeight: .infinity)
+                        .frame(minHeight: min(contactsFloor, leftover), maxHeight: .infinity)
                     }
                     Text(status).font(.system(size: 9, design: .monospaced)).foregroundColor(themeVM.chrome.accent.opacity(0.5))
                 }
                 .padding(12)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             }
         }
         .task { await loadContacts() }
