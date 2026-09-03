@@ -5,16 +5,24 @@ import AutumnServices
 public struct RightRailView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
+    var axis: Axis = .vertical
 
     public var body: some View {
-        VStack(spacing: 8) {
+        let tabs = Group {
             rail("MIST", selected: appNav.rightTab == .mist) { toggle(.mist) }
             rail("STAR", selected: appNav.rightTab == .star) { toggle(.star) }
             rail("SHARD", selected: appNav.rightTab == .shard) { toggle(.shard) }
             rail("SYS", selected: appNav.rightTab == .sys) { toggle(.sys) }
-            Spacer()
         }
-        .padding(.top, 4)
+        if axis == .horizontal {
+            HStack(spacing: 4) { tabs }
+        } else {
+            VStack(spacing: 8) {
+                tabs
+                Spacer()
+            }
+            .padding(.top, 4)
+        }
     }
 
     private func toggle(_ t: AppNavigation.RightTab) {
@@ -41,22 +49,32 @@ struct ModuleOverlayHost: View {
     var body: some View {
         GeometryReader { geo in
             let land = geo.size.width > geo.size.height
-            HStack {
-                Spacer()
-                Group {
-                    switch appNav.rightTab {
-                    case .mist: MISTOverlay()
-                    case .star: StarOverlay()
-                    case .shard: ShardOverlay()
-                    case .sys: SYSOverlay()
-                    case .none: EmptyView()
+            ZStack(alignment: .topTrailing) {
+                if appNav.rightTab != .none {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { appNav.rightTab = .none }
+                }
+                if appNav.rightTab != .none {
+                    HStack {
+                        Spacer()
+                        Group {
+                            switch appNav.rightTab {
+                            case .mist: MISTOverlay()
+                            case .star: StarOverlay()
+                            case .shard: ShardOverlay()
+                            case .sys: SYSOverlay()
+                            case .none: EmptyView()
+                            }
+                        }
+                        .frame(width: land ? min(geo.size.width - 24, 520) : min(300, geo.size.width - 52))
+                        .frame(maxHeight: land ? geo.size.height - 16 : min(geo.size.height - 16, 520))
+                        .padding(.trailing, land ? 10 : 46)
+                        .padding(.leading, land ? 10 : 0)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
                     }
                 }
-                .frame(width: land ? min(geo.size.width * 0.72, 560) : 300)
-                .frame(maxHeight: land ? geo.size.height - 12 : min(geo.size.height - 16, 520))
-                .padding(.trailing, land ? 8 : 46)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
             }
         }
         .allowsHitTesting(appNav.rightTab != .none)

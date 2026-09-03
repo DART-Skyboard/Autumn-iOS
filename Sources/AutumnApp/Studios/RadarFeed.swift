@@ -16,6 +16,7 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var userLat: Double = 40.7128
     @Published var userLon: Double = -74.0060
     @Published var hasFix = false
+    @Published var authSettled = false
     @Published var adsbStatus = "ADS-B OFFLINE"
     @Published var orbitStatus = "ORBITAL OFFLINE"
     @Published var rangeKm: Double = 50
@@ -33,10 +34,15 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func start() {
-        if started { return }
-        started = true
         loc.requestWhenInUseAuthorization()
         loc.startUpdatingLocation()
+        if let c = loc.location?.coordinate {
+            userLat = c.latitude
+            userLon = c.longitude
+            hasFix = true
+        }
+        if started { return }
+        started = true
         Task { await refreshADSB(); await refreshTLE() }
         adsbTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refreshADSB() }
@@ -69,10 +75,18 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
         switch manager.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
             loc.startUpdatingLocation()
+            if let c = manager.location?.coordinate {
+                userLat = c.latitude
+                userLon = c.longitude
+                hasFix = true
+            }
         case .denied, .restricted:
             hasFix = false
+            authSettled = true
             userLat = 40.7128; userLon = -74.0060
             Task { await refreshADSB() }
+        case .notDetermined:
+            loc.requestWhenInUseAuthorization()
         default:
             break
         }
@@ -105,6 +119,7 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
         let urls = [
             "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=TLE",
             "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=TLE",
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=TLE",
         ]
         var combined = ""
         for u in urls {
@@ -120,6 +135,7 @@ final class RadarFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
             let p = body.geodetic(at: now)
             return RadarSat(id: body.id, name: body.name, lat: p.lat, lon: p.lon, altKm: p.altKm)
         }
+        if satellites.count > 220 { satellites = Array(satellites.prefix(220)) }
         orbitStatus = "ORBITAL LIVE (\(satellites.count))"
     }
 
