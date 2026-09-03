@@ -9,7 +9,6 @@ public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @Namespace private var bottomID
-    @FocusState private var inputFocused: Bool
 
     public var body: some View {
         ZStack {
@@ -33,14 +32,8 @@ public struct ChatView: View {
                         .padding(.top, 12)
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    .onTapGesture {
-                        inputFocused = false
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                            to: nil, from: nil, for: nil)
-                    }
                     .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { value in
                         if value.translation.height > 40 {
-                            inputFocused = false
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
                                 to: nil, from: nil, for: nil)
                         }
@@ -51,7 +44,7 @@ public struct ChatView: View {
                 }
 
                 // MARK: — Input bar
-                InputBar(inputFocused: _inputFocused)
+                InputBar()
             }
         }
     }
@@ -234,6 +227,8 @@ struct InputBar: View {
 
             TextField("Ask Autumn...", text: $chatVM.inputText, axis: .vertical)
                 .lineLimit(1...5)
+                .textInputAutocapitalization(.sentences)
+                .submitLabel(.send)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(themeVM.current.surface)
@@ -244,21 +239,8 @@ struct InputBar: View {
                         .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
                 )
                 .focused($inputFocused)
-                .onTapGesture { inputFocused = true }
                 .onSubmit {
                     Task { await chatVM.send() }
-                }
-                // Down arrow button appears when keyboard is showing
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button {
-                            inputFocused = false
-                        } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                                .foregroundColor(.cyan)
-                        }
-                    }
                 }
 
             Button {
