@@ -65,6 +65,12 @@ targets:
       - path: Sources/AutumnApp/Resources/elements.json
         type: file
         buildPhase: resources
+      - path: Sources/AutumnApp/Resources/ne_110m_coastline.geojson
+        type: file
+        buildPhase: resources
+      - path: Sources/AutumnApp/Resources/ne_110m_admin_0_boundary_lines_land.geojson
+        type: file
+        buildPhase: resources
     info:
       path: Sources/AutumnApp/Info.plist
       properties:
@@ -129,7 +135,7 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-        CURRENT_PROJECT_VERSION: "62"
+        CURRENT_PROJECT_VERSION: "63"
         MARKETING_VERSION: "1.0.2"
       configs:
         Debug:

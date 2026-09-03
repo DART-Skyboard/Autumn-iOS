@@ -6,7 +6,7 @@ import LEATRCore
 /// Native shell matching live leatr.xyz:
 /// Z-order: theme video/solid → scrim (hit-test off) → chrome/scene/chat/sheets.
 /// Portrait: scene top, chat bottom, left GEO/MAR/AERO+ADMIN, right MIST/STAR/SHARD/SYS.
-/// Landscape: header/tools left, scene+ash middle, chat right (web three-split). Portrait restores the stacked chrome.
+/// Landscape: header left, 3D scene over Ash Canvas in the middle, full chat right. Portrait restores the stacked chrome.
 /// GEO/MAR/AERO live only as the left stack — never also as a top row.
 public struct AppShellView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
@@ -85,31 +85,29 @@ public struct AppShellView: View {
         }
     }
 
-    // MARK: — Landscape three-split: header left, ash middle, narrow scene+chat right.
+    // MARK: — Landscape: header left, scene+canvas middle, full chat right.
     /// Portrait stack is restored by portraitChrome — do not change that layout.
     private func landscapeChrome(size: CGSize) -> some View {
         HStack(spacing: 0) {
             leftDrawer
                 .frame(width: min(148, max(112, size.width * 0.16)))
 
-            // Middle: Ash Canvas as its own column
+            // Middle: HUD on the 3D scene (top); Ash Canvas (bottom) when open. Both stay in view.
             VStack(spacing: 0) {
+                landscapeTopHUD
+                sceneStage(includeSideHUD: false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 AshCanvasTrigger()
                 if appNav.showAshCanvas {
                     AshCanvasView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                } else {
-                    Spacer(minLength: 0)
                 }
             }
             .frame(maxWidth: .infinity)
-            .background(themeVM.chrome.surface.opacity(0.55))
+            .background(themeVM.chrome.surface.opacity(0.35))
 
-            // Right: keep scene + chat NARROW (phone-strip) so the video/scene stay usable for chat.
+            // Right: entire pane is chat (messages + paperclip/send).
             VStack(spacing: 0) {
-                landscapeTopHUD
-                sceneStage(includeSideHUD: false)
-                    .frame(height: min(size.height * 0.42, 300))
                 EmoHUD()
                 ChatView()
                     .frame(maxHeight: .infinity)
@@ -118,7 +116,7 @@ public struct AppShellView: View {
                     footerBar
                 }
             }
-            .frame(width: min(380, max(268, size.width * 0.38)))
+            .frame(width: min(400, max(280, size.width * 0.36)))
         }
     }
 

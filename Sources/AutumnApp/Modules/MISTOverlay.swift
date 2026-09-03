@@ -417,10 +417,8 @@ final class LEMACCubeViewModel: ObservableObject {
             return
         }
         let pm = pathNodes[solveStep]
-        let col = ThreeJSGeometry.hex(0x00d9ff)
-        pm.geometry?.firstMaterial?.emission.contents = col.withAlphaComponent(0.95)
-        pm.geometry?.firstMaterial?.diffuse.contents = col.withAlphaComponent(0.95)
-        pm.geometry?.firstMaterial?.transparency = 0.05
+        // Same material as INSTANT (opacity 0.95 constant) — don't leave the hidden 0-alpha mat.
+        pm.geometry?.firstMaterial = ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00d9ff), opacity: 0.95)
         solveStep += 1
     }
 

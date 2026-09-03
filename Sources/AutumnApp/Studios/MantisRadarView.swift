@@ -229,15 +229,18 @@ struct RadarGlobeView: UIViewRepresentable {
             let earth = SCNSphere(radius: CGFloat(earthR))
             earth.segmentCount = 64
             let mat = SCNMaterial()
-            mat.diffuse.contents = Self.earthTexture()
-            mat.emission.contents = UIColor(red: 0, green: 0.25, blue: 0.35, alpha: 0.18)
+            mat.diffuse.contents = UIColor(red: 0.02, green: 0.08, blue: 0.16, alpha: 1)
+            mat.emission.contents = UIColor(red: 0, green: 0.12, blue: 0.18, alpha: 1)
             mat.lightingModel = .phong
             mat.locksAmbientWithDiffuse = true
-            mat.specular.contents = UIColor(white: 0.25, alpha: 1)
+            mat.specular.contents = UIColor(white: 0.18, alpha: 1)
             earth.firstMaterial = mat
             let earthNode = SCNNode(geometry: earth)
             earthNode.name = "earth"
             root.addChildNode(earthNode)
+            // Natural Earth 110m coastlines + land borders — same vectors as mr.html, not painted blobs.
+            addGeoJSONLines(resource: "ne_110m_coastline", color: UIColor(red: 0, green: 0.96, blue: 1, alpha: 1), opacity: 0.85, rScale: 1.0025)
+            addGeoJSONLines(resource: "ne_110m_admin_0_boundary_lines_land", color: UIColor(red: 0, green: 0.78, blue: 0.847, alpha: 1), opacity: 0.35, rScale: 1.003)
 
             let grid = SCNSphere(radius: CGFloat(earthR) * 1.002)
             grid.segmentCount = 24
@@ -302,35 +305,64 @@ struct RadarGlobeView: UIViewRepresentable {
             }
         }
 
-        static func earthTexture() -> UIImage {
-            let s: CGFloat = 512
-            let r = UIGraphicsImageRenderer(size: CGSize(width: s, height: s))
-            return r.image { ctx in
-                UIColor(red: 0.02, green: 0.08, blue: 0.16, alpha: 1).setFill()
-                ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
-                let c = ctx.cgContext
-                // land blobs
-                UIColor(red: 0.12, green: 0.32, blue: 0.22, alpha: 1).setFill()
-                let lands: [(CGFloat,CGFloat,CGFloat,CGFloat)] = [
-                    (40,90,130,90),(200,70,90,70),(320,110,140,80),(80,250,160,70),
-                    (280,280,120,90),(420,160,70,110),(10,360,180,80),(250,380,160,60)
-                ]
-                for (x,y,w,h) in lands {
-                    c.fillEllipse(in: CGRect(x: x, y: y, width: w, height: h))
-                }
-                // night terminator wash
-                let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                                   colors: [UIColor.clear.cgColor, UIColor(white: 0, alpha: 0.45).cgColor] as CFArray,
-                                   locations: [0,1])!
-                c.drawLinearGradient(g, start: CGPoint(x: s*0.35, y: 0), end: CGPoint(x: s, y: 0), options: [])
-            }
-        }
-
+        /// mr.html latLonToV3 — continents, sats, and the user mark must share this.
         private func xyz(lat: Double, lon: Double, altKm: Double) -> SCNVector3 {
             let r = earthR * Float(1.0 + max(0, altKm) / 6371.0 * 0.18)
+            return latLon(lat: lat, lon: lon, r: r)
+        }
+
+        private func latLon(lat: Double, lon: Double, r: Float) -> SCNVector3 {
             let la = Float(lat * .pi / 180)
             let lo = Float(lon * .pi / 180)
-            return SCNVector3(r * cos(la) * sin(lo), r * sin(la), r * cos(la) * cos(lo))
+            return SCNVector3(r * cos(la) * cos(lo), r * sin(la), -r * cos(la) * sin(lo))
+        }
+
+        static func num(_ v: Any) -> Double? {
+            if let n = v as? NSNumber { return n.doubleValue }
+            if let d = v as? Double { return d }
+            return nil
+        }
+
+        private func addGeoJSONLines(resource: String, color: UIColor, opacity: CGFloat, rScale: Float) {
+            guard let url = Bundle.main.url(forResource: resource, withExtension: "geojson"),
+                  let data = try? Data(contentsOf: url),
+                  let rootObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let features = rootObj["features"] as? [[String: Any]] else { return }
+            var verts: [Float] = []
+            let rr = earthR * rScale
+            for f in features {
+                guard let geom = f["geometry"] as? [String: Any] else { continue }
+                let type = geom["type"] as? String ?? ""
+                let rings: [[[Any]]]
+                if type == "LineString", let c = geom["coordinates"] as? [[Any]] {
+                    rings = [c]
+                } else if type == "MultiLineString", let c = geom["coordinates"] as? [[[Any]]] {
+                    rings = c
+                } else if type == "Polygon", let c = geom["coordinates"] as? [[[Any]]] {
+                    rings = c
+                } else if type == "MultiPolygon", let c = geom["coordinates"] as? [[[[Any]]]] {
+                    rings = c.flatMap { $0 }
+                } else {
+                    continue
+                }
+                for ring in rings {
+                    var pts: [SCNVector3] = []
+                    pts.reserveCapacity(ring.count)
+                    for pair in ring {
+                        guard pair.count >= 2, let lon = Self.num(pair[0]), let lat = Self.num(pair[1]) else { continue }
+                        pts.append(latLon(lat: lat, lon: lon, r: rr))
+                    }
+                    guard pts.count >= 2 else { continue }
+                    for i in 0..<(pts.count - 1) {
+                        let a = pts[i], b = pts[i + 1]
+                        verts += [a.x, a.y, a.z, b.x, b.y, b.z]
+                    }
+                }
+            }
+            if let node = ThreeJSGeometry.lineSegments(verts, color: color, opacity: opacity) {
+                node.name = resource
+                root.addChildNode(node)
+            }
         }
     }
 }
