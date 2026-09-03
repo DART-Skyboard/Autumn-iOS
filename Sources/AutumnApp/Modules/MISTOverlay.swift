@@ -46,6 +46,14 @@ public struct MISTOverlay: View {
                         Button("CUBE") { cubicMode = true; cubeVM.generate(difficulty: difficulty) }
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
                             .foregroundColor(cubicMode ? Color.cyan : .white.opacity(0.45))
+                        if cubicMode {
+                            Button("INSTANT") { cubeVM.animatedSolve = false }
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(!cubeVM.animatedSolve ? Color.cyan : .white.opacity(0.45))
+                            Button("ANIMATE") { cubeVM.animatedSolve = true }
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(cubeVM.animatedSolve ? Color.cyan : .white.opacity(0.45))
+                        }
                         Spacer()
                         Text("DIFF \(["", "I", "II", "III"][difficulty])")
                             .font(.system(size: 8, design: .monospaced))
@@ -67,7 +75,7 @@ public struct MISTOverlay: View {
                                 cubeVM.sigmaSolve()
                                 mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
                                 sceneVM.emitMist(fromLocal: true)
-                                status = "SIGMA REMAINDER"
+                                status = cubeVM.animatedSolve ? "SIGMA WALK" : "SIGMA REMAINDER"
                             } else if var m = maze, let sol = MazeEngine.solveMaze(m) {
                                 dragPath = sol
                                 m.solved = true
@@ -307,9 +315,14 @@ final class LEMACCubeViewModel: ObservableObject {
     private var result: LEMACEngineASH.CubicResult?
     private var pathNodes: [SCNNode] = []
     private var solveStep = 0
+    private var frameTick = 0
+    private var solveTimer: Timer?
     var isSolving = false
+    /// Match BRPN orb reveal: 1 cell every 4 frames at 60fps (~15 cells/sec).
+    @Published var animatedSolve = true
 
     func generate(difficulty: Int) {
+        stopSolveAnim()
         let n = difficulty == 1 ? 5 : difficulty == 2 ? 7 : 9
         scene.rootNode.childNodes.filter { $0.name != "lemacCam" }.forEach { $0.removeFromParentNode() }
         root = SCNNode()
@@ -367,6 +380,7 @@ final class LEMACCubeViewModel: ObservableObject {
 
     func sigmaSolve() {
         guard let mr = result else { return }
+        stopSolveAnim()
         pathNodes.forEach { $0.removeFromParentNode() }
         pathNodes.removeAll()
         // JS: LEMAC_ENGINE_ASH.solveCubic — degree-map sigma prune, NOT BFS
@@ -374,14 +388,46 @@ final class LEMACCubeViewModel: ObservableObject {
         let n = mr.w
         let u: Float = 0.22
         let ox = Float(n) * u / 2, oy = Float(n) * u / 2, oz = Float(n) * u / 2
+        let startOpacity: CGFloat = animatedSolve ? 0 : 0.95
         for p in ordered {
             let g = SCNSphere(radius: CGFloat(u * 0.16)); g.segmentCount = 4
-            g.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00d9ff), opacity: 0.95)]
+            g.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00d9ff), opacity: startOpacity)]
             let node = SCNNode(geometry: g)
             node.position = SCNVector3(Float(p.x) * u - ox + u / 2, Float(p.y) * u - oy + u / 2, Float(p.z) * u - oz + u / 2)
             root.addChildNode(node)
             pathNodes.append(node)
         }
+        guard animatedSolve, !pathNodes.isEmpty else { return }
+        solveStep = 0
+        frameTick = 0
+        isSolving = true
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.tickSolve()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        solveTimer = timer
+    }
+
+    private func tickSolve() {
+        frameTick += 1
+        // BRPNAnimator: revealEvery = 4 when not thinking
+        guard frameTick % 4 == 0 else { return }
+        guard solveStep < pathNodes.count else {
+            stopSolveAnim()
+            return
+        }
+        let pm = pathNodes[solveStep]
+        let col = ThreeJSGeometry.hex(0x00d9ff)
+        pm.geometry?.firstMaterial?.emission.contents = col.withAlphaComponent(0.95)
+        pm.geometry?.firstMaterial?.diffuse.contents = col.withAlphaComponent(0.95)
+        pm.geometry?.firstMaterial?.transparency = 0.05
+        solveStep += 1
+    }
+
+    private func stopSolveAnim() {
+        solveTimer?.invalidate()
+        solveTimer = nil
+        isSolving = false
     }
 }
 
