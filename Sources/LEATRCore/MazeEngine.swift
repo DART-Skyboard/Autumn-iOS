@@ -191,6 +191,84 @@ public enum MazeEngine {
         return wallVerts
     }
 
+    /// Ash Tree IDE cubic display, wireframe:
+    /// outer-face quads where walls remain (holes at randomized openings) +
+    /// internal passage lines along carved connections. Not every cell's 3 faces.
+    public static func cubicShellAndPassageVerts(
+        grid: [[[OrbMazeCell]]],
+        w: Int, h: Int, d: Int,
+        u: Float,
+        openings: [(x: Int, y: Int, z: Int, face: String)]
+    ) -> (shell: [Float], passages: [Float]) {
+        var shell: [Float] = []
+        var passages: [Float] = []
+        let ox = (Float(w) * u) / 2
+        let oy = (Float(h) * u) / 2
+        let oz = (Float(d) * u) / 2
+        let hs = u * 0.5
+        func isOpening(_ x: Int, _ y: Int, _ z: Int, _ face: String) -> Bool {
+            openings.contains { $0.x == x && $0.y == y && $0.z == z && $0.face == face }
+        }
+        func edge(_ arr: inout [Float], _ a: (Float, Float, Float), _ b: (Float, Float, Float)) {
+            arr += [a.0, a.1, a.2, b.0, b.1, b.2]
+        }
+        func quad(_ arr: inout [Float], _ a: (Float, Float, Float), _ b: (Float, Float, Float),
+                  _ c: (Float, Float, Float), _ d: (Float, Float, Float)) {
+            edge(&arr, a, b); edge(&arr, b, c); edge(&arr, c, d); edge(&arr, d, a)
+        }
+        // Outer bounding box so the volume reads as a cube
+        let x0 = -ox, x1 = Float(w) * u - ox
+        let y0 = -oy, y1 = Float(h) * u - oy
+        let z0 = -oz, z1 = Float(d) * u - oz
+        let corners: [(Float, Float, Float)] = [
+            (x0,y0,z0),(x1,y0,z0),(x1,y1,z0),(x0,y1,z0),
+            (x0,y0,z1),(x1,y0,z1),(x1,y1,z1),(x0,y1,z1)
+        ]
+        let boxEdges = [(0,1),(1,2),(2,3),(3,0),(4,5),(5,6),(6,7),(7,4),(0,4),(1,5),(2,6),(3,7)]
+        for (i, j) in boxEdges { edge(&shell, corners[i], corners[j]) }
+
+        for z in 0..<d {
+            for y in 0..<h {
+                for x in 0..<w {
+                    let c = grid[z][y][x]
+                    let cx = Float(x) * u - ox + hs
+                    let cy = Float(y) * u - oy + hs
+                    let cz = Float(z) * u - oz + hs
+                    // Perimeter face quads (skip the punched opening)
+                    if x == 0 && c.left && !isOpening(x, y, z, "left") {
+                        let px = cx - hs
+                        quad(&shell, (px, cy-hs, cz-hs), (px, cy+hs, cz-hs), (px, cy+hs, cz+hs), (px, cy-hs, cz+hs))
+                    }
+                    if x == w - 1 && c.right && !isOpening(x, y, z, "right") {
+                        let px = cx + hs
+                        quad(&shell, (px, cy-hs, cz-hs), (px, cy+hs, cz-hs), (px, cy+hs, cz+hs), (px, cy-hs, cz+hs))
+                    }
+                    if y == 0 && c.bottom && !isOpening(x, y, z, "bottom") {
+                        let py = cy - hs
+                        quad(&shell, (cx-hs, py, cz-hs), (cx+hs, py, cz-hs), (cx+hs, py, cz+hs), (cx-hs, py, cz+hs))
+                    }
+                    if y == h - 1 && c.top && !isOpening(x, y, z, "top") {
+                        let py = cy + hs
+                        quad(&shell, (cx-hs, py, cz-hs), (cx+hs, py, cz-hs), (cx+hs, py, cz+hs), (cx-hs, py, cz+hs))
+                    }
+                    if z == 0 && c.back && !isOpening(x, y, z, "back") {
+                        let pz = cz - hs
+                        quad(&shell, (cx-hs, cy-hs, pz), (cx+hs, cy-hs, pz), (cx+hs, cy+hs, pz), (cx-hs, cy+hs, pz))
+                    }
+                    if z == d - 1 && c.front && !isOpening(x, y, z, "front") {
+                        let pz = cz + hs
+                        quad(&shell, (cx-hs, cy-hs, pz), (cx+hs, cy-hs, pz), (cx+hs, cy+hs, pz), (cx-hs, cy+hs, pz))
+                    }
+                    // Internal passages (carved openings) — +axis only so edges aren't doubled
+                    if !c.right && x < w - 1 { edge(&passages, (cx, cy, cz), (cx + u, cy, cz)) }
+                    if !c.top && y < h - 1 { edge(&passages, (cx, cy, cz), (cx, cy + u, cz)) }
+                    if !c.front && z < d - 1 { edge(&passages, (cx, cy, cz), (cx, cy, cz + u)) }
+                }
+            }
+        }
+        return (shell, passages)
+    }
+
     public static func orbCellCenter(x: Int, y: Int, z: Int, w: Int, h: Int, d: Int, u: Float = MazeOrbState.u) -> (Float, Float, Float) {
         let ox = (Float(w) * u) / 2
         let oy = (Float(h) * u) / 2
@@ -509,7 +587,10 @@ public enum LEMACEngineASH {
     /// JS: `_randPerimeter3D(w,h,d,exclude)`
     public static func randPerimeter3D(_ w: Int, _ h: Int, _ d: Int, exclude: Perimeter3D?) -> Perimeter3D {
         var res: Perimeter3D
+        let minDist = max(w, max(h, d))
+        var attempts = 0
         repeat {
+            attempts += 1
             let face = Int.random(in: 0..<6)
             if face == 0 {
                 res = Perimeter3D(x: 0, y: Int.random(in: 0..<h), z: Int.random(in: 0..<d), face: "left")
@@ -524,7 +605,10 @@ public enum LEMACEngineASH {
             } else {
                 res = Perimeter3D(x: Int.random(in: 0..<w), y: Int.random(in: 0..<h), z: d - 1, face: "front")
             }
-        } while exclude != nil && res.x == exclude!.x && res.y == exclude!.y && res.z == exclude!.z
+        } while exclude != nil && attempts < 40 && (
+            (res.x == exclude!.x && res.y == exclude!.y && res.z == exclude!.z) ||
+            (abs(res.x - exclude!.x) + abs(res.y - exclude!.y) + abs(res.z - exclude!.z) < minDist)
+        )
         return res
     }
 

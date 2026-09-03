@@ -9,10 +9,10 @@ public struct LeftHUDView: View {
     @EnvironmentObject var appNav: AppNavigation
     @EnvironmentObject var sceneVM: BRPNSceneViewModel
     @EnvironmentObject var circuit: AdminCircuitMonitor
+    var axis: Axis = .vertical
 
     public var body: some View {
-        let chrome = themeVM.chrome
-        VStack(spacing: 8) {
+        let pills = Group {
             pill("GEO", sub: sceneVM.shellStates[.geological] ?? "FOUNDATION", color: Color(hex: "#00ffcc")) {
                 appNav.leftTab = appNav.leftTab == .geo ? .none : .geo
             }
@@ -66,9 +66,17 @@ public struct LeftHUDView: View {
                     .moduleFrost(stroke: Color(hex: "#ffb347").opacity(0.4), fill: 0.10)
                 }
             }
-            Spacer()
         }
-        .padding(.top, 4)
+        if axis == .horizontal {
+            HStack(spacing: 4) { pills }
+                .padding(.vertical, 2)
+        } else {
+            VStack(spacing: 8) {
+                pills
+                Spacer()
+            }
+            .padding(.top, 4)
+        }
     }
 
     private func pill(_ title: String, sub: String, color: Color, action: @escaping () -> Void) -> some View {

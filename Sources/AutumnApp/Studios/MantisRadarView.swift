@@ -7,32 +7,57 @@ import CoreLocation
 /// Not a WKWebView of mr.html.
 struct MantisRadarView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var appNav: AppNavigation
     @ObservedObject private var feed = RadarFeed.shared
     @State private var aerial = true
 
     var body: some View {
         let cyan = Color(hex: "#00f5ff")
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Text("MANTIS RADAR")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .tracking(2)
                     .foregroundColor(cyan)
-                Spacer()
+                    .lineLimit(1)
+                Spacer(minLength: 4)
                 HStack(spacing: 0) {
-                    tab("2D", on: aerial) { aerial = true }
-                    tab("3D", on: !aerial) { aerial = false }
+                    tab("2D AERIAL", on: aerial) { aerial = true }
+                    tab("3D ORBIT", on: !aerial) { aerial = false }
                 }
                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(cyan.opacity(0.25), lineWidth: 1))
+                Button { appNav.showRadar = false } label: {
+                    Text("✕ CLOSE")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.black.opacity(0.55))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Color.black.opacity(0.55))
 
-            ZStack {
+            ZStack(alignment: .topLeading) {
                 if aerial {
                     RadarMapView(feed: feed)
                 } else {
                     RadarGlobeView(feed: feed)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CELESTRAK TLE")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(cyan)
+                        Text(feed.orbitStatus)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("\(feed.satellites.count) SAT / DEBRIS")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(cyan)
+                    }
+                    .padding(10)
+                    .background(Color.black.opacity(0.55))
+                    .padding(8)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,10 +114,11 @@ struct RadarMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ m: MKMapView, context: Context) {
-        let center = CLLocationCoordinate2D(latitude: feed.userLat, longitude: feed.userLon)
-        if !context.coordinator.didCenter {
-            m.setRegion(MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 2.5, longitudeDelta: 2.5)), animated: false)
-            context.coordinator.didCenter = true
+        let ready = feed.hasFix || feed.authSettled
+        if ready && !context.coordinator.didCenterOnFix {
+            let center = CLLocationCoordinate2D(latitude: feed.userLat, longitude: feed.userLon)
+            m.setRegion(MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 1.2, longitudeDelta: 1.2)), animated: feed.hasFix)
+            context.coordinator.didCenterOnFix = true
         }
         context.coordinator.sync(aircraft: feed.aircraft, on: m)
     }
@@ -100,7 +126,7 @@ struct RadarMapView: UIViewRepresentable {
     func makeCoordinator() -> Coord { Coord() }
 
     final class Coord: NSObject, MKMapViewDelegate {
-        var didCenter = false
+        var didCenterOnFix = false
         var overlay: MKTileOverlay?
         private var byId: [String: MKPointAnnotation] = [:]
 
@@ -257,7 +283,7 @@ struct RadarGlobeView: UIViewRepresentable {
             geo.firstMaterial?.diffuse.contents = UIColor.orange
             geo.firstMaterial?.emission.contents = UIColor.orange.withAlphaComponent(0.8)
             geo.firstMaterial?.lightingModel = .constant
-            for s in sats.prefix(180) {
+            for s in sats.prefix(220) {
                 let n = SCNNode(geometry: geo)
                 n.position = xyz(lat: s.lat, lon: s.lon, altKm: max(200, s.altKm))
                 n.name = s.name

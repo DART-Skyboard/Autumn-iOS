@@ -322,19 +322,40 @@ final class LEMACCubeViewModel: ObservableObject {
         let mr = LEMACEngineASH.generateCubic(n, n, n)
         result = mr
         let u: Float = 0.22
-        let verts = MazeEngine.orbMazeWallVerts(grid: mr.grid, w: n, h: n, d: n, u: u)
-        if let wall = ThreeJSGeometry.lineSegments(verts, color: ThreeJSGeometry.hex(0x00ffcc), opacity: 0.55) {
-            root.addChildNode(wall)
+        let pair = MazeEngine.cubicShellAndPassageVerts(
+            grid: mr.grid, w: n, h: n, d: n, u: u,
+            openings: [
+                (mr.start.x, mr.start.y, mr.start.z, mr.start.face),
+                (mr.end.x, mr.end.y, mr.end.z, mr.end.face)
+            ]
+        )
+        if let shell = ThreeJSGeometry.lineSegments(pair.shell, color: ThreeJSGeometry.hex(0x00ffcc), opacity: 0.92) {
+            root.addChildNode(shell)
         }
-        // Markers
+        if let pass = ThreeJSGeometry.lineSegments(pair.passages, color: ThreeJSGeometry.hex(0x00d9ff), opacity: 0.42) {
+            root.addChildNode(pass)
+        }
+        // Markers sit on the punched opening, slightly outside the shell (Ash Tree IDE).
         func pos(_ t: LEMACEngineASH.Perimeter3D) -> SCNVector3 {
             let ox = Float(n) * u / 2, oy = Float(n) * u / 2, oz = Float(n) * u / 2
-            return SCNVector3(Float(t.x) * u - ox + u / 2, Float(t.y) * u - oy + u / 2, Float(t.z) * u - oz + u / 2)
+            var x = Float(t.x) * u - ox + u / 2
+            var y = Float(t.y) * u - oy + u / 2
+            var z = Float(t.z) * u - oz + u / 2
+            let bump = u * 0.55
+            switch t.face {
+            case "left": x -= bump
+            case "right": x += bump
+            case "bottom": y -= bump
+            case "top": y += bump
+            case "back": z -= bump
+            default: z += bump
+            }
+            return SCNVector3(x, y, z)
         }
-        let sg = SCNSphere(radius: CGFloat(u * 0.35)); sg.segmentCount = 6
-        sg.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00d9ff), opacity: 1)]
+        let sg = SCNSphere(radius: CGFloat(u * 0.28)); sg.segmentCount = 8
+        sg.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00ff88), opacity: 1)]
         let sn = SCNNode(geometry: sg); sn.position = pos(mr.start); root.addChildNode(sn)
-        let eg = SCNSphere(radius: CGFloat(u * 0.35)); eg.segmentCount = 6
+        let eg = SCNSphere(radius: CGFloat(u * 0.28)); eg.segmentCount = 8
         eg.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0xff0000), opacity: 1)]
         let en = SCNNode(geometry: eg); en.position = pos(mr.end); root.addChildNode(en)
 

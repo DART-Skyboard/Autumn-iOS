@@ -38,6 +38,7 @@ struct OverlayPanel<Content: View>: View {
         .background(Color.white.opacity(0.08))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.28), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .contentShape(RoundedRectangle(cornerRadius: 10))
         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
     }
 }

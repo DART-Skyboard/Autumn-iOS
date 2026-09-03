@@ -42,12 +42,13 @@ public struct AppShellView: View {
                         portraitChrome(size: geo.size)
                     }
                 }
+                ModuleOverlayHost()
 
                 if appNav.showProfile { ProfileSheet().transition(.move(edge: .trailing)) }
                 if appNav.showFeedback { FeedbackSheet().transition(.opacity) }
                 if appNav.showAdmin, circuit.allows(authVM) { AdminDrawerView().transition(.move(edge: .leading)) }
                 if appNav.showMantis { studioWrap { MantisNavigationView() } }
-                if appNav.showRadar { studioWrap { MantisRadarView() } }
+                if appNav.showRadar { MantisRadarView() }
                 if let studio = appNav.studio { StudioHostView(kind: studio) }
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -84,27 +85,32 @@ public struct AppShellView: View {
         }
     }
 
-    // MARK: — Landscape: web three-split — header left, ash middle, chat right.
-    /// Portrait stack (scene / EmoHUD / ash bar / chat) is restored by portraitChrome.
+    // MARK: — Landscape three-split: header left, ash middle, narrow scene+chat right.
+    /// Portrait stack is restored by portraitChrome — do not change that layout.
     private func landscapeChrome(size: CGSize) -> some View {
         HStack(spacing: 0) {
             leftDrawer
-                .frame(width: min(156, max(120, size.width * 0.18)))
-            // Middle: 3D scene + EmoHUD + Ash Canvas as its own section (not a thin bar under chat).
+                .frame(width: min(148, max(112, size.width * 0.16)))
+
+            // Middle: Ash Canvas as its own column
             VStack(spacing: 0) {
-                sceneStage
-                    .frame(maxHeight: .infinity)
-                EmoHUD()
                 AshCanvasTrigger()
                 if appNav.showAshCanvas {
                     AshCanvasView()
-                        .frame(maxWidth: .infinity)
-                        .frame(maxHeight: min(size.height * 0.52, 360))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                } else {
+                    Spacer(minLength: 0)
                 }
             }
             .frame(maxWidth: .infinity)
-            // Right: chat stays independent so the video/scene stay readable and narrow.
+            .background(themeVM.chrome.surface.opacity(0.55))
+
+            // Right: keep scene + chat NARROW (phone-strip) so the video/scene stay usable for chat.
             VStack(spacing: 0) {
+                landscapeTopHUD
+                sceneStage(includeSideHUD: false)
+                    .frame(height: min(size.height * 0.42, 300))
+                EmoHUD()
                 ChatView()
                     .frame(maxHeight: .infinity)
                     .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
@@ -112,8 +118,22 @@ public struct AppShellView: View {
                     footerBar
                 }
             }
-            .frame(width: min(340, max(220, size.width * 0.34)))
+            .frame(width: min(380, max(268, size.width * 0.38)))
         }
+    }
+
+    /// HUD tabs sit on TOP of the chat/scene strip in landscape so they don't clip off the edge.
+    private var landscapeTopHUD: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 3) {
+                LeftHUDView(axis: .horizontal)
+                HUDToolsTab()
+                RightRailView(axis: .horizontal)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
+        }
+        .background(themeVM.chrome.surface.opacity(0.9))
     }
 
     /// Web order under #brpn-region: EmoHUD, ash-canvas-trigger, drawer (over chat).
@@ -138,34 +158,37 @@ public struct AppShellView: View {
         }
     }
 
-    /// BRPN + left GEO/MAR/AERO stack + right rail + overlays. No duplicate GEO top row.
-    private var sceneStage: some View {
+    /// BRPN + optional side HUD. Overlays live at the shell so landscape can squeeze them on-screen.
+    private var sceneStage: some View { sceneStage(includeSideHUD: true) }
+
+    private func sceneStage(includeSideHUD: Bool) -> some View {
         ZStack {
             BRPNSceneView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(alignment: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    LeftHUDView()
-                    HUDToolsTab()
+            if includeSideHUD {
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        LeftHUDView()
+                        HUDToolsTab()
+                        Spacer()
+                    }
                     Spacer()
+                    RightRailView()
                 }
-                Spacer()
-                RightRailView()
+                .padding(.horizontal, 4)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
             }
-            .padding(.horizontal, 4)
-            .padding(.top, 6)
-            .padding(.bottom, 8)
 
             if appNav.showHUDTools {
                 HUDToolsPanel()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(.leading, 52)
+                    .padding(.leading, includeSideHUD ? 52 : 8)
                     .padding(.top, 8)
+                    .padding(.trailing, 8)
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
-
-            ModuleOverlayHost()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -210,8 +233,10 @@ public struct AppShellView: View {
             livePill
             profileChip
             Divider().background(chrome.accent.opacity(0.2))
-            HUDToolsPanel(compact: true)
-            Spacer()
+            ScrollView(.vertical, showsIndicators: false) {
+                HUDToolsPanel(compact: true)
+            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 10)
