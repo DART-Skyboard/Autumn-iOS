@@ -14,6 +14,74 @@ public protocol ReasoningProvider: Actor {
     var isAvailable: Bool { get async }
 }
 
+// MARK: — Chat attachment (web #img-file-input accept list + CAD/USDZ)
+public struct ChatAttachment: Identifiable, Sendable, Codable, Equatable {
+    public let id: UUID
+    public var fileName: String
+    public var ext: String
+    public var kind: Kind
+    public var storedName: String
+
+    public enum Kind: String, Sendable, Codable {
+        case image, video, audio, model3d, cad, script, document, other
+    }
+
+    public init(fileName: String, ext: String, kind: Kind, storedName: String) {
+        self.id = UUID()
+        self.fileName = fileName
+        self.ext = ext
+        self.kind = kind
+        self.storedName = storedName
+    }
+
+    public var fileURL: URL { ChatAttachment.directory.appendingPathComponent(storedName) }
+
+    public static var directory: URL {
+        let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("chat-attachments", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    public static func kind(for ext: String) -> Kind {
+        let e = ext.lowercased()
+        if ["png","jpg","jpeg","gif","webp","bmp","heic","heif","tif","tiff","svg"].contains(e) { return .image }
+        if ["mp4","mov","m4v","webm","avi","mkv"].contains(e) { return .video }
+        if ["mp3","wav","ogg","flac","m4a","aac","opus","aiff","caf"].contains(e) { return .audio }
+        if ["glb","gltf","obj","stl","fbx","dae","usdz","usda","usdc","ply","3ds","blend"].contains(e) { return .model3d }
+        if ["step","stp","iges","igs","sat","dwg","dxf","3dm","sldprt","sldasm","ipt","iam","prt","catpart","catproduct","x_t","x_b"].contains(e) { return .cad }
+        if ["html","htm","js","ts","json","css","xml","yaml","yml","py","java","c","cpp","h","hpp","rs","rb","go","php","sh","swift","sql","toml","ini","md","kt"].contains(e) { return .script }
+        if ["pdf","txt","doc","docx","rtf","odt","csv","log","pages"].contains(e) { return .document }
+        return .other
+    }
+
+    public var badge: String {
+        switch kind {
+        case .image: return "IMG"
+        case .video: return "VIDEO"
+        case .audio: return "AUDIO"
+        case .model3d: return "3D"
+        case .cad: return "CAD"
+        case .script: return ext.uppercased()
+        case .document: return ext.uppercased()
+        case .other: return ext.uppercased()
+        }
+    }
+
+    public var glyph: String {
+        switch kind {
+        case .image: return "🖼"
+        case .video: return "▶"
+        case .audio: return "🎵"
+        case .model3d: return "◈"
+        case .cad: return "⬡"
+        case .script: return "</>"
+        case .document: return "📄"
+        case .other: return "📎"
+        }
+    }
+}
+
 // MARK: — Chat Message
 public struct ChatMessage: Identifiable, Sendable, Codable {
     public let id: UUID
@@ -22,17 +90,34 @@ public struct ChatMessage: Identifiable, Sendable, Codable {
     public var timestamp: Date
     public var leatrMeta: LexicalMetadata?
     public var isInternal: Bool   // _internal:true → private thoughts, never surfaced
+    public var attachments: [ChatAttachment]
 
     public enum Role: String, Sendable, Codable {
         case user, assistant, system
     }
 
-    public init(role: Role, content: String, isInternal: Bool = false) {
+    public init(role: Role, content: String, isInternal: Bool = false, attachments: [ChatAttachment] = []) {
         self.id = UUID()
         self.role = role
         self.content = content
         self.timestamp = Date()
         self.isInternal = isInternal
+        self.attachments = attachments
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, content, timestamp, leatrMeta, isInternal, attachments
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        role = try c.decode(Role.self, forKey: .role)
+        content = try c.decode(String.self, forKey: .content)
+        timestamp = try c.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+        leatrMeta = try c.decodeIfPresent(LexicalMetadata.self, forKey: .leatrMeta)
+        isInternal = try c.decodeIfPresent(Bool.self, forKey: .isInternal) ?? false
+        attachments = try c.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
     }
 }
 

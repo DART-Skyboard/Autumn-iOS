@@ -2,6 +2,8 @@ import SwiftUI
 import MarkdownUI
 import LEATRCore
 import AutumnServices
+import UniformTypeIdentifiers
+import UIKit
 
 public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
@@ -122,6 +124,11 @@ struct MessageBubble: View {
             if isUser { Spacer(minLength: 40) }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                if !message.attachments.isEmpty {
+                    MessageAttachmentRow(attachments: message.attachments)
+                        .frame(maxWidth: 220, alignment: isUser ? .trailing : .leading)
+                }
+                if !message.content.isEmpty {
                 Markdown(message.content)
                     .markdownTextStyle { ForegroundColor(.white) }
                     .padding(.horizontal, 14)
@@ -141,6 +148,7 @@ struct MessageBubble: View {
                             )
                     )
                     .onTapGesture { withAnimation { showMeta.toggle() } }
+                }
 
                 if showMeta, let meta = message.leatrMeta {
                     HStack(spacing: 8) {
@@ -196,13 +204,29 @@ struct InputBar: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @FocusState var inputFocused: Bool
 
+    @State private var showImporter = false
+    private var canSend: Bool {
+        !chatVM.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !chatVM.pendingAttachments.isEmpty
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(spacing: 0) {
+        PendingAttachmentStrip()
+        HStack(spacing: 8) {
             Button {
                 chatVM.toggleListening()
             } label: {
                 Image(systemName: chatVM.isListening ? "mic.fill" : "mic")
                     .foregroundColor(chatVM.isListening ? .red : themeVM.current.accent)
+                    .frame(width: 36, height: 36)
+                    .background(themeVM.current.surface)
+                    .cornerRadius(18)
+            }
+
+            Button { showImporter = true } label: {
+                Image(systemName: "paperclip")
+                    .foregroundColor(themeVM.current.accent)
                     .frame(width: 36, height: 36)
                     .background(themeVM.current.surface)
                     .cornerRadius(18)
@@ -241,16 +265,26 @@ struct InputBar: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 34))
-                    .foregroundColor(chatVM.inputText.isEmpty ? themeVM.current.textSecondary : themeVM.current.accent)
+                    .foregroundColor(canSend ? themeVM.current.accent : themeVM.current.textSecondary)
             }
-            .disabled(chatVM.inputText.isEmpty || chatVM.isThinking)
+            .disabled(!canSend || chatVM.isThinking)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        }
         .background(.ultraThinMaterial)
         .overlay(
             Rectangle().frame(height: 1).foregroundColor(themeVM.current.accent.opacity(0.15)),
             alignment: .top
         )
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            if case .success(let urls) = result {
+                chatVM.importFiles(from: urls)
+            }
+        }
     }
 }

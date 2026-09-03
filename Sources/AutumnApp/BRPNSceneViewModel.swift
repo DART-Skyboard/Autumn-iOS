@@ -194,19 +194,30 @@ public final class BRPNSceneViewModel: ObservableObject {
         let w = animator.mazeOrbState.width
         let h = animator.mazeOrbState.height
         let d = animator.mazeOrbState.depth
-        let grid = MazeEngine.orbGenMaze(w, h, d)
+        // Ash Tree IDE cubic: randomized far-apart openings + perimeter shell (not a solid lattice).
+        let cubic = LEMACEngineASH.generateCubic(w, h, d)
+        let grid = cubic.grid
         animator.mazeOrbState.grid = grid
-        let solution = MazeEngine.orbSolveMaze(grid, w, h, d)
+        let solution = LEMACEngineASH.solveCubic(cubic)
         animator.mazeOrbState.solution = solution
         mazeCanSolve = !solution.isEmpty
         isSolving = false
 
         let u = MazeOrbState.u
-        let verts = MazeEngine.orbMazeWallVerts(grid: grid, w: w, h: h, d: d, u: u)
-        // JS: LineBasicMaterial({color:0x00ffcc,transparent:true,opacity:0.55})
-        if let wall = ThreeJSGeometry.lineSegments(verts, color: ThreeJSGeometry.hex(0x00ffcc), opacity: 0.55) {
-            wall.name = "mazeWalls"
-            mazeOrbGroup.addChildNode(wall)
+        let pair = MazeEngine.cubicShellAndPassageVerts(
+            grid: grid, w: w, h: h, d: d, u: u,
+            openings: [
+                (cubic.start.x, cubic.start.y, cubic.start.z, cubic.start.face),
+                (cubic.end.x, cubic.end.y, cubic.end.z, cubic.end.face)
+            ]
+        )
+        if let shell = ThreeJSGeometry.lineSegments(pair.shell, color: ThreeJSGeometry.hex(0x00ffcc), opacity: 0.9) {
+            shell.name = "mazeShell"
+            mazeOrbGroup.addChildNode(shell)
+        }
+        if let pass = ThreeJSGeometry.lineSegments(pair.passages, color: ThreeJSGeometry.hex(0x00d9ff), opacity: 0.4) {
+            pass.name = "mazePassages"
+            mazeOrbGroup.addChildNode(pass)
         }
 
         // Path spheres hidden, revealed during solve — JS: SphereGeometry(u*0.22,4,4) opacity 0
@@ -222,22 +233,28 @@ public final class BRPNSceneViewModel: ObservableObject {
             pathMeshNodes.append(mesh)
         }
 
-        // Start/end markers — JS: start 0x00ffcc Sphere u*0.35 at (0,0,0); end 0xff4466 at last
-        if !solution.isEmpty {
-            let mgeo = SCNSphere(radius: CGFloat(u * 0.35))
-            mgeo.segmentCount = 6
-            let sMat = ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00ffcc), opacity: 1)
-            let eMat = ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0xff4466), opacity: 1)
-            let sm = SCNNode(geometry: { let g = mgeo.copy() as! SCNSphere; g.materials = [sMat]; return g }())
-            let sc = MazeEngine.orbCellCenter(x: 0, y: 0, z: 0, w: w, h: h, d: d, u: u)
-            sm.position = SCNVector3(sc.0, sc.1, sc.2)
-            mazeOrbGroup.addChildNode(sm)
-            let last = solution[solution.count - 1]
-            let em = SCNNode(geometry: { let g = mgeo.copy() as! SCNSphere; g.materials = [eMat]; return g }())
-            let ec = MazeEngine.orbCellCenter(x: last.x, y: last.y, z: last.z, w: w, h: h, d: d, u: u)
-            em.position = SCNVector3(ec.0, ec.1, ec.2)
-            mazeOrbGroup.addChildNode(em)
+        // Start/end sit on the punched openings (Ash Tree), not always (0,0,0).
+        func openingPos(_ p: LEMACEngineASH.Perimeter3D) -> SCNVector3 {
+            var c = MazeEngine.orbCellCenter(x: p.x, y: p.y, z: p.z, w: w, h: h, d: d, u: u)
+            let bump = u * 0.45
+            switch p.face {
+            case "left": c.0 -= bump
+            case "right": c.0 += bump
+            case "bottom": c.1 -= bump
+            case "top": c.1 += bump
+            case "back": c.2 -= bump
+            default: c.2 += bump
+            }
+            return SCNVector3(c.0, c.1, c.2)
         }
+        let mgeo = SCNSphere(radius: CGFloat(u * 0.32))
+        mgeo.segmentCount = 6
+        let sm = SCNNode(geometry: { let g = mgeo.copy() as! SCNSphere; g.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0x00ff88), opacity: 1)]; return g }())
+        sm.position = openingPos(cubic.start)
+        mazeOrbGroup.addChildNode(sm)
+        let em = SCNNode(geometry: { let g = mgeo.copy() as! SCNSphere; g.materials = [ThreeJSGeometry.basicMat(ThreeJSGeometry.hex(0xff4466), opacity: 1)]; return g }())
+        em.position = openingPos(cubic.end)
+        mazeOrbGroup.addChildNode(em)
         animator.pathMeshNodes = pathMeshNodes
         animator.mazeOrbGroup = mazeOrbGroup
     }

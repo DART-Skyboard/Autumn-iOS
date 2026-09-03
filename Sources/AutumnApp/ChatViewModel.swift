@@ -17,6 +17,7 @@ public final class ChatViewModel: ObservableObject {
     @Published public var sentienceState: SentienceState = .idle
     @Published public var isListening = false
     @Published public var errorMessage: String? = nil
+    @Published public var pendingAttachments: [ChatAttachment] = []
 
     public var memoryOwner: String = "guest"
     public var sessionSID: String = String(UUID().uuidString.prefix(8)).lowercased()
@@ -42,17 +43,55 @@ public final class ChatViewModel: ObservableObject {
     }
 
     // MARK: — Send (grammar-first, same loop as web processForChat)
+    public func importFiles(from urls: [URL]) {
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let ext = url.pathExtension.lowercased()
+            let name = url.lastPathComponent
+            let stored = UUID().uuidString + (ext.isEmpty ? "" : ".\(ext)")
+            let dest = ChatAttachment.directory.appendingPathComponent(stored)
+            do {
+                if FileManager.default.fileExists(atPath: dest.path) {
+                    try FileManager.default.removeItem(at: dest)
+                }
+                try FileManager.default.copyItem(at: url, to: dest)
+                pendingAttachments.append(ChatAttachment(
+                    fileName: name,
+                    ext: ext,
+                    kind: ChatAttachment.kind(for: ext),
+                    storedName: stored
+                ))
+            } catch {
+                errorMessage = "Attach failed: \(name)"
+            }
+        }
+    }
+
+    public func removePending(_ id: UUID) {
+        if let a = pendingAttachments.first(where: { $0.id == id }) {
+            try? FileManager.default.removeItem(at: a.fileURL)
+        }
+        pendingAttachments.removeAll { $0.id == id }
+    }
+
     public func send() async {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let files = pendingAttachments
+        guard !text.isEmpty || !files.isEmpty else { return }
         inputText = ""
+        pendingAttachments = []
 
-        let userMsg = ChatMessage(role: .user, content: text)
+        let names = files.map(\.fileName).joined(separator: ", ")
+        let display = text.isEmpty ? "[attached \(names)]" : text
+        let grammar = files.isEmpty ? display : display + "\n\n[files: \(names)]"
+
+        let userMsg = ChatMessage(role: .user, content: display, attachments: files)
         messages.append(userMsg)
         isThinking = true
         sentienceState = .reflexing
 
-        let turn = await GrammarEngine.shared.processForChat(text, facts: ["_memoryOwner": memoryOwner])
+        let turn = await GrammarEngine.shared.processForChat(grammar, facts: ["_memoryOwner": memoryOwner])
         currentEmotion = turn.emotion
         currentBuoyancy = turn.buoyancy
         currentTool = turn.tool
