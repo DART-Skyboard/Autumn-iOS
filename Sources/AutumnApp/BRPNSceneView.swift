@@ -12,7 +12,7 @@ public struct BRPNSceneView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var chatVM: ChatViewModel
     private let nodeCapVals: [(Int, String)] = [
-        (10, "10"), (50, "50"), (100, "100"), (300, "300"), (1200, "1.2K"), (2_000_000, "2M")
+        (50, "50"), (150, "150"), (300, "300"), (1000, "1K"), (100_000, "100K"), (1_000_000, "1M")
     ]
 
     public var body: some View {

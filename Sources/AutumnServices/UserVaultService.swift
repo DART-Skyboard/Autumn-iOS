@@ -67,7 +67,7 @@ public actor UserVaultService {
     private func createAllSubfolders(at root: URL) {
         let fm = FileManager.default
         let folders = [
-            "journal", "memory", "projects", "exports",
+            "journal", "memory", "projects", "exports", "ash-shard",
             "ArcLake", "ArcLake/models", "ArcLake/sessions", "ArcLake/exports"
         ]
         for sub in folders {
@@ -79,8 +79,25 @@ public actor UserVaultService {
     }
 
     // MARK: — GitHub vault mirror
+    public static func repoName(for username: String) -> String {
+        "Autumn-Ash-\(username)"
+    }
+
+    /// Read a vault file from the user's private Autumn-Ash-{username} repo.
+    public func readRemote(folder: VaultFolder, filename: String, githubUsername: String) async -> String? {
+        let repo = Self.repoName(for: githubUsername)
+        guard let file = try? await github.readFile(owner: githubUsername, repo: repo, path: "\(folder.path)/\(filename)"),
+              let text = file.decodedContent
+        else { return nil }
+        return text
+    }
+
+    public func saveMemorySnapshot(username: String, json: String) async {
+        await write(folder: .memory, filename: "chunk_001.json", content: json, githubUsername: username)
+    }
+
     private func setupGitHubVault(username: String) async {
-        let repoName = "Autumn-Ash"
+        let repoName = Self.repoName(for: username)
         do {
             let repos = try await github.listRepos()
             if !repos.contains(where: { $0.name == repoName }) {
@@ -91,6 +108,8 @@ public actor UserVaultService {
                 let seedPaths = [
                     "journal/.gitkeep", "memory/.gitkeep",
                     "projects/.gitkeep", "exports/.gitkeep",
+                    "ash-shard/.gitkeep",
+                    "ash-memory/README.md",
                     "ArcLake/models/.gitkeep",
                     "ArcLake/sessions/.gitkeep",
                     "ArcLake/exports/.gitkeep"
@@ -123,11 +142,12 @@ public actor UserVaultService {
             try? content.write(to: url, atomically: true, encoding: .utf8)
         }
         if let gh = githubUsername, !gh.isEmpty {
+            let repo = Self.repoName(for: gh)
             let path = "\(folder.path)/\(filename)"
             let sha = (try? await github.readFile(
-                owner: gh, repo: "Autumn-Ash", path: path))?.sha
+                owner: gh, repo: repo, path: path))?.sha
             try? await github.writeFile(
-                owner: gh, repo: "Autumn-Ash",
+                owner: gh, repo: repo,
                 path: path, content: content,
                 message: "sync: \(filename)", sha: sha
             )
@@ -180,6 +200,7 @@ public enum VaultFolder: String, CaseIterable {
     case memory     = "memory"
     case projects   = "projects"
     case exports    = "exports"
+    case shard      = "ash-shard"
     // ArcLake folders
     case arcModels  = "ArcLake/models"
     case arcSessions = "ArcLake/sessions"
@@ -193,9 +214,40 @@ public enum VaultFolder: String, CaseIterable {
         case .memory:      return "Memory"
         case .projects:    return "Projects"
         case .exports:     return "Exports"
+        case .shard:       return "Ash Shard"
         case .arcModels:   return "ArcLake Models"
         case .arcSessions: return "ArcLake Sessions"
         case .arcExports:  return "ArcLake Exports"
         }
+    }
+}
+
+
+/// Web `_autosave` / `_ensureUserRepo` — snapshot into Autumn-Ash-{username}.
+public enum AutumnMemorySync {
+    @MainActor
+    public static func saveNow(username: String, sessionUID: String, messages: [ChatMessage] = []) async {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty,
+              user.lowercased() != "guest",
+              !user.hasPrefix("ios-"),
+              !user.hasPrefix("apple-") else { return }
+        await UserVaultService.shared.setup(githubUsername: user)
+        let publicMsgs = messages.filter { !$0.isInternal }.suffix(200)
+        let payload: [String: Any] = [
+            "version": "2.1",
+            "username": user,
+            "saved": ISO8601DateFormatter().string(from: Date()),
+            "platform": "ios",
+            "sid": sessionUID,
+            "sessions": [[
+                "id": sessionUID,
+                "messages": publicMsgs.map { ["role": $0.role.rawValue, "content": $0.content] as [String: String] }
+            ]]
+        ]
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        await UserVaultService.shared.saveMemorySnapshot(username: user, json: json)
     }
 }

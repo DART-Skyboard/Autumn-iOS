@@ -19,7 +19,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     @Published public var mazeCanSolve = false
     @Published public var isSolving = false
     /// JS: `_mantisNodeMax` default 100 — node cap HUD 10/50/100/300/1200/2e6
-    @Published public var mantisNodeMax: Int = 100
+    @Published public var mantisNodeMax: Int = 300
     private var lastAshFire: Date = .distantPast
     private var lastJournalStar: Date = .distantPast
     private var ashStarBroadcastIds: Set<String> = []
@@ -366,7 +366,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     public func addRemoteNode(uid: String, emotion: String = "neutral") {
         if sessionGroupNodes[uid] != nil { return }
         // Node-cap HUD: drop oldest live orbs so weaker devices stay fluid.
-        while sessionGroupNodes.count >= max(1, min(mantisNodeMax, 400)) {
+        while sessionGroupNodes.count >= max(1, mantisNodeMax) {
             if let k = sessionGroupNodes.keys.first {
                 sessionGroupNodes[k]?.removeFromParentNode()
                 sessionGroupNodes.removeValue(forKey: k)
