@@ -50,7 +50,7 @@ public struct AppShellView: View {
                 if appNav.showRadar { MantisRadarView() }
                 if let studio = appNav.studio { StudioHostView(kind: studio) }
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         // Chat/input stack must NOT ignore the keyboard. Removing this lets the
         // Ask Autumn bar rest directly above the system keyboard.
