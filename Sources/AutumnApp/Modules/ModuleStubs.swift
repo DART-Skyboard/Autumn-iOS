@@ -33,6 +33,7 @@ struct OverlayPanel<Content: View>: View {
             .background(chrome.accent.opacity(0.06))
             content
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(.ultraThinMaterial)
         .background(Color.white.opacity(0.08))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.28), lineWidth: 1))

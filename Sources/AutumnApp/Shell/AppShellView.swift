@@ -6,7 +6,7 @@ import LEATRCore
 /// Native shell matching live leatr.xyz:
 /// Z-order: theme video/solid → scrim (hit-test off) → chrome/scene/chat/sheets.
 /// Portrait: scene top, chat bottom, left GEO/MAR/AERO+ADMIN, right MIST/STAR/SHARD/SYS.
-/// Landscape: top bar becomes a left drawer; scene + chat stay on the right, tall.
+/// Landscape: header/tools left, scene+ash middle, chat right (web three-split). Portrait restores the stacked chrome.
 /// GEO/MAR/AERO live only as the left stack — never also as a top row.
 public struct AppShellView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
@@ -84,15 +84,35 @@ public struct AppShellView: View {
         }
     }
 
-    // MARK: — Landscape: left drawer + (scene over chat)
+    // MARK: — Landscape: web three-split — header left, ash middle, chat right.
+    /// Portrait stack (scene / EmoHUD / ash bar / chat) is restored by portraitChrome.
     private func landscapeChrome(size: CGSize) -> some View {
         HStack(spacing: 0) {
             leftDrawer
-                .frame(width: min(168, max(132, size.width * 0.22)))
+                .frame(width: min(156, max(120, size.width * 0.18)))
+            // Middle: 3D scene + EmoHUD + Ash Canvas as its own section (not a thin bar under chat).
             VStack(spacing: 0) {
                 sceneStage
-                belowSceneStack(chatMax: min(size.height * 0.42, 280))
+                    .frame(maxHeight: .infinity)
+                EmoHUD()
+                AshCanvasTrigger()
+                if appNav.showAshCanvas {
+                    AshCanvasView()
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: min(size.height * 0.52, 360))
+                }
             }
+            .frame(maxWidth: .infinity)
+            // Right: chat stays independent so the video/scene stay readable and narrow.
+            VStack(spacing: 0) {
+                ChatView()
+                    .frame(maxHeight: .infinity)
+                    .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
+                if !keyboardUp {
+                    footerBar
+                }
+            }
+            .frame(width: min(340, max(220, size.width * 0.34)))
         }
     }
 

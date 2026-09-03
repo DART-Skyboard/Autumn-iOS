@@ -35,24 +35,29 @@ public struct RightRailView: View {
 }
 
 /// Hosts MIST/STAR/SHARD/SYS overlays on the BRPN scene (web right-edge drawers).
+/// Portrait: 300pt card. Landscape: wider/taller so maze, shard canvas, SYS body show in full.
 struct ModuleOverlayHost: View {
     @EnvironmentObject var appNav: AppNavigation
     var body: some View {
-        HStack {
-            Spacer()
-            Group {
-                switch appNav.rightTab {
-                case .mist: MISTOverlay()
-                case .star: StarOverlay()
-                case .shard: ShardOverlay()
-                case .sys: SYSOverlay()
-                case .none: EmptyView()
+        GeometryReader { geo in
+            let land = geo.size.width > geo.size.height
+            HStack {
+                Spacer()
+                Group {
+                    switch appNav.rightTab {
+                    case .mist: MISTOverlay()
+                    case .star: StarOverlay()
+                    case .shard: ShardOverlay()
+                    case .sys: SYSOverlay()
+                    case .none: EmptyView()
+                    }
                 }
+                .frame(width: land ? min(geo.size.width * 0.72, 560) : 300)
+                .frame(maxHeight: land ? geo.size.height - 12 : min(geo.size.height - 16, 520))
+                .padding(.trailing, land ? 8 : 46)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
             }
-            .frame(width: 300)
-            .padding(.trailing, 46)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
         }
         .allowsHitTesting(appNav.rightTab != .none)
     }

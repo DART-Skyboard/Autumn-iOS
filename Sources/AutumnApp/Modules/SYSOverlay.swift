@@ -2,6 +2,7 @@ import SwiftUI
 import AutumnServices
 
 /// SYSTEM BROADCAST — public read of system-broadcast.json; compose via GAS for dartsolarpunk.
+/// Body is scrollable, pinch-zoomable, and tappable hyperlinks.
 public struct SYSOverlay: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
@@ -14,22 +15,44 @@ public struct SYSOverlay: View {
     @State private var status = ""
     @State private var showCompose = false
     @State private var live = false
+    @State private var zoom: CGFloat = 1.0
+    @State private var pinchBase: CGFloat = 1.0
 
     private let def = "No system updates today."
 
     public var body: some View {
         OverlayPanel(title: "SYSTEM MESSAGE", onClose: { appNav.rightTab = .none }) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(updated.isEmpty ? "NO ACTIVE BROADCAST" : updated)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(themeVM.chrome.accent.opacity(0.45))
-                ScrollView {
-                    Text(message)
-                        .font(.system(size: 13))
-                        .foregroundColor(live ? .white.opacity(0.9) : .white.opacity(0.4))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                HStack {
+                    Text(updated.isEmpty ? "NO ACTIVE BROADCAST" : updated)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(themeVM.chrome.accent.opacity(0.45))
+                    Spacer()
+                    Button("−") { zoom = max(0.8, zoom - 0.15) }
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundColor(themeVM.chrome.accent)
+                    Text("\(Int(zoom * 100))%")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.4))
+                    Button("+") { zoom = min(2.6, zoom + 0.15) }
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundColor(themeVM.chrome.accent)
                 }
-                .frame(maxHeight: 180)
+                ScrollView {
+                    Text(linkedBody)
+                        .font(.system(size: 13 * zoom))
+                        .foregroundColor(live ? .white.opacity(0.9) : .white.opacity(0.4))
+                        .tint(themeVM.chrome.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(.bottom, 8)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .onChanged { v in zoom = min(max(pinchBase * v, 0.8), 2.6) }
+                        .onEnded { _ in pinchBase = zoom }
+                )
 
                 if circuit.allows(authVM) {
                     Button("⚡ COMPOSE") { showCompose = true; draft = live ? message : "" }
@@ -47,12 +70,40 @@ public struct SYSOverlay: View {
         }
     }
 
+    /// Detect raw URLs plus markdown [label](url) so SYS can carry hyperlinks.
+    private var linkedBody: AttributedString {
+        var src = message
+        let md = try? NSRegularExpression(pattern: #"\[([^\]]+)\]\((https?://[^)]+)\)"#, options: [])
+        if let md {
+            let ns = src as NSString
+            let matches = md.matches(in: src, range: NSRange(location: 0, length: ns.length)).reversed()
+            for m in matches {
+                if m.numberOfRanges >= 3,
+                   let label = Range(m.range(at: 1), in: src),
+                   let url = Range(m.range(at: 2), in: src),
+                   let full = Range(m.range, in: src) {
+                    src.replaceSubrange(full, with: "\(src[label]) <\(src[url])>")
+                }
+            }
+        }
+        var attr = AttributedString(src)
+        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
+            let ns = src as NSString
+            for match in detector.matches(in: src, range: NSRange(location: 0, length: ns.length)) {
+                guard let url = match.url, let r = Range(match.range, in: attr) else { continue }
+                attr[r].link = url
+                attr[r].underlineStyle = .single
+            }
+        }
+        return attr
+    }
+
     private var compose: some View {
         NavigationStack {
             ZStack {
                 themeVM.chrome.base.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Post a system message to all sessions. Writes via GAS ashwrite — no PAT.")
+                    Text("Post a system message to all sessions. Writes via GAS ashwrite — no PAT. Links (https://…) stay tappable.")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.6))
                     TextEditor(text: $draft)
