@@ -1,6 +1,7 @@
 import SwiftUI
 import SceneKit
 import LEATRCore
+import AutumnServices
 
 // MARK: — BRPNSceneViewModel
 // Live port of index.html initBRPN / animate / buildOrbMazeGeometry.
@@ -21,6 +22,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     @Published public var mantisNodeMax: Int = 100
     private var lastAshFire: Date = .distantPast
     private var lastJournalStar: Date = .distantPast
+    private var ashStarBroadcastIds: Set<String> = []
     public var connectedUids: [String] { Array(sessionGroupNodes.keys) }
 
     public let scene = SCNScene()
@@ -439,7 +441,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     public func spawnAshStar(color: UIColor = UIColor(red: 1, green: 0.87, blue: 0, alpha: 1), target: String = "all") {
-        _ = fireAshStar(thought: AshStarThought.capabilityLine(), color: color, toUids: target == "all" ? nil : [target], force: true)
+        _ = fireAshStar(thought: "", color: color, toUids: target == "all" ? nil : [target], force: true)
     }
 
     /// js/mist-module.js fireAshStar — ride plasma to chosen live orbs. 8s cooldown unless force.
@@ -587,19 +589,37 @@ public final class BRPNSceneViewModel: ObservableObject {
         maybeAutumnStar()
     }
 
-    /// js _autumnJournalWatch — unprompted star from Autumn's capability lines, never user chat.
+    /// js _autumnJournalWatch — geometry always; archive only a real journal thought.
     private func maybeAutumnStar() {
         let now = Date()
         if now.timeIntervalSince(lastJournalStar) < 20 { return }
         lastJournalStar = now
         guard !connectedUids.isEmpty else { return }
-        // Sparse will: not every poll, and not every connected orb.
         guard Int.random(in: 0..<4) == 0 else { return }
         let pick = Array(connectedUids.shuffled().prefix(max(1, connectedUids.count / 3)))
-        let thought = AshStarThought.capabilityLine()
-        if fireAshStar(thought: thought, toUids: pick, force: false) {
+        Task { await self.autumnJournalStar(toUids: pick) }
+    }
+
+    private func autumnJournalStar(toUids: [String]) async {
+        var thought = ""
+        if let raw = await AutumnGASClient.shared.ashread(path: AutumnConfig.journalPath) {
+            var seen = ashStarBroadcastIds
+            thought = AshStarThought.nextFromJournal(raw, seen: &seen)
+            ashStarBroadcastIds = seen
+        }
+        let fired = fireAshStar(thought: thought, toUids: toUids, force: false)
+        guard fired else { return }
+        if !thought.isEmpty {
             AshStarArchive.push(AshStarCard(thought: thought, color: "#00d4ff", from: "autumn", uid: "autumn"))
-            MISTModule.shared.emitAshStarPacket(thought: String(thought.prefix(120)), toUids: pick, uid: "autumn")
+        }
+        MISTModule.shared.emitAshStarPacket(thought: thought, toUids: toUids, uid: "autumn")
+    }
+
+    public func receiveIncomingStar(thought: String, colorHex: String, uid: String) {
+        _ = fireAshStar(thought: thought, color: UIColor.fromSwiftUI(Color(hex: colorHex.isEmpty ? "#00d4ff" : colorHex)), toUids: nil, force: true)
+        let t = AshStarThought.sanitize(thought)
+        if !t.isEmpty {
+            AshStarArchive.push(AshStarCard(thought: t, color: colorHex.isEmpty ? "#00d4ff" : colorHex, from: "autumn", uid: uid))
         }
     }
 

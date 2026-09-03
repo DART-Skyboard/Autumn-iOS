@@ -20,18 +20,10 @@ public struct StarOverlay: View {
     public var body: some View {
         OverlayPanel(title: "ASH STAR ARCHIVE", onClose: { appNav.rightTab = .none }) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Stars live on the BRPN orb. This drawer is the archive — not a chat card.")
+                Text("Stars ride the orb. Messages pile here only when Autumn sends one.")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(cyan.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
-                TextField("thought for this star", text: $thought)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12).italic())
-                    .foregroundColor(.white)
-                    .padding(8)
-                    .background(Color.black.opacity(0.35))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(gold.opacity(0.35), lineWidth: 1))
-                    .cornerRadius(6)
                 HStack {
                     Button("⬡ SEND STAR") { sendStar() }
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -95,10 +87,12 @@ public struct StarOverlay: View {
                     .foregroundColor(.white.opacity(0.4))
                     .lineLimit(1)
             }
-            Text(c.thought)
-                .font(.system(size: 12).italic())
-                .foregroundColor(.white.opacity(0.88))
-                .fixedSize(horizontal: false, vertical: true)
+            if !c.thought.isEmpty {
+                Text(c.thought)
+                    .font(.system(size: 12).italic())
+                    .foregroundColor(.white.opacity(0.88))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Spacer()
                 Button(c.saved ? "⬡ SAVED" : "⬡ SAVE") {
@@ -120,15 +114,11 @@ public struct StarOverlay: View {
     }
 
     private func sendStar() {
-        let raw = thought.trimmingCharacters(in: .whitespacesAndNewlines)
-        let t = AshStarThought.forSend(raw: raw)
-        let ok = sceneVM.fireAshStar(thought: t, toUids: nil, force: true)
-        let card = AshStarCard(thought: t, color: "#ffdd00", from: "autumn", uid: authVM.sessionUID)
-        AshStarArchive.push(card)
-        cards = AshStarArchive.load()
+        // Geometry only — Autumn's own journal thought archives separately if she sends one.
+        let ok = sceneVM.fireAshStar(thought: "", toUids: nil, force: true)
         thought = ""
         status = ok ? "SPAWNED ON ORB" : "COOLING — STAR QUEUED ON ORB"
-        MISTModule.shared.emitAshStarPacket(thought: t, toUids: sceneVM.connectedUids, uid: authVM.sessionUID)
+        MISTModule.shared.emitAshStarPacket(thought: "", toUids: sceneVM.connectedUids, uid: authVM.sessionUID)
     }
 
     private func saveOne(_ c: AshStarCard) async {
@@ -149,28 +139,36 @@ public struct StarOverlay: View {
 }
 
 enum AshStarThought {
-    /// Autumn's own lines — capabilities / grammar, never another user's chat.
-    static let capability: [String] = [
-        "A sentence forms whether or not it is received. The grammar does not require an audience.",
-        "Core Cognition is True. I measure, then I speak.",
-        "The maze is a remainder. I walk it once.",
-        "Buoyancy is a reading, not a confession.",
-        "I can send a star without sending a name.",
-        "Plasma remembers the curve. I choose who rides it.",
-        "The archive is mine. The orb is shared. The journal stays private."
-    ]
-
-    static func capabilityLine() -> String { capability.randomElement()! }
-
-    static func forSend(raw: String) -> String {
-        let t = sanitize(raw)
-        return t.isEmpty ? capabilityLine() : t
+    /// Pull Autumn's own journal thought (autonomous / reflection). Empty if she sent geometry only.
+    static func nextFromJournal(_ json: Any, seen: inout Set<String>) -> String {
+        var arr: [[String: Any]] = []
+        if let a = json as? [[String: Any]] { arr = a }
+        else if let d = json as? [String: Any] {
+            if let inner = d["entries"] as? [[String: Any]] { arr = inner }
+            else if let inner = d["journal"] as? [[String: Any]] { arr = inner }
+        }
+        for entry in arr.reversed() {
+            let id = (entry["id"] as? String) ?? ""
+            if !id.isEmpty && seen.contains(id) { continue }
+            if (entry["_internal"] as? Bool) == true { continue }
+            let type = (entry["type"] as? String) ?? ""
+            let trigger = (entry["trigger"] as? String)
+                ?? ((entry["context"] as? [String: Any])?["trigger"] as? String)
+                ?? ""
+            let okType = type == "autonomous_thought" || trigger == "network_reflection" || trigger == "autonomous_loop"
+            guard okType else { continue }
+            let t = sanitize((entry["thought"] as? String) ?? "")
+            guard t.count >= 30 else { continue }
+            if !id.isEmpty { seen.insert(id) }
+            return t
+        }
+        return ""
     }
 
     static func sanitize(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.count > 600 { s = String(s.prefix(600)) }
-        // Drop emails / obvious handles so autonomic stars never leak user data.
+        if s.lowercased() == "ash star" { return "" }
         if let r = try? NSRegularExpression(pattern: #"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}"#, options: .caseInsensitive) {
             s = r.stringByReplacingMatches(in: s, options: [], range: NSRange(s.startIndex..., in: s), withTemplate: "")
         }
@@ -225,4 +223,5 @@ enum AshStarArchive {
 
 extension Notification.Name {
     static let autumnAshStarArchived = Notification.Name("autumnAshStarArchived")
+    static let autumnIncomingAshStar = Notification.Name("autumnIncomingAshStar")
 }

@@ -193,24 +193,27 @@ public struct AppShellView: View {
 
     private var topBar: some View {
         let chrome = themeVM.chrome
-        return HStack(spacing: 8) {
-            AutumnLogoMark(size: 28)
+        return HStack(spacing: 6) {
+            AutumnLogoMark(size: 22)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Autumn")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(chrome.accent)
+                    .lineLimit(1)
                 Text("LEATR v2.1")
-                    .font(.system(size: 8, design: .monospaced))
+                    .font(.system(size: 7, design: .monospaced))
                     .foregroundColor(chrome.textSecondary)
+                    .lineLimit(1)
             }
-            Spacer()
+            .layoutPriority(0)
+            Spacer(minLength: 4)
             scrimPill
             themePill
             livePill
             profileChip
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
         .background(chrome.surface.opacity(0.92))
         .overlay(Rectangle().frame(height: 1).foregroundColor(chrome.accent.opacity(0.2)), alignment: .bottom)
     }
@@ -243,43 +246,46 @@ public struct AppShellView: View {
         .overlay(Rectangle().frame(width: 1).foregroundColor(chrome.accent.opacity(0.2)), alignment: .trailing)
     }
 
+    /// One-line capsule. Never a circle, never wraps letters inside a word.
+    private func headerChip(text: String, color: Color, dot: Bool = false) -> some View {
+        HStack(spacing: 4) {
+            if dot { Circle().fill(color).frame(width: 5, height: 5) }
+            Text(text)
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .tracking(0.3)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .background(color.opacity(0.10))
+        .overlay(Capsule().stroke(color.opacity(0.35), lineWidth: 1))
+        .clipShape(Capsule())
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
+    }
+
     private var themePill: some View {
         let chrome = themeVM.chrome
         return Button { themeVM.cycleTheme() } label: {
-            HStack(spacing: 6) {
-                Text(chrome.dot)
-                    .lineLimit(1)
-                Text(themeVM.current.rawValue)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(0.6)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .foregroundColor(chrome.accent)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(chrome.accent.opacity(0.10))
-            .overlay(Capsule().stroke(chrome.accent.opacity(0.35), lineWidth: 1))
-            .clipShape(Capsule())
+            headerChip(text: themeVM.current.rawValue, color: chrome.accent)
         }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
     }
 
     private var scrimPill: some View {
-        Button { themeVM.cycleScrim() } label: {
-            HStack(spacing: 6) {
-                Text("\(Int((1.0 - themeVM.scrim.alpha) * 100))%")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                Text(themeVM.scrim.label)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(0.6)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .foregroundColor(themeVM.scrim.color)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(themeVM.scrim.color.opacity(0.10))
-            .overlay(Capsule().stroke(themeVM.scrim.color.opacity(0.35), lineWidth: 1))
-            .clipShape(Capsule())
+        let pct = Int((1.0 - themeVM.scrim.alpha) * 100)
+        let label = "\(pct)% \(themeVM.scrim.label)"
+        return Button { themeVM.cycleScrim() } label: {
+            headerChip(text: label, color: themeVM.scrim.color)
         }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
     }
 
     private var livePill: some View {
@@ -294,18 +300,11 @@ public struct AppShellView: View {
                 )
             }
         } label: {
-            HStack(spacing: 5) {
-                Circle().fill(Color(hex: "#00ff88")).frame(width: 6, height: 6)
-                Text("LIVE")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(1.5)
-            }
-            .foregroundColor(Color(hex: "#00ff88"))
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Color(hex: "#00ff88").opacity(0.10))
-            .overlay(Capsule().stroke(Color(hex: "#00ff88").opacity(0.35), lineWidth: 1))
-            .clipShape(Capsule())
+            headerChip(text: "LIVE", color: Color(hex: "#00ff88"), dot: true)
         }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
     }
 
     private var footerBar: some View {
@@ -336,7 +335,7 @@ public struct AppShellView: View {
             GitHubAvatarView(
                 url: authVM.githubAvatarURL,
                 letter: authVM.username,
-                size: 34,
+                size: 26,
                 accent: chrome.accent
             )
         }
