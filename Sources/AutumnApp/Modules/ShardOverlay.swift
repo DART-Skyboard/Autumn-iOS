@@ -24,15 +24,16 @@ public struct ShardOverlay: View {
     public var body: some View {
         OverlayPanel(title: "ASH SHARD", onClose: { appNav.rightTab = .none }) {
             GeometryReader { geo in
-                // Square canvas from leftover height, never a wide squat bar.
-                // Contacts get the remaining column so many names show (~180pt floor).
+                // Landscape textile fills overlay width; shapes stay proportional (uniform scale).
+                // Contacts list taller so more than four names show (valour was clipped).
                 let pad: CGFloat = 12
                 let innerW = max(80, geo.size.width - pad * 2)
                 let chrome: CGFloat = 214
-                let contactsFloor: CGFloat = 180
-                let canvasBudget = max(110, geo.size.height - chrome - contactsFloor)
-                let side = min(innerW, canvasBudget)
-                let leftover = max(80, geo.size.height - chrome - side)
+                let contactsFloor: CGFloat = 260
+                let canvasBudget = max(90, geo.size.height - chrome - contactsFloor)
+                let canvasW = innerW
+                let canvasH = min(canvasBudget, canvasW * 0.58)
+                let leftover = max(contactsFloor, geo.size.height - chrome - canvasH)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Build a textile, pick contacts, send along plasma curves.")
                         .font(.system(size: 11))
@@ -46,14 +47,10 @@ public struct ShardOverlay: View {
                                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(themeVM.chrome.accent.opacity(tool == t ? 0.6 : 0.15), lineWidth: 1))
                         }
                     }
-                    HStack {
-                        Spacer(minLength: 0)
-                        textileCanvas
-                            .frame(width: side, height: side)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(themeVM.chrome.accent.opacity(0.2), lineWidth: 1))
-                            .cornerRadius(6)
-                        Spacer(minLength: 0)
-                    }
+                    textileCanvas
+                        .frame(width: canvasW, height: canvasH)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(themeVM.chrome.accent.opacity(0.2), lineWidth: 1))
+                        .cornerRadius(6)
 
                     HStack(spacing: 8) {
                         ColorPicker("", selection: $color).labelsHidden().frame(width: 32, height: 22)
@@ -136,11 +133,14 @@ public struct ShardOverlay: View {
     }
 
     private func drawShape(_ ctx: inout GraphicsContext, _ s: ShardShape, in size: CGSize) {
+        // Uniform pixel scale so a rect/circle keeps aspect on a wide landscape canvas.
+        // x/y still map across the full canvas; mark size uses width as the unit.
+        let unit = size.width
         let rect = CGRect(
             x: s.x * size.width,
             y: s.y * size.height,
-            width: max(12, s.w * size.width),
-            height: max(12, s.h * size.height)
+            width: max(12, s.w * unit),
+            height: max(12, s.h * unit)
         )
         let col = Color(hex: s.color).opacity(s.opacity)
         switch s.tool {

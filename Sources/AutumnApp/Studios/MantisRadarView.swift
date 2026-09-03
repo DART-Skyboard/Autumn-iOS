@@ -14,6 +14,11 @@ struct MantisRadarView: View {
     @ObservedObject private var feed = RadarFeed.shared
     @State private var aerial = true
 
+    private var displayName: String {
+        if !authVM.githubUsername.isEmpty { return authVM.githubUsername }
+        return authVM.username
+    }
+
     var body: some View {
         let cyan = Color(hex: "#00f5ff")
         VStack(spacing: 0) {
@@ -44,9 +49,9 @@ struct MantisRadarView: View {
 
             ZStack(alignment: .topLeading) {
                 if aerial {
-                    RadarMapView(feed: feed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username)
+                    RadarMapView(feed: feed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName)
                 } else {
-                    RadarGlobeView(feed: feed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username)
+                    RadarGlobeView(feed: feed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("CELESTRAK TLE")
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
@@ -61,12 +66,21 @@ struct MantisRadarView: View {
                     .padding(10)
                     .background(Color.black.opacity(0.55))
                     .padding(8)
-
-                    if let sat = feed.selectedSat {
-                        satInfoCard(sat, cyan: cyan)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    }
                 }
+
+            }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if feed.selectedUser {
+                        userInfoCard(cyan: cyan)
+                    } else if aerial, let ac = feed.selectedAircraft {
+                        aircraftInfoCard(ac, cyan: cyan)
+                    } else if !aerial, let sat = feed.selectedSat {
+                        satInfoCard(sat, cyan: cyan)
+                    }
+                    rangeSlider(cyan: cyan)
+                }
+                .padding(8)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -135,7 +149,104 @@ struct MantisRadarView: View {
         .frame(maxWidth: 280, alignment: .leading)
         .background(Color.black.opacity(0.72))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(cyan.opacity(0.35), lineWidth: 1))
-        .padding(8)
+    }
+
+    private func rangeSlider(cyan: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("RANGE \(Int(feed.rangeMiles.rounded())) MI")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(cyan)
+            Slider(value: $feed.rangeMiles, in: 10...600, step: 1)
+                .tint(cyan)
+                .frame(width: 168)
+        }
+        .padding(10)
+        .background(Color.black.opacity(0.55))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(cyan.opacity(0.25), lineWidth: 1))
+        .frame(maxWidth: 200, alignment: .leading)
+        .onChange(of: feed.rangeMiles) { _ in
+            feed.scheduleADSBFromRange()
+        }
+    }
+
+    private func aircraftInfoCard(_ ac: RadarAircraft, cyan: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text("\(ac.icon)  \(ac.callsign)")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(cyan)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Button {
+                    feed.selectedAircraft = nil
+                } label: {
+                    Text("✕")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+            }
+            Text(ac.typeLabel.uppercased())
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.white.opacity(0.8))
+            HStack(spacing: 10) {
+                Text(ac.altitude.map { "\(Int($0.rounded())) ft" } ?? "ALT —")
+                Text(ac.track.map { String(format: "TRK %.0f°", $0) } ?? "TRK —")
+                Text(ac.gs.map { String(format: "%.0f kt", $0) } ?? "")
+            }
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white.opacity(0.85))
+            Text(String(format: "LAT %.3f  LON %.3f", ac.lat, ac.lon))
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.white.opacity(0.55))
+        }
+        .padding(10)
+        .frame(maxWidth: 280, alignment: .leading)
+        .background(Color.black.opacity(0.72))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(cyan.opacity(0.35), lineWidth: 1))
+    }
+
+    private func userInfoCard(cyan: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                if let url = authVM.githubAvatarURL {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img.resizable().scaledToFill()
+                        default:
+                            Circle().fill(Color(hex: "#00202a"))
+                        }
+                    }
+                    .frame(width: 36, height: 36)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(cyan, lineWidth: 1.5))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(cyan)
+                        .lineLimit(1)
+                    Text("YOU")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                Spacer(minLength: 8)
+                Button { feed.selectedUser = false } label: {
+                    Text("✕")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+            }
+            Text(String(format: "LAT %.3f  LON %.3f", feed.userLat, feed.userLon))
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.white.opacity(0.55))
+        }
+        .padding(10)
+        .frame(maxWidth: 280, alignment: .leading)
+        .background(Color.black.opacity(0.72))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(cyan.opacity(0.35), lineWidth: 1))
     }
 
     private func tab(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -188,6 +299,7 @@ struct RadarMapView: UIViewRepresentable {
     @ObservedObject var feed: RadarFeed
     var avatarURL: URL?
     var avatarLetter: String
+    var displayName: String
 
     func makeUIView(context: Context) -> MKMapView {
         let m = MKMapView()
@@ -209,24 +321,46 @@ struct RadarMapView: UIViewRepresentable {
 
     func updateUIView(_ m: MKMapView, context: Context) {
         context.coordinator.map = m
+        context.coordinator.feed = feed
         context.coordinator.letter = avatarLetter
+        context.coordinator.displayName = displayName
         context.coordinator.loadAvatar(avatarURL)
+        m.userLocation.title = displayName
+        m.userLocation.subtitle = nil
         let ready = feed.hasFix || feed.authSettled
+        let span = Self.span(forMiles: feed.rangeMiles)
         if ready && !context.coordinator.didCenterOnFix {
             let center = CLLocationCoordinate2D(latitude: feed.userLat, longitude: feed.userLon)
-            m.setRegion(MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 1.2, longitudeDelta: 1.2)), animated: feed.hasFix)
+            m.setRegion(MKCoordinateRegion(center: center, span: span), animated: feed.hasFix)
             context.coordinator.didCenterOnFix = true
+            context.coordinator.lastRange = feed.rangeMiles
+        } else if context.coordinator.didCenterOnFix, abs(context.coordinator.lastRange - feed.rangeMiles) > 1 {
+            context.coordinator.lastRange = feed.rangeMiles
+            m.setRegion(MKCoordinateRegion(center: m.centerCoordinate, span: span), animated: true)
         }
         context.coordinator.sync(aircraft: feed.aircraft, on: m)
+        if feed.selectedAircraft == nil && !feed.selectedUser {
+            for ann in m.selectedAnnotations {
+                m.deselectAnnotation(ann, animated: true)
+            }
+        }
+    }
+
+    static func span(forMiles miles: Double) -> MKCoordinateSpan {
+        let deg = max(0.35, min(14.0, (miles / 69.0) * 2.5))
+        return MKCoordinateSpan(latitudeDelta: deg, longitudeDelta: deg)
     }
 
     func makeCoordinator() -> Coord { Coord() }
 
     final class Coord: NSObject, MKMapViewDelegate {
         var didCenterOnFix = false
+        var lastRange: Double = 50
         var overlay: MKTileOverlay?
         weak var map: MKMapView?
+        weak var feed: RadarFeed?
         var letter = "G"
+        var displayName = ""
         var avatarImage: UIImage?
         private var loadedURL: URL?
         private var avatarTask: URLSessionDataTask?
@@ -297,7 +431,9 @@ struct RadarMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            if annotation is MKUserLocation {
+            if let user = annotation as? MKUserLocation {
+                user.title = displayName.isEmpty ? nil : displayName
+                user.subtitle = nil
                 let id = RadarUserPinView.reuse
                 let v = (mapView.dequeueReusableAnnotationView(withIdentifier: id) as? RadarUserPinView)
                     ?? RadarUserPinView(annotation: annotation, reuseIdentifier: id)
@@ -312,6 +448,35 @@ struct RadarMapView: UIViewRepresentable {
             v.annotation = ac
             v.apply(ac)
             return v
+        }
+
+        func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
+            UIView.animate(withDuration: 0.16) {
+                view.transform = CGAffineTransform(scaleX: 1.7, y: 1.7)
+            }
+            if view.annotation is MKUserLocation {
+                Task { @MainActor in
+                    self.feed?.selectedUser = true
+                    self.feed?.selectedAircraft = nil
+                }
+            } else if let ac = view.annotation as? RadarACAnnotation {
+                Task { @MainActor in
+                    self.feed?.selectedUser = false
+                    self.feed?.selectedAircraft = self.feed?.aircraft.first(where: { $0.id == ac.aircraftId })
+                }
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, didDeselect view: MKAnnotationView) {
+            UIView.animate(withDuration: 0.16) {
+                view.transform = .identity
+            }
+            Task { @MainActor in
+                if mapView.selectedAnnotations.isEmpty {
+                    self.feed?.selectedAircraft = nil
+                    self.feed?.selectedUser = false
+                }
+            }
         }
     }
 }
@@ -331,7 +496,7 @@ final class RadarACPinView: MKAnnotationView {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         frame = CGRect(x: 0, y: 0, width: 32, height: 32)
         centerOffset = .zero
-        canShowCallout = true
+        canShowCallout = false
         displayPriority = .required
         clusteringIdentifier = nil
         badge.frame = CGRect(x: 2, y: 2, width: 28, height: 28)
@@ -363,7 +528,7 @@ final class RadarUserPinView: MKAnnotationView {
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        canShowCallout = true
+        canShowCallout = false
         displayPriority = .required
         centerOffset = .zero
         collisionMode = .circle
@@ -405,6 +570,7 @@ struct RadarGlobeView: UIViewRepresentable {
     @ObservedObject var feed: RadarFeed
     var avatarURL: URL?
     var avatarLetter: String
+    var displayName: String
 
     func makeUIView(context: Context) -> SCNView {
         let v = SCNView()
@@ -413,8 +579,6 @@ struct RadarGlobeView: UIViewRepresentable {
         v.allowsCameraControl = true
         v.antialiasingMode = .multisampling4X
         v.autoenablesDefaultLighting = false
-        let spin = SCNAction.repeatForever(SCNAction.rotateBy(x: 0, y: CGFloat.pi * 2, z: 0, duration: 80))
-        context.coordinator.root.runAction(spin)
         context.coordinator.scnView = v
         let tap = RadarShortTapRecognizer(target: context.coordinator, action: #selector(Globe.handleTap(_:)))
         tap.cancelsTouchesInView = false
@@ -430,12 +594,14 @@ struct RadarGlobeView: UIViewRepresentable {
         context.coordinator.scnView = v
         context.coordinator.letter = avatarLetter
         context.coordinator.loadAvatar(avatarURL)
+        context.coordinator.displayName = displayName
         context.coordinator.sync(
             sats: feed.satellites,
             aircraft: feed.aircraft,
             userLat: feed.userLat,
             userLon: feed.userLon,
-            selectedId: feed.selectedSat?.id
+            selectedId: feed.selectedSat?.id,
+            selectedUser: feed.selectedUser
         )
     }
 
@@ -448,8 +614,10 @@ struct RadarGlobeView: UIViewRepresentable {
         let userNode = SCNNode()
         let earthR: Float = 1.0
         weak var scnView: SCNView?
+        weak var sceneRoot: SCNNode?
         weak var feed: RadarFeed?
         var letter = "G"
+        var displayName = ""
         var avatarImage: UIImage?
         private var loadedURL: URL?
         private var avatarTask: URLSessionDataTask?
@@ -489,9 +657,6 @@ struct RadarGlobeView: UIViewRepresentable {
             root.addChildNode(SCNNode(geometry: grid))
 
             applyUserAvatar(force: true)
-            root.addChildNode(userNode)
-            root.addChildNode(satRoot)
-            root.addChildNode(acRoot)
 
             let amb = SCNNode()
             amb.light = { let l = SCNLight(); l.type = .ambient; l.intensity = 400; l.color = UIColor.white; return l }()
@@ -504,9 +669,13 @@ struct RadarGlobeView: UIViewRepresentable {
             cam.position = SCNVector3(0, 0, 3.2)
 
             scene.rootNode.addChildNode(root)
+            scene.rootNode.addChildNode(userNode)
+            scene.rootNode.addChildNode(satRoot)
+            scene.rootNode.addChildNode(acRoot)
             scene.rootNode.addChildNode(amb)
             scene.rootNode.addChildNode(dir)
             scene.rootNode.addChildNode(cam)
+            sceneRoot = scene.rootNode
             return scene
         }
 
@@ -551,9 +720,10 @@ struct RadarGlobeView: UIViewRepresentable {
             }
         }
 
-        func sync(sats: [RadarSat], aircraft: [RadarAircraft], userLat: Double, userLon: Double, selectedId: String?) {
+        func sync(sats: [RadarSat], aircraft: [RadarAircraft], userLat: Double, userLon: Double, selectedId: String?, selectedUser: Bool) {
             lastSats = Array(sats.prefix(220))
             userNode.position = xyz(lat: userLat, lon: userLon, altKm: 50)
+            userNode.scale = selectedUser ? SCNVector3(1.7, 1.7, 1.7) : SCNVector3(1, 1, 1)
             applyUserAvatar(force: false)
 
             let live = Set(lastSats.map(\.id))
@@ -564,7 +734,7 @@ struct RadarGlobeView: UIViewRepresentable {
             for s in lastSats {
                 let pos = xyz(lat: s.lat, lon: s.lon, altKm: max(200, s.altKm))
                 let selected = s.id == selectedId
-                let r: CGFloat = selected ? 0.022 : 0.014
+                let r: CGFloat = selected ? 0.026 : 0.018
                 let col = Self.uiColor(s)
                 if let n = satNodes[s.id] {
                     n.position = pos
@@ -646,7 +816,7 @@ struct RadarGlobeView: UIViewRepresentable {
             }
             if let node = ThreeJSGeometry.lineSegments(verts, color: UIColor(red: 0.15, green: 1, blue: 0.45, alpha: 1), opacity: 0.78) {
                 node.name = "orbit"
-                root.addChildNode(node)
+                (sceneRoot ?? root).addChildNode(node)
                 orbitNode = node
             }
         }
@@ -674,7 +844,7 @@ struct RadarGlobeView: UIViewRepresentable {
             ]
             if let node = ThreeJSGeometry.lineSegments(verts, color: UIColor(red: 0.7, green: 1, blue: 0.85, alpha: 1), opacity: 0.95) {
                 node.name = "orbit-tick"
-                root.addChildNode(node)
+                (sceneRoot ?? root).addChildNode(node)
                 tickNode = node
             }
         }
@@ -682,11 +852,42 @@ struct RadarGlobeView: UIViewRepresentable {
         @objc func handleTap(_ g: UIGestureRecognizer) {
             guard g.state == .recognized, let view = scnView else { return }
             let pt = g.location(in: view)
-            guard let id = pickSat(at: pt, in: view),
-                  let sat = lastSats.first(where: { $0.id == id }) else { return }
-            Task { @MainActor in
-                self.feed?.selectedSat = sat
+            if isUserHit(at: pt, in: view) {
+                Task { @MainActor in
+                    self.feed?.selectedUser = true
+                    self.feed?.selectedSat = nil
+                    self.feed?.selectedAircraft = nil
+                }
+                return
             }
+            if let id = pickSat(at: pt, in: view),
+               let sat = lastSats.first(where: { $0.id == id }) {
+                Task { @MainActor in
+                    self.feed?.selectedUser = false
+                    self.feed?.selectedSat = sat
+                }
+                return
+            }
+            Task { @MainActor in
+                self.feed?.selectedSat = nil
+                self.feed?.selectedUser = false
+            }
+        }
+
+        private func isUserHit(at point: CGPoint, in view: SCNView) -> Bool {
+            let p = view.projectPoint(userNode.worldPosition)
+            if p.z > 0, p.z < 1 {
+                let d = hypot(CGFloat(p.x) - point.x, CGFloat(p.y) - point.y)
+                if d < 40 { return true }
+            }
+            let hits = view.hitTest(point, options: [
+                .searchMode: SCNHitTestSearchMode.closest.rawValue,
+                .boundingBoxOnly: true
+            ])
+            for h in hits {
+                if h.node.name == "user" || h.node.parent?.name == "user" { return true }
+            }
+            return false
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
@@ -699,7 +900,7 @@ struct RadarGlobeView: UIViewRepresentable {
                 let p = view.projectPoint(node.worldPosition)
                 guard p.z > 0, p.z < 1 else { continue }
                 let d = hypot(CGFloat(p.x) - point.x, CGFloat(p.y) - point.y)
-                if d < 32, best == nil || d < best!.1 {
+                if d < 44, best == nil || d < best!.1 {
                     best = (id, d)
                 }
             }
