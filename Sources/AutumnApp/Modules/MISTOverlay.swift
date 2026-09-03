@@ -5,6 +5,7 @@ import AutumnServices
 import LEATRCore
 
 /// MIST overlay — js/mist-module.js generateMaze/solveMaze 2D + LEMAC cubic sigma.
+/// Green player dot follows the finger along open corridors (web sphereActual lerp + path walk).
 public struct MISTOverlay: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
@@ -17,87 +18,92 @@ public struct MISTOverlay: View {
     @State private var dragPath: [MazeEngine.MistPt] = []
     @State private var dragging = false
     @State private var cubicMode = false
+    @State private var ball: CGPoint? = nil
     @StateObject private var cubeVM = LEMACCubeViewModel()
 
     public var body: some View {
         OverlayPanel(title: "MIST · LEAD EDGE MAZE", onClose: { appNav.rightTab = .none }) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    ForEach([1, 2, 3], id: \.self) { d in
-                        Button(d == 1 ? "★ STAR" : d == 2 ? "♥ HEART" : "◈ MIST") {
-                            difficulty = d
+            GeometryReader { geo in
+                let mazeH = max(180, min(geo.size.height * 0.62, geo.size.width - 8))
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        ForEach([1, 2, 3], id: \.self) { d in
+                            Button(d == 1 ? "★ STAR" : d == 2 ? "♥ HEART" : "◈ MIST") {
+                                difficulty = d
+                                newMaze()
+                            }
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .foregroundColor(difficulty == d ? Color(hex: "#00e5ff") : .white.opacity(0.45))
+                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(hex: "#00e5ff").opacity(difficulty == d ? 0.6 : 0.2), lineWidth: 1))
+                        }
+                    }
+
+                    HStack(spacing: 6) {
+                        Button("2D") { cubicMode = false; newMaze() }
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(!cubicMode ? Color.cyan : .white.opacity(0.45))
+                        Button("CUBE") { cubicMode = true; cubeVM.generate(difficulty: difficulty) }
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(cubicMode ? Color.cyan : .white.opacity(0.45))
+                        Spacer()
+                        Text("DIFF \(["", "I", "II", "III"][difficulty])")
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+
+                    if cubicMode {
+                        LEMACCubeKitView(vm: cubeVM)
+                            .frame(height: mazeH)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    } else if let maze {
+                        MistMazeCanvas(maze: maze, dragPath: dragPath, ball: ball, onFinger: handleFinger)
+                            .frame(height: mazeH)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button("⬡ SIGMA SOLVE") {
+                            if cubicMode {
+                                cubeVM.sigmaSolve()
+                                mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
+                                sceneVM.emitMist(fromLocal: true)
+                                status = "SIGMA REMAINDER"
+                            } else if var m = maze, let sol = MazeEngine.solveMaze(m) {
+                                dragPath = sol
+                                m.solved = true
+                                maze = m
+                                ball = nil
+                                mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
+                                sceneVM.emitMist(fromLocal: true)
+                                status = "✓ PATH"
+                            }
+                        }
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.cyan)
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .background(Color.cyan.opacity(0.1))
+                        .clipShape(Capsule())
+
+                        Button("NEW MAZE") {
                             newMaze()
+                            status = "DRAG ● FROM ENTRY TO EXIT"
                         }
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .padding(.horizontal, 8).padding(.vertical, 6)
-                        .foregroundColor(difficulty == d ? Color(hex: "#00e5ff") : .white.opacity(0.45))
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(hex: "#00e5ff").opacity(difficulty == d ? 0.6 : 0.2), lineWidth: 1))
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
                     }
-                }
 
-                HStack(spacing: 6) {
-                    Button("2D") { cubicMode = false; newMaze() }
+                    Text("PRESENCE · \(mist.activeSignals.count) LIVE")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(!cubicMode ? Color.cyan : .white.opacity(0.45))
-                    Button("CUBE") { cubicMode = true; cubeVM.generate(difficulty: difficulty) }
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(cubicMode ? Color.cyan : .white.opacity(0.45))
-                    Spacer()
-                    Text("DIFF \(["", "I", "II", "III"][difficulty])")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.4))
+                        .foregroundColor(themeVM.chrome.accent.opacity(0.7))
+                    Text(status)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(themeVM.chrome.accent.opacity(0.5))
+                    Spacer(minLength: 0)
                 }
-
-                if cubicMode {
-                    LEMACCubeKitView(vm: cubeVM)
-                        .frame(height: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                } else if let maze {
-                    MistMazeCanvas(maze: maze, dragPath: dragPath, onDrag: handleDrag)
-                        .frame(height: 180)
-                }
-
-                HStack(spacing: 8) {
-                    Button("⬡ SIGMA SOLVE") {
-                        if cubicMode {
-                            // JS: ASH_MAZE_solvePath → LEMAC_ENGINE_ASH.solveCubic (degree-map sigma)
-                            cubeVM.sigmaSolve()
-                            mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
-                            sceneVM.emitMist(fromLocal: true)
-                            status = "SIGMA REMAINDER"
-                        } else if var m = maze, let sol = MazeEngine.solveMaze(m) {
-                            dragPath = sol
-                            m.solved = true
-                            maze = m
-                            mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
-                            sceneVM.emitMist(fromLocal: true)
-                            status = "✓ PATH"
-                        }
-                    }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.cyan)
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .background(Color.cyan.opacity(0.1))
-                    .clipShape(Capsule())
-
-                    Button("NEW MAZE") {
-                        newMaze()
-                        status = "DRAG ● FROM ENTRY TO EXIT"
-                    }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.7))
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                }
-
-                Text("PRESENCE · \(mist.activeSignals.count) LIVE")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(themeVM.chrome.accent.opacity(0.7))
-                Text(status)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(themeVM.chrome.accent.opacity(0.5))
+                .padding(12)
             }
-            .padding(12)
         }
         .onAppear { newMaze() }
         .task {
@@ -115,41 +121,112 @@ public struct MISTOverlay: View {
         maze = MazeEngine.generateMaze(cfg.w, cfg.h)
         dragPath = []
         dragging = false
+        ball = nil
     }
 
-    private func handleDrag(_ cell: MazeEngine.MistPt, _ ended: Bool) {
+    /// Continuous finger tracking. Walks open n/s/e/w passages (incl. fast skips) and
+    /// parks the green dot on the corridor under the finger — not a cell-center snap.
+    private func handleFinger(_ loc: CGPoint, _ size: CGSize, ended: Bool) {
         guard var m = maze, !m.solved else { return }
-        if !dragging {
-            if cell.x == m.entry.x && cell.y == m.entry.y {
-                dragging = true
-                dragPath = [cell]
-                status = "NAVIGATE TO ◉ EXIT"
-            }
-            return
+        let cs = min(size.width / CGFloat(m.w), size.height / CGFloat(m.h))
+        func cellOf(_ p: CGPoint) -> MazeEngine.MistPt {
+            let x = min(max(0, Int(p.x / cs)), m.w - 1)
+            let y = min(max(0, Int(p.y / cs)), m.h - 1)
+            return MazeEngine.MistPt(x: x, y: y)
         }
+        func center(_ c: MazeEngine.MistPt) -> CGPoint {
+            CGPoint(x: CGFloat(c.x) * cs + cs / 2, y: CGFloat(c.y) * cs + cs / 2)
+        }
+        func openNeighbors(_ c: MazeEngine.MistPt) -> [MazeEngine.MistPt] {
+            let g = m.grid[c.y][c.x]
+            var out: [MazeEngine.MistPt] = []
+            if g.n == 0, c.y > 0 { out.append(MazeEngine.MistPt(x: c.x, y: c.y - 1)) }
+            if g.s == 0, c.y < m.h - 1 { out.append(MazeEngine.MistPt(x: c.x, y: c.y + 1)) }
+            if g.w == 0, c.x > 0 { out.append(MazeEngine.MistPt(x: c.x - 1, y: c.y)) }
+            if g.e == 0, c.x < m.w - 1 { out.append(MazeEngine.MistPt(x: c.x + 1, y: c.y)) }
+            return out
+        }
+        func clampToCell(_ p: CGPoint, _ c: MazeEngine.MistPt) -> CGPoint {
+            let ox = CGFloat(c.x) * cs, oy = CGFloat(c.y) * cs
+            let pad = cs * 0.12
+            let neigh = openNeighbors(c)
+            var minX = ox + pad, maxX = ox + cs - pad
+            var minY = oy + pad, maxY = oy + cs - pad
+            // bleed into open neighbor so the dot stays glued while crossing
+            if neigh.contains(where: { $0.x == c.x - 1 }) { minX = ox }
+            if neigh.contains(where: { $0.x == c.x + 1 }) { maxX = ox + cs }
+            if neigh.contains(where: { $0.y == c.y - 1 }) { minY = oy }
+            if neigh.contains(where: { $0.y == c.y + 1 }) { maxY = oy + cs }
+            return CGPoint(x: min(max(p.x, minX), maxX), y: min(max(p.y, minY), maxY))
+        }
+
         if ended {
-            dragging = false
-            if !m.solved {
+            if dragging && !m.solved {
+                dragging = false
                 dragPath = []
+                ball = center(m.entry)
                 status = "DRAG ● FROM ENTRY TO EXIT"
             }
             return
         }
-        guard let prev = dragPath.last else { return }
-        if cell.x == prev.x && cell.y == prev.y { return }
-        let dx = cell.x - prev.x, dy = cell.y - prev.y
-        if abs(dx) + abs(dy) != 1 { return }
-        let wd = dx == 1 ? "e" : dx == -1 ? "w" : dy == 1 ? "s" : "n"
-        if m.grid[prev.y][prev.x][wd] != 0 { return }
-        if dragPath.count >= 2, dragPath[dragPath.count - 2].x == cell.x && dragPath[dragPath.count - 2].y == cell.y {
-            dragPath.removeLast()
-        } else {
-            dragPath.append(cell)
+
+        let fingerCell = cellOf(loc)
+        if !dragging {
+            let entryC = center(m.entry)
+            let dx = loc.x - entryC.x, dy = loc.y - entryC.y
+            let onEntry = (fingerCell.x == m.entry.x && fingerCell.y == m.entry.y) || (dx * dx + dy * dy) < (cs * 0.7) * (cs * 0.7)
+            if onEntry {
+                dragging = true
+                dragPath = [m.entry]
+                ball = clampToCell(loc, m.entry)
+                status = "NAVIGATE TO ◉ EXIT"
+            }
+            return
         }
-        if cell.x == m.exit.x && cell.y == m.exit.y {
+
+        // Walk the graph toward the finger (covers fast skips that skip adjacent cells).
+        var hops = 0
+        while hops < 48 {
+            hops += 1
+            guard let prev = dragPath.last else { break }
+            if prev.x == fingerCell.x && prev.y == fingerCell.y { break }
+            if dragPath.count >= 2,
+               dragPath[dragPath.count - 2].x == fingerCell.x && dragPath[dragPath.count - 2].y == fingerCell.y {
+                dragPath.removeLast()
+                continue
+            }
+            let neigh = openNeighbors(prev)
+            if let hit = neigh.first(where: { $0.x == fingerCell.x && $0.y == fingerCell.y }) {
+                dragPath.append(hit)
+                continue
+            }
+            let curD = abs(prev.x - fingerCell.x) + abs(prev.y - fingerCell.y)
+            let best = neigh.min { a, b in
+                abs(a.x - fingerCell.x) + abs(a.y - fingerCell.y) < abs(b.x - fingerCell.x) + abs(b.y - fingerCell.y)
+            }
+            guard let best, abs(best.x - fingerCell.x) + abs(best.y - fingerCell.y) < curD else { break }
+            if dragPath.count >= 2,
+               dragPath[dragPath.count - 2].x == best.x && dragPath[dragPath.count - 2].y == best.y {
+                dragPath.removeLast()
+            } else {
+                dragPath.append(best)
+            }
+        }
+
+        let here = dragPath.last ?? m.entry
+        // If the finger left the path, keep the dot on the last legal cell, sliding toward the finger.
+        let onPath = here.x == fingerCell.x && here.y == fingerCell.y
+        ball = clampToCell(loc, here)
+        if !onPath {
+            // sit on the open edge facing the finger
+            ball = clampToCell(loc, here)
+        }
+
+        if here.x == m.exit.x && here.y == m.exit.y {
             dragging = false
             m.solved = true
             maze = m
+            ball = center(m.exit)
             status = "✓ WELL DONE"
             mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
             sceneVM.emitMist(fromLocal: true)
@@ -157,89 +234,68 @@ public struct MISTOverlay: View {
     }
 }
 
-/// JS: _renderMaze — cyan walls with ticks, entry green, exit cyan glow
+/// JS: _renderMaze — cyan walls with ticks, entry green, exit cyan glow.
+/// Green dot is drawn at `ball` (finger-projected) so it stays glued while dragging.
 struct MistMazeCanvas: View {
     let maze: MazeEngine.MistMaze
     let dragPath: [MazeEngine.MistPt]
-    var onDrag: (MazeEngine.MistPt, Bool) -> Void
+    let ball: CGPoint?
+    var onFinger: (CGPoint, CGSize, Bool) -> Void
 
-    var body: some View {
-        Canvas { ctx, size in
-            let cs = min(size.width / CGFloat(maze.w), size.height / CGFloat(maze.h))
-            for y in 0..<maze.h {
-                for x in 0..<maze.w {
-                    let cell = maze.grid[y][x]
-                    let px = CGFloat(x) * cs, py = CGFloat(y) * cs
-                    func wall(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat) {
-                        var fat = Path(); fat.move(to: CGPoint(x: x1, y: y1)); fat.addLine(to: CGPoint(x: x2, y: y2))
-                        ctx.stroke(fat, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.45)), lineWidth: cs * 0.35)
-                        ctx.stroke(fat, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.9)), lineWidth: 1)
-                        for i in 0...4 {
-                            let t = CGFloat(i) / 4
-                            let rx = x1 + (x2 - x1) * t, ry = y1 + (y2 - y1) * t
-                            let rxD = (y2 - y1) * 0.12, ryD = -(x2 - x1) * 0.12
-                            var tick = Path(); tick.move(to: CGPoint(x: rx - rxD, y: ry - ryD)); tick.addLine(to: CGPoint(x: rx + rxD, y: ry + ryD))
-                            ctx.stroke(tick, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.9)), lineWidth: 1)
-                        }
-                    }
-                    if cell.n != 0 { wall(px, py, px + cs, py) }
-                    if cell.s != 0 { wall(px, py + cs, px + cs, py + cs) }
-                    if cell.w != 0 { wall(px, py, px, py + cs) }
-                    if cell.e != 0 { wall(px + cs, py, px + cs, py + cs) }
-                    let dot = Path(ellipseIn: CGRect(x: px - 1, y: py - 1, width: 2, height: 2))
-                    ctx.fill(dot, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.25)))
-                }
-            }
-            if dragPath.count > 1 {
-                var p = Path()
-                p.move(to: CGPoint(x: CGFloat(dragPath[0].x) * cs + cs / 2, y: CGFloat(dragPath[0].y) * cs + cs / 2))
-                for pt in dragPath {
-                    p.addLine(to: CGPoint(x: CGFloat(pt.x) * cs + cs / 2, y: CGFloat(pt.y) * cs + cs / 2))
-                }
-                ctx.stroke(p, with: .color(Color(red: 0, green: 1, blue: 136/255).opacity(0.6)), style: StrokeStyle(lineWidth: cs * 0.22, lineCap: .round, lineJoin: .round))
-            }
-            let ex = CGFloat(maze.exit.x) * cs + cs / 2
-            let ey = CGFloat(maze.exit.y) * cs + cs / 2
-            ctx.fill(Path(ellipseIn: CGRect(x: ex - cs * 0.35, y: ey - cs * 0.35, width: cs * 0.7, height: cs * 0.7)),
-                     with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.55)))
-            let last = dragPath.last ?? maze.entry
-            let bx = CGFloat(last.x) * cs + cs / 2
-            let by = CGFloat(last.y) * cs + cs / 2
-            let fill = maze.solved ? Color(red: 0, green: 1, blue: 136/255) : Color(red: 0, green: 1, blue: 136/255).opacity(0.95)
-            ctx.fill(Path(ellipseIn: CGRect(x: bx - cs * 0.4, y: by - cs * 0.4, width: cs * 0.8, height: cs * 0.8)), with: .color(fill))
-        }
-        .background(Color.black.opacity(0.2))
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { v in
-                    let cs = min(220, 220) // cell mapping uses actual size via preference
-                    _ = cs
-                    // Use a GeometryReader wrapper instead — handled below via overlay
-                }
-        )
-        .overlay(MistDragCatcher(w: maze.w, h: maze.h, onDrag: onDrag))
-    }
-}
-
-struct MistDragCatcher: View {
-    let w: Int, h: Int
-    var onDrag: (MazeEngine.MistPt, Bool) -> Void
     var body: some View {
         GeometryReader { geo in
-            Color.clear.contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { v in
-                            let csW = geo.size.width / CGFloat(w)
-                            let csH = geo.size.height / CGFloat(h)
-                            let x = min(max(0, Int(v.location.x / csW)), w - 1)
-                            let y = min(max(0, Int(v.location.y / csH)), h - 1)
-                            onDrag(MazeEngine.MistPt(x: x, y: y), false)
+            let size = geo.size
+            let cs = min(size.width / CGFloat(maze.w), size.height / CGFloat(maze.h))
+            Canvas { ctx, _ in
+                for y in 0..<maze.h {
+                    for x in 0..<maze.w {
+                        let cell = maze.grid[y][x]
+                        let px = CGFloat(x) * cs, py = CGFloat(y) * cs
+                        func wall(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat) {
+                            var fat = Path(); fat.move(to: CGPoint(x: x1, y: y1)); fat.addLine(to: CGPoint(x: x2, y: y2))
+                            ctx.stroke(fat, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.45)), lineWidth: cs * 0.35)
+                            ctx.stroke(fat, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.9)), lineWidth: 1)
+                            for i in 0...4 {
+                                let t = CGFloat(i) / 4
+                                let rx = x1 + (x2 - x1) * t, ry = y1 + (y2 - y1) * t
+                                let rxD = (y2 - y1) * 0.12, ryD = -(x2 - x1) * 0.12
+                                var tick = Path(); tick.move(to: CGPoint(x: rx - rxD, y: ry - ryD)); tick.addLine(to: CGPoint(x: rx + rxD, y: ry + ryD))
+                                ctx.stroke(tick, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.9)), lineWidth: 1)
+                            }
                         }
-                        .onEnded { _ in
-                            onDrag(MazeEngine.MistPt(x: 0, y: 0), true)
-                        }
-                )
+                        if cell.n != 0 { wall(px, py, px + cs, py) }
+                        if cell.s != 0 { wall(px, py + cs, px + cs, py + cs) }
+                        if cell.w != 0 { wall(px, py, px, py + cs) }
+                        if cell.e != 0 { wall(px + cs, py, px + cs, py + cs) }
+                        let dot = Path(ellipseIn: CGRect(x: px - 1, y: py - 1, width: 2, height: 2))
+                        ctx.fill(dot, with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.25)))
+                    }
+                }
+                if dragPath.count > 1 {
+                    var p = Path()
+                    p.move(to: CGPoint(x: CGFloat(dragPath[0].x) * cs + cs / 2, y: CGFloat(dragPath[0].y) * cs + cs / 2))
+                    for pt in dragPath {
+                        p.addLine(to: CGPoint(x: CGFloat(pt.x) * cs + cs / 2, y: CGFloat(pt.y) * cs + cs / 2))
+                    }
+                    ctx.stroke(p, with: .color(Color(red: 0, green: 1, blue: 136/255).opacity(0.6)), style: StrokeStyle(lineWidth: cs * 0.22, lineCap: .round, lineJoin: .round))
+                }
+                let ex = CGFloat(maze.exit.x) * cs + cs / 2
+                let ey = CGFloat(maze.exit.y) * cs + cs / 2
+                ctx.fill(Path(ellipseIn: CGRect(x: ex - cs * 0.35, y: ey - cs * 0.35, width: cs * 0.7, height: cs * 0.7)),
+                         with: .color(Color(red: 0, green: 229/255, blue: 1).opacity(0.55)))
+                let last = dragPath.last ?? maze.entry
+                let fallback = CGPoint(x: CGFloat(last.x) * cs + cs / 2, y: CGFloat(last.y) * cs + cs / 2)
+                let b = ball ?? fallback
+                let fill = maze.solved ? Color(red: 0, green: 1, blue: 136/255) : Color(red: 0, green: 1, blue: 136/255).opacity(0.95)
+                ctx.fill(Path(ellipseIn: CGRect(x: b.x - cs * 0.4, y: b.y - cs * 0.4, width: cs * 0.8, height: cs * 0.8)), with: .color(fill))
+            }
+            .background(Color.black.opacity(0.2))
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { v in onFinger(v.location, size, false) }
+                    .onEnded { v in onFinger(v.location, size, true) }
+            )
         }
     }
 }

@@ -1,7 +1,9 @@
 import SwiftUI
+import Darwin
 import AutumnServices
 
 /// Ash Shard — textile + contacts, send along plasma splines (js/ash-shard-module.js).
+/// CYCLE/AUTO regenerates _randomizeTextile() iterations before SEND.
 public struct ShardOverlay: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
@@ -13,108 +15,204 @@ public struct ShardOverlay: View {
     @State private var contacts: [GitHubFollowUser] = []
     @State private var starred: Set<String> = []
     @State private var status = "DESIGN A SHARD THEN SEND"
+    @State private var seed: Int = 0
+    @State private var generation = 0
+
+    private static let autoColors = ["#00e5ff", "#bf5fff", "#ff6b35", "#00ff88", "#ffd700", "#ff4488", "#44aaff"]
+    private static let autoTools = ["rect", "tri", "pent", "slash", "cross"]
 
     public var body: some View {
         OverlayPanel(title: "ASH SHARD", onClose: { appNav.rightTab = .none }) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Build a textile, pick contacts, send along plasma curves.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.7))
-                HStack(spacing: 6) {
-                    ForEach(["rect", "tri", "pent", "slash", "cross"], id: \.self) { t in
-                        Button(t.uppercased()) { tool = t }
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 6).padding(.vertical, 5)
-                            .foregroundColor(tool == t ? themeVM.chrome.accent : .white.opacity(0.4))
-                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(themeVM.chrome.accent.opacity(tool == t ? 0.6 : 0.15), lineWidth: 1))
-                    }
-                }
-                GeometryReader { g in
-                    ZStack {
-                        Color(hex: "#0a0e1a")
-                        ForEach(shapes) { s in
-                            shardMark(s, in: g.size)
+            GeometryReader { geo in
+                let canvasH = max(140, min(geo.size.height * 0.42, 280))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Build a textile, pick contacts, send along plasma curves.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
+                    HStack(spacing: 6) {
+                        ForEach(Self.autoTools, id: \.self) { t in
+                            Button(t.uppercased()) { tool = t }
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .padding(.horizontal, 6).padding(.vertical, 5)
+                                .foregroundColor(tool == t ? themeVM.chrome.accent : .white.opacity(0.4))
+                                .overlay(RoundedRectangle(cornerRadius: 3).stroke(themeVM.chrome.accent.opacity(tool == t ? 0.6 : 0.15), lineWidth: 1))
                         }
                     }
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0).onEnded { v in
-                        shapes.append(ShardShape(tool: tool, x: Double(v.location.x / g.size.width), y: Double(v.location.y / g.size.height), color: color.hexString))
-                    })
-                }
-                .frame(height: 120)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(themeVM.chrome.accent.opacity(0.2), lineWidth: 1))
-                .cornerRadius(6)
+                    textileCanvas
+                        .frame(height: canvasH)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(themeVM.chrome.accent.opacity(0.2), lineWidth: 1))
+                        .cornerRadius(6)
 
-                HStack {
-                    ColorPicker("", selection: $color).labelsHidden().frame(width: 32, height: 22)
-                    Button("CLEAR") { shapes.removeAll() }
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.5))
-                    Spacer()
-                    Button("⬡ SEND SHARD") {
-                        sceneVM.spawnShard(color: UIColor.fromSwiftUI(color))
-                        sceneVM.emitMist(fromLocal: true)
-                        Task {
-                            let payload: [String: Any] = [
-                                "type": "shard",
-                                "fromUid": authVM.sessionUID,
-                                "toUids": Array(starred),
-                                "textile": ["shapes": shapes.map { ["type": $0.tool, "x": $0.x, "y": $0.y, "color": $0.color] }],
-                                "ts": Date().timeIntervalSince1970 * 1000
-                            ]
-                            _ = await AutumnGASClient.shared.ashwrite(
-                                path: "ashtree/shards/events.json",
-                                uid: authVM.sessionUID,
-                                append: true,
-                                payload: [payload]
-                            )
+                    HStack(spacing: 8) {
+                        ColorPicker("", selection: $color).labelsHidden().frame(width: 32, height: 22)
+                        Button("CLEAR") { shapes.removeAll(); status = "DESIGN A SHARD THEN SEND" }
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.5))
+                        Button("↻ CYCLE") { cycleAuto() }
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(themeVM.chrome.accent)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(themeVM.chrome.accent.opacity(0.45), lineWidth: 1))
+                        if generation > 0 {
+                            Text("GEN \(generation)")
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.35))
                         }
-                        status = starred.isEmpty ? "SENT ON ORB (NO CONTACTS SELECTED)" : "SENT TO \(starred.count) CONTACTS"
+                        Spacer()
+                        Button("⬡ SEND SHARD") { sendShard() }
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(themeVM.chrome.accent)
                     }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(themeVM.chrome.accent)
-                }
 
-                Text("CONTACTS")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(themeVM.chrome.accent.opacity(0.6))
-                if contacts.isEmpty {
-                    Text(authVM.githubConnected ? "NO FOLLOWING LOADED" : "CONNECT GITHUB TO LOAD FOLLOWING")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.35))
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(contacts.prefix(20)) { c in
-                                Button {
-                                    if starred.contains(c.login) { starred.remove(c.login) } else { starred.insert(c.login) }
-                                } label: {
-                                    HStack {
-                                        Text(starred.contains(c.login) ? "★" : "☆").foregroundColor(Color(hex: "#ffdd00"))
-                                        Text(c.login).font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.8))
-                                        Spacer()
+                    Text("CONTACTS")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(themeVM.chrome.accent.opacity(0.6))
+                    if contacts.isEmpty {
+                        Text(authVM.githubConnected ? "NO FOLLOWING LOADED" : "CONNECT GITHUB TO LOAD FOLLOWING")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.35))
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(contacts.prefix(20)) { c in
+                                    Button {
+                                        if starred.contains(c.login) { starred.remove(c.login) } else { starred.insert(c.login) }
+                                    } label: {
+                                        HStack {
+                                            Text(starred.contains(c.login) ? "★" : "☆").foregroundColor(Color(hex: "#ffdd00"))
+                                            Text(c.login).font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.8))
+                                            Spacer()
+                                        }
                                     }
                                 }
                             }
                         }
+                        .frame(maxHeight: .infinity)
                     }
-                    .frame(maxHeight: 90)
+                    Text(status).font(.system(size: 9, design: .monospaced)).foregroundColor(themeVM.chrome.accent.opacity(0.5))
                 }
-                Text(status).font(.system(size: 9, design: .monospaced)).foregroundColor(themeVM.chrome.accent.opacity(0.5))
+                .padding(12)
             }
-            .padding(12)
         }
         .task { await loadContacts() }
     }
 
-    @ViewBuilder
-    private func shardMark(_ s: ShardShape, in size: CGSize) -> some View {
-        let p = CGPoint(x: s.x * size.width, y: s.y * size.height)
-        RoundedRectangle(cornerRadius: s.tool == "rect" ? 2 : 8)
-            .fill(Color(hex: s.color).opacity(0.8))
-            .frame(width: 16, height: 16)
-            .rotationEffect(.degrees(s.tool == "tri" ? 45 : (s.tool == "slash" ? 30 : 0)))
-            .position(p)
+    private var textileCanvas: some View {
+        GeometryReader { g in
+            Canvas { ctx, size in
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: "#0a0e1a")))
+                for s in shapes {
+                    drawShape(&ctx, s, in: size)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onEnded { v in
+                let w = 0.10 + Double.random(in: 0...0.12)
+                let h = 0.10 + Double.random(in: 0...0.12)
+                shapes.append(ShardShape(
+                    tool: tool,
+                    x: Double(v.location.x / g.size.width),
+                    y: Double(v.location.y / g.size.height),
+                    color: color.hexString,
+                    w: w, h: h, opacity: 0.75
+                ))
+            })
+        }
+    }
+
+    private func drawShape(_ ctx: inout GraphicsContext, _ s: ShardShape, in size: CGSize) {
+        let rect = CGRect(
+            x: s.x * size.width,
+            y: s.y * size.height,
+            width: max(12, s.w * size.width),
+            height: max(12, s.h * size.height)
+        )
+        let col = Color(hex: s.color).opacity(s.opacity)
+        switch s.tool {
+        case "tri":
+            var p = Path()
+            p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            p.closeSubpath()
+            ctx.fill(p, with: .color(col))
+            ctx.stroke(p, with: .color(col.opacity(0.9)), lineWidth: 1)
+        case "pent":
+            var p = Path()
+            let cx = rect.midX, cy = rect.midY
+            let rx = rect.width / 2, ry = rect.height / 2
+            for i in 0..<5 {
+                let a = Double(i) * .pi * 2 / 5 - .pi / 2
+                let pt = CGPoint(x: cx + CGFloat(Darwin.cos(a)) * rx, y: cy + CGFloat(Darwin.sin(a)) * ry)
+                if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+            }
+            p.closeSubpath()
+            ctx.fill(p, with: .color(col))
+            ctx.stroke(p, with: .color(col.opacity(0.9)), lineWidth: 1)
+        case "slash":
+            var p = Path(); p.move(to: CGPoint(x: rect.minX, y: rect.maxY)); p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            ctx.stroke(p, with: .color(col), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        case "cross":
+            var a = Path(); a.move(to: CGPoint(x: rect.minX, y: rect.maxY)); a.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            var b = Path(); b.move(to: CGPoint(x: rect.minX + rect.width * 0.3, y: rect.maxY)); b.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.2))
+            ctx.stroke(a, with: .color(col), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            ctx.stroke(b, with: .color(col), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        default:
+            let p = Path(roundedRect: rect, cornerRadius: 2)
+            ctx.fill(p, with: .color(col))
+            ctx.stroke(p, with: .color(col.opacity(0.9)), lineWidth: 1)
+        }
+    }
+
+    /// Web `_randomizeTextile()` — 8–22 random auto-shaped marks, new seed each tap.
+    private func cycleAuto() {
+        generation += 1
+        seed = Int(Date().timeIntervalSince1970 * 1000)
+        var rng = SplitMix64(seed: UInt64(truncatingIfNeeded: seed))
+        let count = 8 + Int(rng.next() % 14)
+        var next: [ShardShape] = []
+        for _ in 0..<count {
+            let w = 0.08 + Double(rng.next() % 1000) / 1000.0 * 0.22
+            let h = 0.08 + Double(rng.next() % 1000) / 1000.0 * 0.22
+            next.append(ShardShape(
+                tool: Self.autoTools[Int(rng.next() % UInt64(Self.autoTools.count))],
+                x: Double(rng.next() % 1000) / 1000.0 * (1.0 - w),
+                y: Double(rng.next() % 1000) / 1000.0 * (1.0 - h),
+                color: Self.autoColors[Int(rng.next() % UInt64(Self.autoColors.count))],
+                w: w, h: h,
+                opacity: 0.4 + Double(rng.next() % 500) / 1000.0
+            ))
+        }
+        shapes = next
+        status = "AUTO GEN \(generation) — CYCLE AGAIN OR SEND"
+    }
+
+    private func sendShard() {
+        if shapes.isEmpty {
+            status = "DESIGN YOUR SHARD FIRST"
+            return
+        }
+        sceneVM.spawnShard(color: UIColor.fromSwiftUI(color))
+        sceneVM.emitMist(fromLocal: true)
+        Task {
+            let payload: [String: Any] = [
+                "type": "shard",
+                "fromUid": authVM.sessionUID,
+                "toUids": Array(starred),
+                "textile": [
+                    "shapes": shapes.map { ["type": $0.tool, "x": $0.x, "y": $0.y, "w": $0.w, "h": $0.h, "color": $0.color, "opacity": $0.opacity] },
+                    "seed": seed
+                ],
+                "ts": Date().timeIntervalSince1970 * 1000
+            ]
+            _ = await AutumnGASClient.shared.ashwrite(
+                path: "ashtree/shards/events.json",
+                uid: authVM.sessionUID,
+                append: true,
+                payload: [payload]
+            )
+        }
+        status = starred.isEmpty ? "SENT ON ORB (NO CONTACTS SELECTED)" : "SENT TO \(starred.count) CONTACTS"
     }
 
     private func loadContacts() async {
@@ -133,6 +231,22 @@ struct ShardShape: Identifiable {
     let x: Double
     let y: Double
     let color: String
+    var w: Double = 0.10
+    var h: Double = 0.10
+    var opacity: Double = 0.75
+}
+
+/// Tiny deterministic RNG so CYCLE is a real new iteration, not Swift.random in a View redraw.
+struct SplitMix64 {
+    var state: UInt64
+    init(seed: UInt64) { state = seed &* 0x9E3779B97F4A7C15 }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
 }
 
 extension Color {
