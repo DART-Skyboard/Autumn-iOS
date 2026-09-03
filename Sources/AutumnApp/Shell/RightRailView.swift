@@ -34,7 +34,9 @@ public struct RightRailView: View {
         return Button(action: action) {
             Text(title)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .tracking(1.2)
+                .tracking(0.8)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(selected ? chrome.accent : chrome.textSecondary)
                 .padding(.horizontal, 8).padding(.vertical, 10)
                 .moduleFrost(stroke: chrome.accent.opacity(selected ? 0.55 : 0.22), fill: selected ? 0.14 : 0.08)

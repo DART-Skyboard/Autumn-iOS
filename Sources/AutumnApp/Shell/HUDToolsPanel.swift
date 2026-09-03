@@ -64,10 +64,12 @@ struct HUDToolsPanel: View {
     private func row(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .tracking(1)
+            .tracking(0.4)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
             .foregroundColor(themeVM.chrome.accent.opacity(0.85))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8).padding(.vertical, 6)
+            .padding(.horizontal, 10).padding(.vertical, 7)
             .background(themeVM.chrome.accent.opacity(0.06))
             .overlay(RoundedRectangle(cornerRadius: 4).stroke(themeVM.chrome.accent.opacity(0.2), lineWidth: 1))
     }

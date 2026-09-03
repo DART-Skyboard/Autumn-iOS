@@ -29,40 +29,45 @@ public struct LeftHUDView: View {
                 appNav.showHUDTools = false
                 appNav.showRadar = true
             } label: {
-                VStack(spacing: 2) {
-                    Text("📡").font(.system(size: 11))
+                HStack(spacing: 4) {
+                    Text("📡").font(.system(size: 10))
                     Text("RADAR")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundColor(Color(hex: "#00ff88"))
-                .padding(.horizontal, 8).padding(.vertical, 8)
+                .padding(.horizontal, 8).padding(.vertical, 7)
                 .moduleFrost(stroke: Color(hex: "#00ff88").opacity(appNav.showRadar ? 0.7 : 0.35), fill: appNav.showRadar ? 0.14 : 0.08)
             }
             Button {
                 appNav.showRadar = false
                 appNav.studio = .alc
             } label: {
-                VStack(spacing: 2) {
-                    Text("✦").font(.system(size: 11))
+                HStack(spacing: 4) {
+                    Text("✦").font(.system(size: 10))
                     Text("ALC")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundColor(Color(hex: "#a050ff"))
-                .padding(.horizontal, 8).padding(.vertical, 8)
+                .padding(.horizontal, 8).padding(.vertical, 7)
                 .moduleFrost(stroke: Color(hex: "#a050ff").opacity(appNav.studio == .alc ? 0.7 : 0.35), fill: appNav.studio == .alc ? 0.14 : 0.08)
             }
             if circuit.allows(authVM) {
                 Button {
                     appNav.showAdmin.toggle()
                 } label: {
-                    VStack(spacing: 2) {
-                        Text("⚙").font(.system(size: 12))
+                    HStack(spacing: 4) {
+                        Text("⚙").font(.system(size: 11))
                         Text("ADMIN")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .tracking(1)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     .foregroundColor(Color(hex: "#ffb347"))
-                    .padding(.horizontal, 8).padding(.vertical, 8)
+                    .padding(.horizontal, 8).padding(.vertical, 7)
                     .moduleFrost(stroke: Color(hex: "#ffb347").opacity(0.4), fill: 0.10)
                 }
             }
@@ -81,18 +86,22 @@ public struct LeftHUDView: View {
 
     private func pill(_ title: String, sub: String, color: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 2) {
+            HStack(spacing: 4) {
                 Text(title)
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(1)
-                Text(sub.prefix(4).uppercased())
-                    .font(.system(size: 7, design: .monospaced))
-                    .opacity(0.7)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(sub.uppercased())
+                    .font(.system(size: 8, design: .monospaced))
+                    .opacity(0.75)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(color)
-            .padding(.horizontal, 8).padding(.vertical, 8)
+            .padding(.horizontal, 8).padding(.vertical, 7)
             .moduleFrost(stroke: color.opacity(0.35), fill: 0.08)
         }
+        .buttonStyle(.plain)
     }
 }
 

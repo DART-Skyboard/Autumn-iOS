@@ -90,7 +90,7 @@ public struct AppShellView: View {
     private func landscapeChrome(size: CGSize) -> some View {
         HStack(spacing: 0) {
             leftDrawer
-                .frame(width: min(148, max(112, size.width * 0.16)))
+                .frame(width: min(176, max(132, size.width * 0.18)))
 
             // Middle: HUD on the 3D scene (top); Ash Canvas (bottom) when open. Both stay in view.
             VStack(spacing: 0) {
@@ -248,9 +248,12 @@ public struct AppShellView: View {
         return Button { themeVM.cycleTheme() } label: {
             HStack(spacing: 6) {
                 Text(chrome.dot)
+                    .lineLimit(1)
                 Text(themeVM.current.rawValue)
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(1.5)
+                    .tracking(0.6)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(chrome.accent)
             .padding(.horizontal, 10).padding(.vertical, 6)
@@ -267,7 +270,9 @@ public struct AppShellView: View {
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                 Text(themeVM.scrim.label)
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(1.5)
+                    .tracking(0.6)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(themeVM.scrim.color)
             .padding(.horizontal, 10).padding(.vertical, 6)

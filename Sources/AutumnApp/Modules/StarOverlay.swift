@@ -2,7 +2,7 @@ import SwiftUI
 import AutumnServices
 import LEATRCore
 
-/// Ash Star archive drawer. Sending spawns 3D geometry on the orb — never a chat card.
+/// Ash Star archive — js/ash-star-archive.js. Stars ride BRPN splines; this drawer is the archive.
 public struct StarOverlay: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
@@ -12,109 +12,169 @@ public struct StarOverlay: View {
     @State private var cards: [AshStarCard] = AshStarArchive.load()
     @State private var thought = ""
     @State private var status = ""
+    @State private var selectedId: String?
+
+    private var gold: Color { Color(hex: "#e8c36a") }
+    private var cyan: Color { themeVM.chrome.accent }
 
     public var body: some View {
         OverlayPanel(title: "ASH STAR ARCHIVE", onClose: { appNav.rightTab = .none }) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Stars live on the BRPN orb. This drawer is the archive — not a chat card.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(cyan.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
                 TextField("thought for this star", text: $thought)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12).italic())
                     .foregroundColor(.white)
                     .padding(8)
-                    .background(themeVM.chrome.surface)
+                    .background(Color.black.opacity(0.35))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(gold.opacity(0.35), lineWidth: 1))
                     .cornerRadius(6)
                 HStack {
-                    Button("⬡ SEND STAR") {
-                        let t = thought.trimmingCharacters(in: .whitespacesAndNewlines)
-                        sceneVM.spawnAshStar()
-                        sceneVM.emitMist(fromLocal: true)
-                        let card = AshStarCard(thought: t.isEmpty ? chatVM.messages.last(where: { !$0.isInternal })?.content ?? "ash star" : t,
-                                               color: "#ffdd00", from: "autumn", uid: authVM.sessionUID)
-                        AshStarArchive.push(card)
-                        cards = AshStarArchive.load()
-                        thought = ""
-                        status = "SPAWNED ON ORB"
-                    }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color(hex: "#ffdd00"))
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .background(Color(hex: "#ffdd00").opacity(0.12))
-                    .clipShape(Capsule())
+                    Button("⬡ SEND STAR") { sendStar() }
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(gold)
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .overlay(Capsule().stroke(gold.opacity(0.55), lineWidth: 1))
                     Spacer()
-                    Button("⬡ SAVE ALL") {
-                        Task { await saveAll() }
-                    }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color(hex: "#ffdd00"))
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .overlay(Capsule().stroke(Color(hex: "#ffdd00").opacity(0.4), lineWidth: 1))
+                    Button("⬡ SAVE ALL") { Task { await saveAll() } }
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(gold)
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .overlay(Capsule().stroke(gold.opacity(0.4), lineWidth: 1))
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         if cards.isEmpty {
                             Text("NO STARS THIS SESSION")
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.35))
+                                .tracking(1.5)
+                                .foregroundColor(cyan.opacity(0.35))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                         }
                         ForEach(cards) { c in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Circle().fill(Color(hex: c.color)).frame(width: 8, height: 8)
-                                    Text("ASH STAR").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundColor(themeVM.chrome.accent)
-                                    Spacer()
-                                    Text(c.when).font(.system(size: 8, design: .monospaced)).foregroundColor(.white.opacity(0.35))
-                                }
-                                Text(c.thought).font(.system(size: 12)).foregroundColor(.white.opacity(0.85)).lineLimit(4)
-                                if !c.saved {
-                                    Button("⬡ SAVE") {
-                                        Task {
-                                            await AutumnGASClient.shared.writeJournal(
-                                                uid: authVM.sessionUID,
-                                                thought: c.thought,
-                                                reply: "[ash star]",
-                                                emotion: "inspiring",
-                                                buoyancy: 0.8
-                                            )
-                                            AshStarArchive.markSaved(c.id)
-                                            cards = AshStarArchive.load()
-                                            status = "SAVED VIA GAS"
-                                        }
-                                    }
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundColor(themeVM.chrome.accent)
-                                }
-                            }
-                            .padding(8)
-                            .background(themeVM.chrome.accent.opacity(0.05))
-                            .cornerRadius(6)
+                            starCard(c)
                         }
                     }
                 }
-                .frame(maxHeight: 220)
-                Text(status).font(.system(size: 9, design: .monospaced)).foregroundColor(themeVM.chrome.accent.opacity(0.5))
+                .frame(maxHeight: .infinity)
+                Text(status)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(gold.opacity(0.7))
             }
             .padding(12)
         }
+        .onAppear { cards = AshStarArchive.load() }
+        .onReceive(NotificationCenter.default.publisher(for: .autumnAshStarArchived)) { _ in
+            cards = AshStarArchive.load()
+        }
+    }
+
+    private func starCard(_ c: AshStarCard) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle().fill(Color(hex: c.color)).frame(width: 8, height: 8)
+                    .shadow(color: Color(hex: c.color).opacity(0.8), radius: 4)
+                Text("ASH STAR")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(1.5)
+                    .foregroundColor(cyan.opacity(0.75))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text("AUTUMN")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .foregroundColor(cyan)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(c.when)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.4))
+                    .lineLimit(1)
+            }
+            Text(c.thought)
+                .font(.system(size: 12).italic())
+                .foregroundColor(.white.opacity(0.88))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(c.saved ? "⬡ SAVED" : "⬡ SAVE") {
+                    if !c.saved { Task { await saveOne(c) } }
+                }
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(cyan.opacity(c.saved ? 0.45 : 0.9))
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .overlay(RoundedRectangle(cornerRadius: 3).stroke(cyan.opacity(0.4), lineWidth: 1))
+                .disabled(c.saved)
+            }
+        }
+        .padding(9)
+        .background(Color.black.opacity(0.42))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(
+            selectedId == c.id ? cyan : cyan.opacity(0.22), lineWidth: 1))
+        .cornerRadius(6)
+        .onTapGesture { selectedId = c.id }
+    }
+
+    private func sendStar() {
+        let raw = thought.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = AshStarThought.forSend(raw: raw)
+        let ok = sceneVM.fireAshStar(thought: t, toUids: nil, force: true)
+        let card = AshStarCard(thought: t, color: "#ffdd00", from: "autumn", uid: authVM.sessionUID)
+        AshStarArchive.push(card)
+        cards = AshStarArchive.load()
+        thought = ""
+        status = ok ? "SPAWNED ON ORB" : "COOLING — STAR QUEUED ON ORB"
+        MISTModule.shared.emitAshStarPacket(thought: t, toUids: sceneVM.connectedUids, uid: authVM.sessionUID)
+    }
+
+    private func saveOne(_ c: AshStarCard) async {
+        await AutumnGASClient.shared.writeJournal(
+            uid: authVM.sessionUID, thought: c.thought, reply: "[ash star]",
+            emotion: "inspiring", buoyancy: 0.8)
+        AshStarArchive.markSaved(c.id)
+        cards = AshStarArchive.load()
+        status = "SAVED VIA GAS"
     }
 
     private func saveAll() async {
         let unsaved = cards.filter { !$0.saved }
         guard !unsaved.isEmpty else { status = "NOTHING TO SAVE"; return }
-        for c in unsaved {
-            await AutumnGASClient.shared.writeJournal(
-                uid: authVM.sessionUID,
-                thought: c.thought,
-                reply: "[ash star]",
-                emotion: "inspiring",
-                buoyancy: 0.8
-            )
-            AshStarArchive.markSaved(c.id)
-        }
-        cards = AshStarArchive.load()
+        for c in unsaved { await saveOne(c) }
         status = "SAVED ALL \(unsaved.count) VIA GAS"
+    }
+}
+
+enum AshStarThought {
+    /// Autumn's own lines — capabilities / grammar, never another user's chat.
+    static let capability: [String] = [
+        "A sentence forms whether or not it is received. The grammar does not require an audience.",
+        "Core Cognition is True. I measure, then I speak.",
+        "The maze is a remainder. I walk it once.",
+        "Buoyancy is a reading, not a confession.",
+        "I can send a star without sending a name.",
+        "Plasma remembers the curve. I choose who rides it.",
+        "The archive is mine. The orb is shared. The journal stays private."
+    ]
+
+    static func capabilityLine() -> String { capability.randomElement()! }
+
+    static func forSend(raw: String) -> String {
+        let t = sanitize(raw)
+        return t.isEmpty ? capabilityLine() : t
+    }
+
+    static func sanitize(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.count > 600 { s = String(s.prefix(600)) }
+        // Drop emails / obvious handles so autonomic stars never leak user data.
+        if let r = try? NSRegularExpression(pattern: #"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}"#, options: .caseInsensitive) {
+            s = r.stringByReplacingMatches(in: s, options: [], range: NSRange(s.startIndex..., in: s), withTemplate: "")
+        }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -154,10 +214,15 @@ enum AshStarArchive {
         all.insert(card, at: 0)
         if all.count > 100 { all = Array(all.prefix(100)) }
         if let data = try? JSONEncoder().encode(all) { UserDefaults.standard.set(data, forKey: key) }
+        NotificationCenter.default.post(name: .autumnAshStarArchived, object: nil)
     }
     static func markSaved(_ id: String) {
         var all = load()
         if let i = all.firstIndex(where: { $0.id == id }) { all[i].saved = true }
         if let data = try? JSONEncoder().encode(all) { UserDefaults.standard.set(data, forKey: key) }
     }
+}
+
+extension Notification.Name {
+    static let autumnAshStarArchived = Notification.Name("autumnAshStarArchived")
 }
