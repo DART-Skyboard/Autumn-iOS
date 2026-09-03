@@ -113,7 +113,7 @@ struct BRPNSceneKitView: UIViewRepresentable {
     @ObservedObject var vm: BRPNSceneViewModel
 
     func makeUIView(context: Context) -> SCNView {
-        let v = SCNView()
+        let v = QuietSCNView()
         v.scene = vm.scene
         v.allowsCameraControl = false // JS custom pointer drag on rotX/rotY, not orbit camera
         v.autoenablesDefaultLighting = false
@@ -179,4 +179,10 @@ struct BRPNSceneKitView: UIViewRepresentable {
             animator.camera?.position.z = max(minZ, min(10, z))
         }
     }
+}
+
+
+/// SceneKit must not steal first responder from Ask Autumn.
+final class QuietSCNView: SCNView {
+    override var canBecomeFirstResponder: Bool { false }
 }
