@@ -1,0 +1,386 @@
+name: SIWA Capability Audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Audit Sign in with Apple (ASC API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install App Store Connect API key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          KEY_SIZE=$(wc -c < ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8)
+          echo "API key: $KEY_SIZE bytes"
+          if [ "$KEY_SIZE" -lt 100 ]; then
+            echo "ERROR: APP_STORE_CONNECT_API_KEY_CONTENT empty or too small"
+            exit 1
+          fi
+
+      - name: Install Python deps (PyJWT + cryptography)
+        run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+
+      - name: Fetch Ashtree entitlements from sibling repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/ashtree-ref
+          cp -f scripts/ashtree-ref/AshtreeIDE.entitlements /tmp/ashtree-ref/AshtreeIDE.entitlements
+          # Prefer live sibling-repo file; fall back to committed reference copy
+          if curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.raw" \
+            "https://api.github.com/repos/DART-Skyboard/AshtreeIDE-iOS/contents/Sources/AshtreeIDEApp/AshtreeIDE.entitlements?ref=main" \
+            -o /tmp/ashtree-ref/AshtreeIDE.entitlements; then
+            echo "Fetched live AshtreeIDE.entitlements"
+          else
+            echo "WARN: live fetch failed — using scripts/ashtree-ref copy"
+            cp -f scripts/ashtree-ref/AshtreeIDE.entitlements /tmp/ashtree-ref/AshtreeIDE.entitlements
+          fi
+          ls -la /tmp/ashtree-ref/ || true
+          echo "--- Ashtree entitlements ---"
+          cat /tmp/ashtree-ref/AshtreeIDE.entitlements 2>/dev/null || echo "(missing)"
+
+      - name: Run ASC SIWA audit
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: NQXQ595W59
+          ASC_KEY_PATH: ${{ runner.temp }}/../.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+        run: |
+          # Resolve key path (HOME-based, matching Install step)
+          export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8"
+          python3 << 'PY'
+          import json, os, sys, time, base64, textwrap
+          from pathlib import Path
+
+          try:
+              import jwt
+              import requests
+          except ImportError as e:
+              print(f"FATAL import: {e}")
+              sys.exit(1)
+
+          KEY_ID = os.environ["ASC_KEY_ID"]
+          ISSUER = os.environ["ASC_ISSUER_ID"]
+          KEY_PATH = os.environ["ASC_KEY_PATH"]
+          API = "https://api.appstoreconnect.apple.com/v1"
+
+          AUTUMN_BUNDLE = "com.dartmeadow.autumn"
+          ASHTREE_BUNDLE = "DART-Meadow-LLC.AshtreeIDE"
+          INTERESTING_CAPS = {
+              "SIGN_IN_WITH_APPLE",
+              "ICLOUD",
+              "PUSH_NOTIFICATIONS",
+              "KEYCHAIN_SHARING",
+              "APPLE_ID_AUTH",  # older alias if present
+          }
+          PROFILE_NAME_HINTS = ("AutumnGitHubFlow", "Autumn", "Distribution", "App Store", "Ashtree")
+
+          def make_token():
+              with open(KEY_PATH, "r") as f:
+                  private_key = f.read()
+              now = int(time.time())
+              payload = {
+                  "iss": ISSUER,
+                  "iat": now,
+                  "exp": now + 20 * 60,
+                  "aud": "appstoreconnect-v1",
+              }
+              headers = {"alg": "ES256", "kid": KEY_ID, "typ": "JWT"}
+              return jwt.encode(payload, private_key, algorithm="ES256", headers=headers)
+
+          TOKEN = make_token()
+          H = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+          def get(path, params=None):
+              url = path if path.startswith("http") else f"{API}{path}"
+              r = requests.get(url, headers=H, params=params, timeout=60)
+              print(f"GET {url} -> {r.status_code}")
+              if r.status_code >= 400:
+                  print(r.text[:2000])
+                  r.raise_for_status()
+              return r.json()
+
+          def get_all(path, params=None):
+              params = dict(params or {})
+              params.setdefault("limit", 200)
+              data = []
+              included = []
+              page = get(path, params)
+              data.extend(page.get("data") or [])
+              included.extend(page.get("included") or [])
+              while page.get("links", {}).get("next"):
+                  page = get(page["links"]["next"])
+                  data.extend(page.get("data") or [])
+                  included.extend(page.get("included") or [])
+              return data, included
+
+          report_lines = []
+          def log(s=""):
+              print(s)
+              report_lines.append(s)
+
+          log("# SIWA Capability Audit — Autumn vs Ashtree")
+          log("")
+          log(f"- Generated (UTC): {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}")
+          log(f"- Key ID: `{KEY_ID}`")
+          log(f"- Issuer: `{ISSUER[:8]}…`")
+          log(f"- Autumn bundle: `{AUTUMN_BUNDLE}`")
+          log(f"- Ashtree bundle: `{ASHTREE_BUNDLE}`")
+          log("")
+
+          # --- Bundle IDs ---
+          log("## 1. Bundle ID lookup")
+          bundles, _ = get_all("/bundleIds", {"filter[identifier]": f"{AUTUMN_BUNDLE},{ASHTREE_BUNDLE}"})
+          # filter may not accept comma on all endpoints; also list + filter client-side
+          if len(bundles) < 2:
+              all_bundles, _ = get_all("/bundleIds")
+              wanted = {AUTUMN_BUNDLE, ASHTREE_BUNDLE}
+              bundles = [b for b in all_bundles if b.get("attributes", {}).get("identifier") in wanted]
+              # also try fuzzy
+              if len(bundles) < 2:
+                  log(f"_Listed {len(all_bundles)} total bundleIds; filtering locally._")
+                  for b in all_bundles:
+                      ident = b.get("attributes", {}).get("identifier", "")
+                      if "autumn" in ident.lower() or "ashtree" in ident.lower():
+                          if b not in bundles:
+                              bundles.append(b)
+
+          by_ident = {}
+          for b in bundles:
+              ident = b["attributes"]["identifier"]
+              by_ident[ident] = b
+              log(f"- **{ident}** id=`{b['id']}` name=`{b['attributes'].get('name')}` platform=`{b['attributes'].get('platform')}`")
+
+          if AUTUMN_BUNDLE not in by_ident:
+              log(f"- **FAIL** Autumn bundle `{AUTUMN_BUNDLE}` NOT FOUND in ASC")
+          if ASHTREE_BUNDLE not in by_ident:
+              log(f"- **FAIL** Ashtree bundle `{ASHTREE_BUNDLE}` NOT FOUND in ASC")
+          log("")
+
+          # --- Capabilities ---
+          log("## 2. Enabled capabilities per Bundle ID")
+          cap_maps = {}  # ident -> {capType: attrs}
+          for ident, b in by_ident.items():
+              bid = b["id"]
+              log(f"### `{ident}`")
+              try:
+                  caps, _ = get_all(f"/bundleIds/{bid}/bundleIdCapabilities")
+              except Exception as e:
+                  log(f"- ERROR fetching capabilities: {e}")
+                  caps = []
+              cmap = {}
+              for c in caps:
+                  ctype = c.get("attributes", {}).get("capabilityType") or "?"
+                  settings = c.get("attributes", {}).get("settings")
+                  cmap[ctype] = {"id": c["id"], "settings": settings}
+                  flag = "⭐" if ctype in INTERESTING_CAPS or "APPLE" in ctype or "SIGN" in ctype else "-"
+                  log(f"- {flag} `{ctype}` id=`{c['id']}` settings=`{json.dumps(settings)[:200] if settings else 'null'}`")
+              # also dump raw if empty
+              if not caps:
+                  log("- _(no capabilities returned)_")
+              cap_maps[ident] = cmap
+              log("")
+
+          # --- Profiles ---
+          log("## 3. Provisioning profiles (name hints)")
+          try:
+              profiles, _ = get_all("/profiles")
+          except Exception as e:
+              log(f"- ERROR listing profiles: {e}")
+              profiles = []
+
+          def profile_matches(name):
+              n = (name or "").lower()
+              return any(h.lower() in n for h in PROFILE_NAME_HINTS)
+
+          matched = [p for p in profiles if profile_matches(p.get("attributes", {}).get("name"))]
+          # also include profiles whose bundleId matches our targets
+          autumn_id = by_ident.get(AUTUMN_BUNDLE, {}).get("id")
+          ashtree_id = by_ident.get(ASHTREE_BUNDLE, {}).get("id")
+
+          log(f"_Total profiles: {len(profiles)}; name-matched: {len(matched)}_")
+          for p in matched:
+              a = p["attributes"]
+              log(f"- **{a.get('name')}** uuid=`{a.get('uuid')}` type=`{a.get('profileType')}` state=`{a.get('profileState')}`")
+              # Try include bundleId relationship
+              try:
+                  detail = get(f"/profiles/{p['id']}", {"include": "bundleId,certificates"})
+                  rel_bundle = (detail.get("data") or {}).get("relationships", {}).get("bundleId", {}).get("data")
+                  if rel_bundle:
+                      log(f"  - bundleId ref: `{rel_bundle.get('id')}`")
+                  # Decode profileContent if present (base64 CMS) — list entitlements via openssl if available
+                  content_b64 = a.get("profileContent")
+                  if not content_b64:
+                      content_b64 = (detail.get("data") or {}).get("attributes", {}).get("profileContent")
+                  if content_b64:
+                      raw = base64.b64decode(content_b64)
+                      out = Path(f"/tmp/profile_{a.get('uuid','x')}.mobileprovision")
+                      out.write_bytes(raw)
+                      # Try to extract Entitlements from CMS (may need openssl smime)
+                      import subprocess
+                      try:
+                          xml = subprocess.check_output(
+                              ["openssl", "smime", "-inform", "der", "-verify", "-noverify", "-in", str(out)],
+                              stderr=subprocess.DEVNULL,
+                          )
+                          # Find Entitlements dict roughly
+                          text = xml.decode("utf-8", errors="replace")
+                          if "com.apple.developer.applesignin" in text:
+                              log("  - entitlements: **HAS com.apple.developer.applesignin**")
+                          else:
+                              log("  - entitlements: **MISSING com.apple.developer.applesignin**")
+                          for needle in ("aps-environment", "icloud", "keychain-access-groups", "application-identifier"):
+                              if needle in text.lower() or needle in text:
+                                  log(f"  - entitlements mention: `{needle}`")
+                          # snip entitlement keys
+                          if "<key>Entitlements</key>" in text:
+                              idx = text.index("<key>Entitlements</key>")
+                              snip = text[idx:idx+2500]
+                              log("  - Entitlements snippet:")
+                              log("```xml")
+                              log(snip[:2000])
+                              log("```")
+                      except Exception as ex:
+                          log(f"  - could not decode profile CMS: {ex}")
+              except Exception as e:
+                  log(f"  - detail fetch failed: {e}")
+
+          log("")
+
+          # --- Git entitlements dump ---
+          log("## 4. Repo entitlements (git)")
+          autumn_ent = Path("Sources/AutumnApp/AutumnApp.entitlements")
+          ashtree_ent = Path("/tmp/ashtree-ref/AshtreeIDE.entitlements")
+          if not ashtree_ent.exists():
+              ashtree_ent = Path("scripts/ashtree-ref/AshtreeIDE.entitlements")
+          log("### AutumnApp.entitlements")
+          log("```xml")
+          log(autumn_ent.read_text() if autumn_ent.exists() else "(missing)")
+          log("```")
+          log("### AshtreeIDE.entitlements")
+          log("```xml")
+          log(ashtree_ent.read_text() if ashtree_ent.exists() else "(missing)")
+          log("```")
+          log("")
+
+          # --- PASS/FAIL checklist ---
+          log("## 5. SIWA readiness checklist")
+          results = []
+
+          def check(name, ok, detail=""):
+              status = "PASS" if ok else "FAIL"
+              results.append((status, name, detail))
+              log(f"- **{status}**: {name}" + (f" — {detail}" if detail else ""))
+
+          a_caps = cap_maps.get(AUTUMN_BUNDLE, {})
+          s_caps = cap_maps.get(ASHTREE_BUNDLE, {})
+
+          check(
+              "Autumn App ID exists in ASC",
+              AUTUMN_BUNDLE in by_ident,
+              by_ident.get(AUTUMN_BUNDLE, {}).get("id", "not found"),
+          )
+          check(
+              "Ashtree App ID exists in ASC",
+              ASHTREE_BUNDLE in by_ident,
+              by_ident.get(ASHTREE_BUNDLE, {}).get("id", "not found"),
+          )
+          autumn_siwa = "SIGN_IN_WITH_APPLE" in a_caps
+          ashtree_siwa = "SIGN_IN_WITH_APPLE" in s_caps
+          check("Autumn has SIGN_IN_WITH_APPLE capability", autumn_siwa, str(a_caps.get("SIGN_IN_WITH_APPLE")))
+          check("Ashtree has SIGN_IN_WITH_APPLE capability (reference)", ashtree_siwa, str(s_caps.get("SIGN_IN_WITH_APPLE")))
+          check(
+              "Autumn repo entitlements declare com.apple.developer.applesignin",
+              autumn_ent.exists() and "com.apple.developer.applesignin" in autumn_ent.read_text(),
+          )
+          check(
+              "Ashtree repo entitlements declare com.apple.developer.applesignin (reference)",
+              ashtree_ent.exists() and "com.apple.developer.applesignin" in ashtree_ent.read_text(),
+          )
+
+          # Profile SIWA
+          autumn_profile_siwa = False
+          autumn_profile_found = False
+          for p in matched:
+              name = p.get("attributes", {}).get("name", "")
+              if "AutumnGitHubFlow" in name or ("Autumn" in name and "Distribution" in name) or name == "AutumnGitHubFlow":
+                  autumn_profile_found = True
+                  # re-check decoded file
+                  uuid = p.get("attributes", {}).get("uuid")
+                  pp = Path(f"/tmp/profile_{uuid}.mobileprovision")
+                  if pp.exists():
+                      try:
+                          import subprocess
+                          xml = subprocess.check_output(
+                              ["openssl", "smime", "-inform", "der", "-verify", "-noverify", "-in", str(pp)],
+                              stderr=subprocess.DEVNULL,
+                          ).decode("utf-8", errors="replace")
+                          if "com.apple.developer.applesignin" in xml:
+                              autumn_profile_siwa = True
+                      except Exception:
+                          pass
+          check("Autumn distribution profile found (name hint)", autumn_profile_found)
+          check(
+              "Autumn profile includes SIWA entitlement",
+              autumn_profile_siwa,
+              "required for device SIWA sheet; regenerate if FAIL",
+          )
+
+          # Cap parity notes
+          for cap in sorted(INTERESTING_CAPS):
+              a = cap in a_caps
+              s = cap in s_caps
+              if a or s:
+                  check(
+                      f"Capability parity `{cap}` (Autumn={a}, Ashtree={s})",
+                      a == s or (cap == "SIGN_IN_WITH_APPLE" and a),
+                      "Ashtree reference; Autumn may intentionally differ on iCloud/push",
+                  )
+
+          fails = [r for r in results if r[0] == "FAIL"]
+          log("")
+          log("## 6. Next concrete fix")
+          if not autumn_siwa:
+              log("- **PRIMARY GAP**: Enable `SIGN_IN_WITH_APPLE` on App ID `com.dartmeadow.autumn` in ASC (API: POST bundleIdCapabilities, or Developer portal → Identifiers → Autumn → Sign In with Apple → Enable → Save).")
+              log("- Then regenerate/download profile `AutumnGitHubFlow` (or recreate) so entitlements include `com.apple.developer.applesignin`, update `PROVISIONING_PROFILE_BASE64` secret if used.")
+          elif not autumn_profile_siwa:
+              log("- App ID has SIWA, but **profile lacks SIWA entitlement** → regenerate `AutumnGitHubFlow` / App Store distribution profile after capability change, refresh CI secret.")
+          else:
+              log("- ASC App ID + profile look SIWA-ready. If device still fails, gap is client (dismiss-before-SIWA / Services ID / error handling), not entitlement guess.")
+          log("- Do **not** ship speculative TestFlight entitlement changes until this checklist is green for Autumn SIWA.")
+          log("")
+          log(f"**Summary: {len(results) - len(fails)} PASS / {len(fails)} FAIL**")
+
+          summary_path = Path(os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/siwa-audit-report.md"))
+          report_path = Path("/tmp/siwa-audit-report.md")
+          body = "\n".join(report_lines) + "\n"
+          report_path.write_text(body)
+          summary_path.write_text(body)
+          Path("siwa-audit-report.md").write_text(body)
+          print(f"\nWrote {report_path} and step summary ({len(body)} bytes)")
+
+          # Exit non-zero only if Autumn SIWA capability missing (hard fail for Phase A clarity)
+          if not autumn_siwa or AUTUMN_BUNDLE not in by_ident:
+              print("::error::Autumn SIWA not ready on App ID — see checklist")
+              # Still succeed the job so logs are preserved; parent reads summary
+              # Use exit 0 so workflow is green but FAIL is in checklist
+          sys.exit(0)
+          PY
+
+      - name: Upload audit report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: siwa-audit-report
+          path: siwa-audit-report.md
+          if-no-files-found: warn

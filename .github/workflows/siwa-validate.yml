@@ -1,0 +1,21 @@
+name: SIWA signing validate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Compare AutumnGitHubFlow vs app entitlements vs Ashtree
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PyJWT
+        run: pip3 install PyJWT cryptography
+      - name: Validate SIWA entitlements / profile / ASC
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: bash scripts/validate_siwa_signing.sh
