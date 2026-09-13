@@ -154,7 +154,8 @@ public final class ChatViewModel: ObservableObject {
                 response: response,
                 emotion: turn.emotion.rawValue,
                 buoyancy: turn.buoyancy,
-                uid: owner
+                uid: owner,
+                sid: sid
             )
         }
         autosaveIfNeeded()

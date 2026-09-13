@@ -292,17 +292,13 @@ public struct AppShellView: View {
 
     private var livePill: some View {
         Button {
-            Task {
-                await AutumnGASClient.shared.pingPresence(
-                    message: "LIVE",
-                    response: "ios shell",
-                    emotion: "neutral",
-                    buoyancy: 0.5,
-                    uid: authVM.sessionUID
-                )
-            }
+            sceneVM.liveFeedEnabled.toggle()
         } label: {
-            headerChip(text: "LIVE", color: Color(hex: "#00ff88"), dot: true)
+            headerChip(
+                text: sceneVM.liveFeedEnabled ? "LIVE FEED" : "FEED OFF",
+                color: sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white.opacity(0.45),
+                dot: sceneVM.liveFeedEnabled
+            )
         }
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)

@@ -78,10 +78,43 @@ public actor AutumnGASClient {
         return await postPlainJSON(body)
     }
 
-    /// Replace-write a JSON array (admin mailbox move/delete). Matches web `_admWriteJson` GAS path.
-    /// Canvas / presence ping. Same GAS as web logpresence plus a session node.
-    public func pingPresence(message: String, response: String, emotion: String, buoyancy: Double, uid: String = "ios-guest") async {
-        await writeSession(uid: uid, sid: "presence-" + hexId(), extra: [
+    /// Web `_pollAshNodes` PRIMARY write — CacheService `writenode` (not a new sid per ping).
+    public func writeNode(sid: String, uid: String, label: String) async {
+        let body: [String: Any] = [
+            "action": "writenode",
+            "sid": sid,
+            "uid": uid,
+            "node": [
+                "x": 0, "y": 0, "z": 0,
+                "shell": "Geological",
+                "color": "#00e5ff",
+                "label": String(label.prefix(10)),
+                "ts": Date().timeIntervalSince1970 * 1000
+            ]
+        ]
+        _ = await postPlain(body)
+    }
+
+    /// Web `?action=readnodes` — live buoyancy-node listing (CacheService, sub-100ms).
+    public func readNodes() async -> [[String: Any]] {
+        guard let url = URL(string: gasURL + "?action=readnodes") else { return [] }
+        guard let json = await getJSON(url) else { return [] }
+        return json["nodes"] as? [[String: Any]] ?? []
+    }
+
+    /// Web `?action=sessions` — GitHub-backed sessions + mist/ashstar heartbeat.
+    public func readSessions() async -> [[String: Any]] {
+        guard let url = URL(string: gasURL + "?action=sessions") else { return [] }
+        guard let json = await getJSON(url) else { return [] }
+        return json["sessions"] as? [[String: Any]] ?? []
+    }
+
+    /// Canvas / presence ping. Same GAS as web: stable sid + writenode (never mint presence-* ghosts).
+    public func pingPresence(message: String, response: String, emotion: String, buoyancy: Double, uid: String = "ios-guest", sid: String? = nil) async {
+        let useSid = (sid?.isEmpty == false) ? sid! : uid
+        await writeNode(sid: useSid, uid: uid, label: uid)
+        await writeSession(uid: uid, sid: useSid, extra: [
+            "type": "presence",
             "message": message,
             "response": response,
             "emotion": emotion,
@@ -94,7 +127,8 @@ public actor AutumnGASClient {
             "emotion": emotion,
             "buoyancy": String(format: "%.3f", buoyancy),
             "ts": ISO8601DateFormatter().string(from: Date()),
-            "uid": uid
+            "uid": uid,
+            "sid": useSid
         ]
         if let raw = try? JSONSerialization.data(withJSONObject: data),
            let json = String(data: raw, encoding: .utf8) {
@@ -102,6 +136,7 @@ public actor AutumnGASClient {
         }
     }
 
+    /// Replace-write a JSON array (admin mailbox move/delete). Matches web `_admWriteJson` GAS path.
     @discardableResult
     public func ashwriteReplace(path: String, uid: String, payload: Any, message: String) async -> Bool {
         let body: [String: Any] = [
