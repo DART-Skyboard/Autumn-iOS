@@ -207,6 +207,28 @@ struct InputBar: View {
     var body: some View {
         VStack(spacing: 0) {
         PendingAttachmentStrip()
+        if inputFocused {
+            HStack {
+                Spacer()
+                Button {
+                    inputFocused = false
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil, from: nil, for: nil)
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(themeVM.current.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(themeVM.current.surface.opacity(0.95))
+                        .cornerRadius(10)
+                }
+                .accessibilityLabel("Hide keyboard")
+                .padding(.trailing, 16)
+                .padding(.bottom, 4)
+            }
+        }
         HStack(spacing: 8) {
             Button {
                 chatVM.toggleListening()
@@ -278,6 +300,23 @@ struct InputBar: View {
         ) { result in
             if case .success(let urls) = result {
                 chatVM.importFiles(from: urls)
+            }
+        }
+        // Collapse control on the keyboard accessory (DART pattern) — swipe alone is not enough on device.
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button {
+                    inputFocused = false
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil, from: nil, for: nil)
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(themeVM.current.accent)
+                }
+                .accessibilityLabel("Hide keyboard")
             }
         }
     }

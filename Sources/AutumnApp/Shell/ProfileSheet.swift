@@ -185,10 +185,14 @@ public struct ProfileSheet: View {
         }
         .onAppear { tint.sample(url: authVM.githubAvatarURL) }
         .onChange(of: authVM.githubAvatarURL) { u in tint.sample(url: u) }
-        .sheet(isPresented: $showGitHubSheet) {
+        .sheet(isPresented: $showGitHubSheet, onDismiss: {
+            if !authVM.githubConnected { authVM.cancelGitHubAuth() }
+        }) {
             GitHubDeviceFlowSheet()
                 .environmentObject(authVM)
                 .environmentObject(themeVM)
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(false)
         }
     }
 

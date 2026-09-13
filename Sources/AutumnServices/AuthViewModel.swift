@@ -45,6 +45,9 @@ public final class AuthViewModel: NSObject, ObservableObject {
         githubConnected && githubUsername.lowercased() == AutumnConfig.adminUsername
     }
 
+    /// Bumped by cancelGitHubAuth so in-flight poll loops exit.
+    private var githubPollGeneration = 0
+
     private let keychainKey    = "autumn_apple_user_id"
     private let displayNameKey = "autumn_apple_display_name"
     private let oauthTokenKey  = "github_oauth_token"
@@ -153,37 +156,52 @@ public final class AuthViewModel: NSObject, ObservableObject {
     }
 
     // MARK: — GitHub device flow (ASWebAuthenticationSession)
-    public func startGitHubAuth() async {
+    /// - Parameter openVerification: When true (default), opens ASWebAuthenticationSession.
+    ///   GitHubDeviceFlowSheet passes false and owns the dismissible Safari sheet instead —
+    ///   stacking both overlays left Cancel/swipe broken.
+    public func startGitHubAuth(openVerification: Bool = true) async {
         error = nil
         isAuthenticating = true
+        githubPollGeneration += 1
+        let gen = githubPollGeneration
         do {
             let flow = try await GitHubClient.shared.startDeviceFlow(clientId: AutumnConfig.githubClientId)
+            guard gen == githubPollGeneration else { return }
             deviceFlowCode = DeviceFlowDisplay(
                 userCode: flow.userCode, verificationUrl: flow.verificationUri,
                 deviceCode: flow.deviceCode, interval: flow.interval)
-            if let url = URL(string: flow.verificationUri) {
+            if openVerification, let url = URL(string: flow.verificationUri) {
                 GitHubOAuth.shared.openDeviceVerification(url: url)
             }
-            await pollForGitHubToken(deviceCode: flow.deviceCode, interval: flow.interval)
+            await pollForGitHubToken(deviceCode: flow.deviceCode, interval: flow.interval, generation: gen)
         } catch {
             // GAS fallback for device code (same as web)
             if let d = await AutumnGASClient.shared.deviceCode(),
                let userCode = d["user_code"] as? String,
                let deviceCode = d["device_code"] as? String,
                let uri = d["verification_uri"] as? String {
+                guard gen == githubPollGeneration else { return }
                 let interval = d["interval"] as? Int ?? 5
                 deviceFlowCode = DeviceFlowDisplay(
                     userCode: userCode, verificationUrl: uri,
                     deviceCode: deviceCode, interval: interval)
-                if let url = URL(string: uri) {
+                if openVerification, let url = URL(string: uri) {
                     GitHubOAuth.shared.openDeviceVerification(url: url)
                 }
-                await pollForGitHubToken(deviceCode: deviceCode, interval: interval)
+                await pollForGitHubToken(deviceCode: deviceCode, interval: interval, generation: gen)
             } else {
                 self.error = error.localizedDescription
                 isAuthenticating = false
             }
         }
+    }
+
+    /// Stop device-flow poll + dismiss any ASWebAuthenticationSession. Safe to call from Cancel / sheet onDismiss.
+    public func cancelGitHubAuth() {
+        githubPollGeneration += 1
+        deviceFlowCode = nil
+        isAuthenticating = false
+        GitHubOAuth.shared.cancel()
     }
 
     /// If a web-flow `code` ever lands (universal link / autumn://oauth?code=), exchange via GAS.
@@ -199,15 +217,17 @@ public final class AuthViewModel: NSObject, ObservableObject {
         }
     }
 
-    private func pollForGitHubToken(deviceCode: String, interval: Int) async {
+    private func pollForGitHubToken(deviceCode: String, interval: Int, generation: Int) async {
         let deadline = Date().addingTimeInterval(600)
         while Date() < deadline {
             try? await Task.sleep(nanoseconds: UInt64(max(interval, 5)) * 1_000_000_000)
+            guard generation == githubPollGeneration else { return }
             guard let token = try? await GitHubClient.shared.pollDeviceFlow(
                 clientId: AutumnConfig.githubClientId, deviceCode: deviceCode), !token.isEmpty else { continue }
             await applyOAuthToken(token)
             return
         }
+        guard generation == githubPollGeneration else { return }
         deviceFlowCode = nil
         isAuthenticating = false
         GitHubOAuth.shared.cancel()
@@ -282,10 +302,11 @@ public final class AuthViewModel: NSObject, ObservableObject {
     }
 
     public func signOut() {
+        cancelGitHubAuth()
         disconnectGitHub()
         isGuest = true; githubConnected = false
         username = "Guest"; githubUsername = ""; appleUserId = ""
-        deviceFlowCode = nil; error = nil; adminEnabled = false
+        error = nil; adminEnabled = false
         KeychainService.shared.delete(key: keychainKey)
         KeychainService.shared.delete(key: displayNameKey)
     }

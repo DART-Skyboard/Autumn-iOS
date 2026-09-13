@@ -119,8 +119,14 @@ public struct WelcomeView: View {
                 Spacer().frame(height: 48)
             }
         }
-        .sheet(isPresented: $showGitHubSheet) {
+        .sheet(isPresented: $showGitHubSheet, onDismiss: {
+            if !authVM.githubConnected { authVM.cancelGitHubAuth() }
+        }) {
             GitHubDeviceFlowSheet()
+                .environmentObject(authVM)
+                .environmentObject(themeVM)
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(false)
         }
     }
 }

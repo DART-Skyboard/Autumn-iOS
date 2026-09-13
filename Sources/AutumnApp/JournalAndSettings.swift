@@ -127,6 +127,7 @@ public struct SettingsView: View {
     @State private var apiKeyInput = ""
     @State private var showAPIKey = false
     @State private var dataConsent = true
+    @State private var showGitHubSheet = false
 
     public var body: some View {
         ZStack {
@@ -206,7 +207,7 @@ public struct SettingsView: View {
                             .font(.system(size: 12, design: .monospaced))
                     }
                     Button(authVM.githubConnected ? "Reconnect GitHub" : "Connect GitHub") {
-                        Task { await authVM.startGitHubAuth() }
+                        showGitHubSheet = true
                     }
                     .foregroundColor(themeVM.current.accent)
                     if authVM.githubConnected {
@@ -300,6 +301,15 @@ public struct SettingsView: View {
                 apiKeyInput = saved
                 chatVM.configure(apiKey: saved)
             }
+        }
+        .sheet(isPresented: $showGitHubSheet, onDismiss: {
+            if !authVM.githubConnected { authVM.cancelGitHubAuth() }
+        }) {
+            GitHubDeviceFlowSheet()
+                .environmentObject(authVM)
+                .environmentObject(themeVM)
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(false)
         }
     }
 }
