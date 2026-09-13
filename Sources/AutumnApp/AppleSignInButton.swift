@@ -1,4 +1,4 @@
-// AppleSignInButton.swift — Crash-safe Sign in with Apple (ported from AshtreeIDE)
+// AppleSignInButton.swift — Crash-safe Sign in with Apple (ported from AshtreeIDE / ArcLake)
 //
 // ROOT CAUSE: SwiftUI's SignInWithAppleButton calls ASAuthorizationController
 // internally. When its onCompletion then starts a *second* controller (or when
@@ -6,6 +6,8 @@
 //
 // FIX: UIViewRepresentable wrapping ASAuthorizationAppleIDButton; Coordinator
 // owns the controller and presents from the live key window.
+// Arc Lake lesson: app entitlements not granted by the profile poison the whole
+// entitlement blob and SIWA fails with ASAuthorizationError 1000 (.unknown).
 import SwiftUI
 import AuthenticationServices
 
@@ -27,13 +29,16 @@ public struct AppleSignInButton: UIViewRepresentable {
         return button
     }
 
-    public func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {}
+    public func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {
+        context.coordinator.hostView = uiView
+    }
 
     public func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     public class Coordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
         let parent: AppleSignInButton
         private var controller: ASAuthorizationController?
+        weak var hostView: UIView?
 
         public init(parent: AppleSignInButton) { self.parent = parent }
 
@@ -49,10 +54,27 @@ public struct AppleSignInButton: UIViewRepresentable {
         }
 
         public func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-            UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap { $0.windows }
-                .first { $0.isKeyWindow } ?? UIWindow()
+            // Prefer the button's own window (same gesture / hierarchy).
+            if let w = hostView?.window { return w }
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            if let w = scenes.filter({ $0.activationState == .foregroundActive })
+                .flatMap({ $0.windows }).first(where: { $0.isKeyWindow }) {
+                return w
+            }
+            if let w = scenes.flatMap({ $0.windows }).first(where: { $0.isKeyWindow }) {
+                return w
+            }
+            if let w = scenes.flatMap({ $0.windows }).first {
+                return w
+            }
+            // Never return a detached UIWindow() — that yields ASAuthorizationError 1000.
+            if let scene = scenes.first {
+                let w = UIWindow(windowScene: scene)
+                w.frame = scene.coordinateSpace.bounds
+                w.makeKeyAndVisible()
+                return w
+            }
+            return UIWindow()
         }
 
         public func authorizationController(

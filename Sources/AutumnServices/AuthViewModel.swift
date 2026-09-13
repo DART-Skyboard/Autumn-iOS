@@ -134,13 +134,13 @@ public final class AuthViewModel: NSObject, ObservableObject {
     }
 
     /// Legacy no-op — AppleSignInButton owns the ASAuthorizationController
-    /// (Welcome + Profile). Never start SIWA outside the button's tap gesture.
+    /// (Welcome + root fullScreenCover). Never start SIWA outside the button's tap gesture.
     public func signInWithApple() {
         // Intentionally empty (Ashtree IDEAuthViewModel pattern).
     }
 
-    /// Removed (TF84): dismiss-then-perform started ASAuthorizationController outside
-    /// the user gesture → .unknown. Profile now uses in-sheet AppleSignInButton.
+    /// Removed (TF84/87): dismiss-then-perform or nested Profile button → .unknown / 1000.
+    /// Welcome is primary SIWA; Profile opens root fullScreenCover with AppleSignInButton.
     public func performAppleSignInFromRootWindow() {
         // Intentionally empty — keep symbol for any stale call sites.
     }
@@ -415,24 +415,29 @@ extension AuthViewModel:
 
     fileprivate func applyAppleError(_ error: Error) {
         let asErr = error as? ASAuthorizationError
+        // Temporary: include ASAuthorizationError rawValue so device reports aren't ambiguous.
+        let codeTag: String = {
+            if let c = asErr?.code.rawValue { return " [ASAuthorizationError \(c)]" }
+            return " [non-ASAuthorizationError]"
+        }()
         switch asErr?.code {
         case .canceled:
             // User dismissed the sheet — stay silent.
             return
         case .unknown:
             // Presentation/hierarchy failures often surface as .unknown; do not always blame iCloud.
-            self.error = "Sign in failed — try again from Welcome, or check Settings → Apple ID / iCloud"
+            self.error = "Sign in failed — try again from Welcome, or check Settings → Apple ID / iCloud" + codeTag
         case .invalidResponse, .notHandled, .failed:
-            self.error = "Sign in failed: \(error.localizedDescription)"
+            self.error = "Sign in failed: \(error.localizedDescription)" + codeTag
         case .notInteractive:
-            self.error = "Sign in failed — Apple Sign In is not available in this context. Try again from Welcome."
+            self.error = "Sign in failed — Apple Sign In is not available in this context. Try again from Welcome." + codeTag
         case nil:
-            self.error = error.localizedDescription
+            self.error = error.localizedDescription + codeTag
         default:
             if let asErr {
-                self.error = "Sign in failed (\(asErr.code.rawValue)): \(error.localizedDescription)"
+                self.error = "Sign in failed (\(asErr.code.rawValue)): \(error.localizedDescription)" + codeTag
             } else {
-                self.error = error.localizedDescription
+                self.error = error.localizedDescription + codeTag
             }
         }
     }

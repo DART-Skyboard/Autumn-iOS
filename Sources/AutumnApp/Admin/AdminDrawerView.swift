@@ -3,8 +3,8 @@ import AutumnServices
 import LEATRCore
 
 /// Admin drawer — public-app left ADMIN tab.
-/// Tabs match web PR #29: DATA / ASH / MSG only. MSG is one mailbox
-/// (inbox / analysis / read / trash) over feedback/*.json. No FEED tab.
+/// Tabs match web: DATA / ASH / FEED / MSG.
+/// FEED = full mailbox (inbox/analysis/read/trash). MSG = inbox-only overlay parity.
 public struct AdminDrawerView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var authVM: AuthViewModel
@@ -46,7 +46,8 @@ public struct AdminDrawerView: View {
                     switch appNav.adminTab {
                     case .data: dataTab
                     case .ash: ashTab
-                    case .msg: AdminMailboxView()
+                    case .feed: AdminMailboxView(inboxOnly: false)
+                    case .msg: AdminMailboxView(inboxOnly: true)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -111,10 +112,12 @@ public struct AdminDrawerView: View {
     }
 }
 
-/// MSG — one mailbox, folders inbox/analysis/read/trash. Matches `_admMountFeedbackUI`.
+/// FEED/MSG mailbox — folders inbox/analysis/read/trash. Matches `_admMountFeedbackUI`.
+/// `inboxOnly` mirrors web MSG overlay (`inboxOnly:true`).
 public struct AdminMailboxView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var authVM: AuthViewModel
+    var inboxOnly: Bool = false
     @State private var folder: MailboxFolder = .inbox
     @State private var entries: [FeedbackEntry] = []
     @State private var selected: Set<String> = []
@@ -139,23 +142,33 @@ public struct AdminMailboxView: View {
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
 
-            HStack(spacing: 0) {
-                ForEach(MailboxFolder.allCases, id: \.rawValue) { f in
-                    Button {
-                        folder = f
-                        Task { await load() }
-                    } label: {
-                        Text(f.rawValue.uppercased())
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .tracking(1.2)
-                            .foregroundColor(folder == f ? chrome.accent : chrome.accent.opacity(0.4))
-                            .padding(.horizontal, 10).padding(.vertical, 8)
-                            .overlay(Rectangle().frame(height: 2).foregroundColor(folder == f ? chrome.accent : .clear), alignment: .bottom)
+            if inboxOnly {
+                Text("INBOX")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .foregroundColor(chrome.accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .overlay(Rectangle().frame(height: 1).foregroundColor(chrome.accent.opacity(0.12)), alignment: .bottom)
+            } else {
+                HStack(spacing: 0) {
+                    ForEach(Array(MailboxFolder.allCases), id: \.rawValue) { f in
+                        Button {
+                            folder = f
+                            Task { await load() }
+                        } label: {
+                            Text(f.rawValue.uppercased())
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .tracking(1.2)
+                                .foregroundColor(folder == f ? chrome.accent : chrome.accent.opacity(0.4))
+                                .padding(.horizontal, 10).padding(.vertical, 8)
+                                .overlay(Rectangle().frame(height: 2).foregroundColor(folder == f ? chrome.accent : .clear), alignment: .bottom)
+                        }
                     }
+                    Spacer()
                 }
-                Spacer()
+                .overlay(Rectangle().frame(height: 1).foregroundColor(chrome.accent.opacity(0.12)), alignment: .bottom)
             }
-            .overlay(Rectangle().frame(height: 1).foregroundColor(chrome.accent.opacity(0.12)), alignment: .bottom)
 
             if entries.isEmpty {
                 Spacer()
@@ -184,6 +197,7 @@ public struct AdminMailboxView: View {
                 .padding(.horizontal, 8).padding(.vertical, 6)
                 .overlay(Rectangle().frame(height: 1).foregroundColor(chrome.accent.opacity(0.1)), alignment: .top)
         }
+        .onAppear { if inboxOnly { folder = .inbox } }
         .task { await load() }
         .onChange(of: folder) { _ in selected = []; expanded = nil }
     }

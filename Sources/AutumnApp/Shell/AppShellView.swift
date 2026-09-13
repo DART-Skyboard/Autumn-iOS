@@ -83,6 +83,13 @@ public struct AppShellView: View {
         .onChange(of: authVM.adminEnabled) { _ in
             if !circuit.allows(authVM) { appNav.showAdmin = false }
         }
+        // SIWA at root window (Ashtree/Welcome pattern) — not nested under Profile overlay.
+        .fullScreenCover(isPresented: $appNav.showAppleSignIn) {
+            RootAppleSignInCover()
+                .environmentObject(authVM)
+                .environmentObject(themeVM)
+                .environmentObject(appNav)
+        }
     }
 
     // MARK: — Portrait: top bar / scene / EmoHUD / ash trigger / chat
@@ -396,11 +403,99 @@ extension ThemeViewModel {
     }
 }
 
+
+/// Dark root SIWA host — AppleSignInButton tap starts auth (same gesture). Profile only opens this cover.
+struct RootAppleSignInCover: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var appNav: AppNavigation
+    @State private var reopenProfileOnSuccess = true
+
+    var body: some View {
+        let chrome = themeVM.chrome
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 20) {
+                HStack {
+                    Text("SIGN IN WITH APPLE")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .tracking(2)
+                        .foregroundColor(chrome.accent)
+                    Spacer()
+                    Button("Cancel") {
+                        authVM.error = nil
+                        appNav.showAppleSignIn = false
+                    }
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+                Spacer()
+
+                Text("Use the Apple button below. Auth starts from this root cover — same as Welcome.")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+
+                AppleSignInButton(
+                    onRequest: { req in
+                        authVM.error = nil
+                        authVM.prepareAppleRequest(req)
+                    },
+                    onCompletion: { result in
+                        authVM.handleAppleCompletion(result)
+                        switch result {
+                        case .success:
+                            appNav.showAppleSignIn = false
+                            authVM.error = nil
+                            if reopenProfileOnSuccess {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                    appNav.showProfile = true
+                                }
+                            }
+                        case .failure:
+                            // Canceled → applyAppleError leaves error nil → dismiss. Failure keeps cover + banner.
+                            if authVM.error == nil {
+                                appNav.showAppleSignIn = false
+                            }
+                        }
+                    }
+                )
+                .frame(maxWidth: 360)
+                .frame(height: 52)
+                .cornerRadius(12)
+                .padding(.horizontal, 28)
+                .accessibilityLabel("Sign in with Apple")
+
+                if let err = authVM.error {
+                    Text(err)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color(hex: "#ff6688"))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+                        .accessibilityLabel("Sign in error")
+                }
+
+                Spacer()
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
 @MainActor
 public final class AppNavigation: ObservableObject {
     @Published public var showProfile = false
     @Published public var showFeedback = false
     @Published public var showAdmin = false
+    /// Root fullScreenCover for SIWA — Profile must not host AppleSignInButton nested.
+    @Published public var showAppleSignIn = false
+    /// When true, RootView shows WelcomeView (fresh Apple/GitHub/Guest) instead of shell.
+    @Published public var showWelcome = false
     @Published public var leftTab: LeftTab = .none
     @Published public var rightTab: RightTab = .none
     @Published public var adminTab: AdminTab = .data
@@ -418,7 +513,8 @@ public final class AppNavigation: ObservableObject {
 
     public enum LeftTab { case none, geo, mar, aero }
     public enum RightTab { case none, mist, star, shard, sys }
-    public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", msg = "MESSAGES" }
+    /// Match web admin chrome: DATA / ASH / FEED / MSG.
+    public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", feed = "FEED", msg = "MSG" }
     public enum StudioKind: String, Identifiable {
         case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc, mathSolver, latexCanvas
         public var id: String { rawValue }

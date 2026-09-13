@@ -14,6 +14,8 @@ public struct ProfileSheet: View {
     @State private var saveBusy = false
     @State private var saveBanner: SaveBanner?
     @State private var showGitHubSheet = false
+    @State private var showSignOutChoices = false
+    @AppStorage("autumn_welcome_done_v1") private var welcomeDone = false
 
     private struct SaveBanner: Equatable {
         let text: String
@@ -81,8 +83,8 @@ public struct ProfileSheet: View {
                     }
                 }
 
-                // Apple ID — real AppleSignInButton (Ashtree pattern): controller starts
-                // inside the button tap (same gesture). Do NOT dismiss Profile first.
+                // Apple ID — open root fullScreenCover (Welcome/Ashtree pattern). Nested
+                // AppleSignInButton inside Profile overlay still fails with .unknown.
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Apple ID").font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.45))
@@ -93,22 +95,23 @@ public struct ProfileSheet: View {
                     }
                     .padding(.horizontal, 14).padding(.top, 10)
                     if authVM.appleUserId.isEmpty {
-                        AppleSignInButton(
-                            onRequest: { req in
-                                authVM.error = nil
-                                authVM.prepareAppleRequest(req)
-                            },
-                            onCompletion: { result in
-                                authVM.handleAppleCompletion(result)
-                                // Success: dismiss Profile. Cancel: silent. Failure: keep Profile + show error.
-                                if case .success = result {
-                                    appNav.showProfile = false
-                                }
+                        Button {
+                            authVM.error = nil
+                            appNav.showProfile = false
+                            appNav.showAppleSignIn = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "apple.logo")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("Sign in with Apple")
+                                    .font(.system(size: 14, weight: .semibold))
                             }
-                        )
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .cornerRadius(8)
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(Color.white)
+                            .cornerRadius(8)
+                        }
                         .padding(.horizontal, 14)
                         .padding(.bottom, 6)
                         .accessibilityLabel("Sign in with Apple")
@@ -165,17 +168,30 @@ public struct ProfileSheet: View {
                     }
                     if circuit.allows(authVM) {
                         Button { appNav.showAdmin = true; appNav.showProfile = false } label: {
-                            labelRow("⚙ OPEN ADMIN")
+                            labelRow("⚙ OPEN ADMIN DRAWER")
                         }
+                        Text("Circuit live — left HUD ADMIN also opens the drawer")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(Color(hex: "#00ff88").opacity(0.75))
+                            .padding(.horizontal, 14).padding(.bottom, 6)
                     } else if authVM.adminEnabled {
-                        Text("Admin waits for web circuit (leatr.xyz live)")
+                        Text("Admin waits for web circuit · \(circuit.status)")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.white.opacity(0.45))
+                            .padding(.horizontal, 14).padding(.bottom, 4)
+                        Text("Keep leatr.xyz admin tab open (heartbeat ≤90s), then OPEN ADMIN here or left HUD.")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.35))
+                            .padding(.horizontal, 14).padding(.bottom, 6)
+                    } else {
+                        Text("Enable Admin (dartsolarpunk) → wait for web circuit → OPEN ADMIN / left HUD")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.35))
                             .padding(.horizontal, 14).padding(.bottom, 6)
                     }
                 }
 
-                Button { authVM.signOut(); appNav.showProfile = false } label: {
+                Button { showSignOutChoices = true } label: {
                     Text("Sign Out").font(.system(size: 13)).foregroundColor(.red)
                         .frame(maxWidth: .infinity).padding(14)
                 }
@@ -205,6 +221,26 @@ public struct ProfileSheet: View {
                 .environmentObject(themeVM)
                 .presentationDragIndicator(.visible)
                 .interactiveDismissDisabled(false)
+        }
+        .confirmationDialog("Sign Out", isPresented: $showSignOutChoices, titleVisibility: .visible) {
+            Button("Sign Out") {
+                authVM.signOut()
+                appNav.showProfile = false
+                appNav.showAdmin = false
+                appNav.showAppleSignIn = false
+            }
+            Button("Sign Out & return to Welcome") {
+                authVM.signOut()
+                appNav.showProfile = false
+                appNav.showAdmin = false
+                appNav.showAppleSignIn = false
+                appNav.showFeedback = false
+                welcomeDone = false
+                appNav.showWelcome = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Sign Out stays in the app as Guest. Sign Out & Welcome returns to the fresh Apple / GitHub / Guest screen.")
         }
     }
 
