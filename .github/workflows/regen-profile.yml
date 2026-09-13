@@ -38,6 +38,8 @@ jobs:
           ASC_KEY_ID: NQXQ595W59
           ASC_KEY_PATH: ${{ runner.temp }}/placeholder
           REGEN_OUT: ${{ runner.temp }}/regen-profile
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
         run: |
           export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8"
           export REGEN_OUT="${{ runner.temp }}/regen-profile"

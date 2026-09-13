@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate INVALID AutumnGitHubFlow IOS_APP_STORE profile via ASC API."""
+"""Regenerate AutumnGitHubFlow IOS_APP_STORE profile via ASC API.
+
+Prefers the distribution certificate that matches CERTIFICATE_BASE64 (CI p12),
+so codesign identity and profile stay in sync.
+"""
 from __future__ import annotations
 
 import base64
@@ -7,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -20,6 +25,11 @@ API = "https://api.appstoreconnect.apple.com/v1"
 
 AUTUMN_BUNDLE = "com.dartmeadow.autumn"
 PROFILE_NAME = "AutumnGitHubFlow"
+# Historical CI cert (old AutumnGitHubFlow / Ashtree expiry twin)
+PREFERRED_CERT_IDS = (
+    "LSSK6A9TYA",  # iOS Distribution exp 2027-06-01T15:04:43
+    "JX4QJGW436",
+)
 OUT_DIR = Path(os.environ.get("REGEN_OUT", "/tmp/regen-profile"))
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -73,6 +83,93 @@ def decode_profile(raw: bytes, label: str) -> str:
     return xml
 
 
+def p12_sha1_fingerprints(b64: str, password: str) -> set[str]:
+    """Return uppercase hex SHA1 fingerprints of certs inside the p12."""
+    raw = base64.b64decode(b64)
+    fps: set[str] = set()
+    with tempfile.TemporaryDirectory() as td:
+        p12 = Path(td) / "dist.p12"
+        p12.write_bytes(raw)
+        # Extract certs (may be bag with key+cert)
+        pem = subprocess.check_output(
+            [
+                "openssl",
+                "pkcs12",
+                "-in",
+                str(p12),
+                "-passin",
+                f"pass:{password}",
+                "-nodes",
+                "-nokeys",
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+        # Split PEMs
+        chunks = pem.split(b"-----BEGIN CERTIFICATE-----")
+        for chunk in chunks[1:]:
+            body = b"-----BEGIN CERTIFICATE-----" + chunk.split(b"-----END CERTIFICATE-----")[0] + b"-----END CERTIFICATE-----\n"
+            cert_path = Path(td) / "c.pem"
+            cert_path.write_bytes(body)
+            out = subprocess.check_output(
+                ["openssl", "x509", "-in", str(cert_path), "-noout", "-fingerprint", "-sha1"],
+                stderr=subprocess.DEVNULL,
+            ).decode()
+            # SHA1 Fingerprint=AB:CD:...
+            if "=" in out:
+                hexfp = out.split("=", 1)[1].strip().replace(":", "").upper()
+                fps.add(hexfp)
+    return fps
+
+
+def asc_cert_sha1(cert_content_b64: str) -> str:
+    der = base64.b64decode(cert_content_b64)
+    with tempfile.NamedTemporaryFile(suffix=".cer") as f:
+        f.write(der)
+        f.flush()
+        out = subprocess.check_output(
+            ["openssl", "x509", "-inform", "DER", "-in", f.name, "-noout", "-fingerprint", "-sha1"],
+            stderr=subprocess.DEVNULL,
+        ).decode()
+    return out.split("=", 1)[1].strip().replace(":", "").upper()
+
+
+def pick_certificate(dist: list) -> str:
+    """Pick ASC cert id that matches CI p12, else preferred ids, else newest IOS_DISTRIBUTION."""
+    env_b64 = os.environ.get("CERTIFICATE_BASE64", "").strip()
+    env_pw = os.environ.get("CERTIFICATE_PASSWORD", "")
+    if env_b64:
+        try:
+            fps = p12_sha1_fingerprints(env_b64, env_pw)
+            print(f"CI p12 SHA1 fingerprints: {sorted(fps)}")
+            for c in dist:
+                content = c.get("attributes", {}).get("certificateContent")
+                if not content:
+                    # need detail fetch
+                    detail = req("GET", f"/certificates/{c['id']}")
+                    content = (detail.get("data") or {}).get("attributes", {}).get("certificateContent")
+                if not content:
+                    continue
+                fp = asc_cert_sha1(content)
+                print(f"  ASC cert {c['id']} sha1={fp} type={c['attributes'].get('certificateType')}")
+                if fp in fps:
+                    print(f"MATCHED CI p12 -> {c['id']}")
+                    return c["id"]
+        except Exception as e:
+            print(f"WARN: p12 match failed: {e}")
+
+    by_id = {c["id"]: c for c in dist}
+    for pref in PREFERRED_CERT_IDS:
+        if pref in by_id:
+            print(f"Using preferred cert {pref}")
+            return pref
+
+    ios = [c for c in dist if c.get("attributes", {}).get("certificateType") == "IOS_DISTRIBUTION"]
+    pool = ios or dist
+    pool.sort(key=lambda c: c["attributes"].get("expirationDate") or "", reverse=True)
+    print(f"Fallback newest cert {pool[0]['id']}")
+    return pool[0]["id"]
+
+
 def main() -> int:
     report = []
 
@@ -106,24 +203,19 @@ def main() -> int:
     if not dist:
         log("FATAL: no distribution certificate")
         return 1
-    # Prefer non-expired; pick latest expiration
-    dist.sort(key=lambda c: c["attributes"].get("expirationDate") or "", reverse=True)
-    cert_id = dist[0]["id"]
+
+    cert_id = pick_certificate(dist)
     log(f"using certificate {cert_id}")
 
     profiles = get_all("/profiles")
-    autumn_profiles = [
-        p
-        for p in profiles
-        if p.get("attributes", {}).get("name") == PROFILE_NAME
-        or (
-            p.get("attributes", {}).get("uuid") == "d5e965c9-84bd-4151-9157-785629bc3d1f"
-        )
-    ]
-    # Also match by bundle via detail later
+    autumn_profiles = []
     for p in profiles:
         name = p.get("attributes", {}).get("name", "")
-        if "Autumn" in name and p not in autumn_profiles:
+        uuid = p.get("attributes", {}).get("uuid", "")
+        if name == PROFILE_NAME or "Autumn" in name or uuid in {
+            "d5e965c9-84bd-4151-9157-785629bc3d1f",
+            "7a9bf1b8-b72b-48eb-af86-0260d1761651",
+        }:
             autumn_profiles.append(p)
 
     log(f"existing Autumn-ish profiles: {len(autumn_profiles)}")
@@ -131,10 +223,12 @@ def main() -> int:
         a = p["attributes"]
         log(f"- {a.get('name')} id={p['id']} uuid={a.get('uuid')} state={a.get('profileState')} type={a.get('profileType')}")
 
-    # Delete INVALID AutumnGitHubFlow (name conflict on create)
     for p in list(autumn_profiles):
         a = p["attributes"]
-        if a.get("name") == PROFILE_NAME or a.get("uuid") == "d5e965c9-84bd-4151-9157-785629bc3d1f":
+        if a.get("name") == PROFILE_NAME or a.get("uuid") in {
+            "d5e965c9-84bd-4151-9157-785629bc3d1f",
+            "7a9bf1b8-b72b-48eb-af86-0260d1761651",
+        }:
             log(f"DELETE profile {p['id']} ({a.get('name')} state={a.get('profileState')})")
             req("DELETE", f"/profiles/{p['id']}")
             log("deleted")
@@ -168,7 +262,6 @@ def main() -> int:
     has_aps = "aps-environment" in xml
     log(f"HAS applesignin={has_siwa} aps={has_aps} ubiquity={has_ubi}")
 
-    # Write outputs
     (OUT_DIR / "profile.mobileprovision").write_bytes(raw)
     (OUT_DIR / "PROVISIONING_PROFILE_BASE64.txt").write_text(base64.b64encode(raw).decode())
     (OUT_DIR / "uuid.txt").write_text(uuid + "\n")
