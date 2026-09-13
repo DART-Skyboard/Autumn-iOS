@@ -1,0 +1,67 @@
+name: Fetch TestFlight Feedback
+on:
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - name: pip
+        run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - name: List TF feedback
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: NQXQ595W59
+          ASC_KEY_PATH: /home/runner/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+        run: |
+          python3 << 'PY'
+          import os, time, json, jwt, requests
+          from pathlib import Path
+          KEY_ID=os.environ["ASC_KEY_ID"]; ISSUER=os.environ["ASC_ISSUER_ID"]
+          key=Path(os.environ["ASC_KEY_PATH"]).read_text()
+          now=int(time.time())
+          token=jwt.encode({"iss":ISSUER,"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"}, key, algorithm="ES256", headers={"alg":"ES256","kid":KEY_ID,"typ":"JWT"})
+          H={"Authorization":f"Bearer {token}","Content-Type":"application/json"}
+          API="https://api.appstoreconnect.apple.com/v1"
+          def get(path, **params):
+            r=requests.get(API+path if path.startswith("/") else path, headers=H, params=params or None, timeout=90)
+            print(path, r.status_code)
+            if r.status_code>=400: print(r.text[:4000]); return None
+            return r.json() if r.content else None
+          apps=get("/apps", **{"filter[bundleId]":"com.dartmeadow.autumn"})
+          app_id=(apps or {}).get("data",[{}])[0].get("id")
+          print("APP", app_id)
+          if not app_id: raise SystemExit(1)
+          # Probe known / likely feedback endpoints
+          for path in [
+            f"/apps/{app_id}/betaFeedbacks",
+            f"/apps/{app_id}/customerReviews",
+            "/betaFeedbacks",
+            "/betaFeedbackCrashSubmissions",
+            f"/apps/{app_id}/betaFeedbackCrashSubmissions",
+            "/betaTesterFeedbacks",
+          ]:
+            j=get(path, **{"limit":50})
+            if not j: continue
+            print("KEYS", list(j.keys()))
+            data=j.get("data") or []
+            print("COUNT", len(data))
+            for item in data[:15]:
+              attrs=item.get("attributes") or {}
+              print(json.dumps({"id":item.get("id"),"type":item.get("type"),"attrs":{k:attrs.get(k) for k in list(attrs)[:20]}}, default=str)[:2000])
+            # included screenshots
+            for inc in (j.get("included") or [])[:10]:
+              print("INC", inc.get("type"), (inc.get("attributes") or {}) )
+          # builds for build 86
+          builds=get(f"/apps/{app_id}/builds", **{"limit":10, "sort":"-uploadedDate"})
+          for b in (builds or {}).get("data") or []:
+            a=b.get("attributes") or {}
+            print("BUILD", b.get("id"), a.get("version"), a.get("uploadedDate"), a.get("processingState"))
+          PY
