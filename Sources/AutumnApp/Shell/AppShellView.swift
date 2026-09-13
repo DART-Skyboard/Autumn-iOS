@@ -49,6 +49,8 @@ public struct AppShellView: View {
                 if appNav.showMantis { studioWrap { MantisNavigationView() } }
                 if appNav.showRadar { MantisRadarView() }
                 if let studio = appNav.studio { StudioHostView(kind: studio) }
+                if appNav.showMathSolver { MathSolverOverlay() }
+                if appNav.showLatexCanvas { LatexCanvasOverlay() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -66,6 +68,14 @@ public struct AppShellView: View {
         .animation(.easeInOut(duration: 0.25), value: appNav.rightTab)
         .animation(.easeInOut(duration: 0.2), value: appNav.showHUDTools)
         .animation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.35), value: appNav.showAshCanvas)
+        .onReceive(NotificationCenter.default.publisher(for: .autumnLatexCanvas)) { note in
+            if let seed = note.object as? String { appNav.latexSeed = seed }
+            appNav.showLatexCanvas = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .autumnMathSolver)) { note in
+            if let seed = note.object as? String { appNav.mathSeed = seed }
+            appNav.showMathSolver = true
+        }
         .onAppear { circuit.start() }
         .onChange(of: circuit.live) { _ in
             if !circuit.allows(authVM) { appNav.showAdmin = false }
@@ -398,6 +408,10 @@ public final class AppNavigation: ObservableObject {
     @Published public var showMantis = false
     @Published public var showRadar = false
     @Published public var showAshCanvas = false
+    @Published public var showMathSolver = false
+    @Published public var showLatexCanvas = false
+    @Published public var latexSeed = ""
+    @Published public var mathSeed = ""
     @Published public var ashApplied = false
     @Published public var ashStatusLabel = "NEURAL INFLUENCE"
     @Published public var studio: StudioKind? = nil
@@ -406,7 +420,7 @@ public final class AppNavigation: ObservableObject {
     public enum RightTab { case none, mist, star, shard, sys }
     public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", msg = "MESSAGES" }
     public enum StudioKind: String, Identifiable {
-        case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc
+        case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc, mathSolver, latexCanvas
         public var id: String { rawValue }
         public var title: String {
             switch self {
@@ -421,6 +435,8 @@ public final class AppNavigation: ObservableObject {
             case .calc: return "CALC"
             case .emoMap: return "EMO MAP"
             case .alc: return "ALC · AFTERLIFE CROSSING"
+            case .mathSolver: return "MATH SOLVER"
+            case .latexCanvas: return "LATEX CANVAS"
             }
         }
     }

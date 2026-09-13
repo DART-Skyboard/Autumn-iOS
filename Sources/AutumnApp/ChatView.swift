@@ -195,6 +195,7 @@ struct ThinkingIndicator: View {
 struct InputBar: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var appNav: AppNavigation
     @FocusState var inputFocused: Bool
 
     @State private var showImporter = false
@@ -224,6 +225,16 @@ struct InputBar: View {
                     .background(themeVM.current.surface)
                     .cornerRadius(18)
             }
+
+            Button { appNav.showMathSolver = true } label: {
+                Text("fx")
+                    .font(.system(size: 13, weight: .bold, design: .serif)).italic()
+                    .foregroundColor(themeVM.current.accent)
+                    .frame(width: 36, height: 36)
+                    .background(themeVM.current.surface)
+                    .cornerRadius(18)
+            }
+            .accessibilityLabel("Math Solver")
 
             TextField("Ask Autumn...", text: $chatVM.inputText, axis: .vertical)
                 .lineLimit(1...5)

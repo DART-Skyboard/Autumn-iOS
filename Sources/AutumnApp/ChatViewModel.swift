@@ -93,7 +93,12 @@ public final class ChatViewModel: ObservableObject {
         let isSync = lc.range(of: #"\b(backup|back up|sync memory|sync memories|sync all|sync everything|sync my memory|sync the memory|memory sync|commit memory|archive memory|save memory|save data|save all|save to github|sync to github|force save|push memory|push to github)\b"#, options: .regularExpression) != nil
         if isSync {
             isThinking = true
-            let save = await AutumnMemorySync.saveAllNow(username: memoryOwner, sessionUID: sessionSID, messages: messages)
+            let save = await AutumnMemorySync.saveAllNow(
+                username: memoryOwner,
+                sessionUID: sessionSID,
+                messages: messages,
+                mathJSON: Self.mathSnapshotJSON()
+            )
             switch save {
             case .success(let msg):
                 messages.append(ChatMessage(role: .assistant, content: msg))
@@ -103,6 +108,13 @@ public final class ChatViewModel: ObservableObject {
             isThinking = false
             sentienceState = .idle
             return
+        }
+
+        if MathIntent.wantsLatexCanvas(text) {
+            let seed = MathIntent.seed(for: text)
+            NotificationCenter.default.post(name: .autumnLatexCanvas, object: seed)
+        } else if MathIntent.wantsMathSolver(text) {
+            NotificationCenter.default.post(name: .autumnMathSolver, object: text)
         }
 
         isThinking = true
@@ -247,6 +259,16 @@ extension ChatViewModel {
     }
 }
 
+extension ChatViewModel {
+    static func mathSnapshotJSON() -> String? {
+        let snap = MathWorkspaceHolder.current.snapshot()
+        guard let data = try? JSONEncoder().encode(snap) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+}
+
 extension Notification.Name {
     static let autumnAshStar = Notification.Name("autumnAshStar")
+    static let autumnLatexCanvas = Notification.Name("autumnLatexCanvas")
+    static let autumnMathSolver = Notification.Name("autumnMathSolver")
 }

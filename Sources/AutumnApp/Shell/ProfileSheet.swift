@@ -182,7 +182,8 @@ public struct ProfileSheet: View {
         let result = await AutumnMemorySync.saveAllNow(
             username: authVM.githubUsername,
             sessionUID: authVM.sessionUID,
-            messages: chatVM.messages
+            messages: chatVM.messages,
+            mathJSON: ChatViewModel.mathSnapshotJSON()
         )
         switch result {
         case .success(let msg):

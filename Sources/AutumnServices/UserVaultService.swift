@@ -69,7 +69,7 @@ public actor UserVaultService {
     private func createAllSubfolders(at root: URL) {
         let fm = FileManager.default
         let folders = [
-            "journal", "memory", "projects", "exports", "ash-shard",
+            "journal", "memory", "projects", "exports", "ash-shard", "math",
             "ArcLake", "ArcLake/models", "ArcLake/sessions", "ArcLake/exports"
         ]
         for sub in folders {
@@ -99,6 +99,18 @@ public actor UserVaultService {
         await write(folder: .memory, filename: "chunk_001.json", content: json, githubUsername: username)
     }
 
+    public func saveMathSnapshot(username: String, json: String) async {
+        await write(folder: .math, filename: "session.json", content: json, githubUsername: username)
+        let note = """
+        {
+          "selfOptimize": true,
+          "source": "ios-math",
+          "saved": "\(ISO8601DateFormatter().string(from: Date()))"
+        }
+        """
+        await write(folder: .math, filename: "notes.json", content: note, githubUsername: username)
+    }
+
     private func setupGitHubVault(username: String) async {
         let repoName = Self.repoName(for: username)
         do {
@@ -112,6 +124,7 @@ public actor UserVaultService {
                     "journal/.gitkeep", "memory/.gitkeep",
                     "projects/.gitkeep", "exports/.gitkeep",
                     "ash-shard/.gitkeep",
+                    "math/.gitkeep",
                     "ash-memory/README.md",
                     "ArcLake/models/.gitkeep",
                     "ArcLake/sessions/.gitkeep",
@@ -220,6 +233,7 @@ public enum VaultFolder: String, CaseIterable {
     case projects   = "projects"
     case exports    = "exports"
     case shard      = "ash-shard"
+    case math       = "math"
     // ArcLake folders
     case arcModels  = "ArcLake/models"
     case arcSessions = "ArcLake/sessions"
@@ -234,6 +248,7 @@ public enum VaultFolder: String, CaseIterable {
         case .projects:    return "Projects"
         case .exports:     return "Exports"
         case .shard:       return "Ash Shard"
+        case .math:        return "Math"
         case .arcModels:   return "ArcLake Models"
         case .arcSessions: return "ArcLake Sessions"
         case .arcExports:  return "ArcLake Exports"
@@ -265,17 +280,17 @@ public enum AutumnMemorySync {
     /// Legacy entry — returns status string for UI toasts.
     @MainActor
     @discardableResult
-    public static func saveNow(username: String, sessionUID: String, messages: [ChatMessage] = []) async -> Result<String, Error> {
-        await saveAllNow(username: username, sessionUID: sessionUID, messages: messages)
+    public static func saveNow(username: String, sessionUID: String, messages: [ChatMessage] = [], mathJSON: String? = nil) async -> Result<String, Error> {
+        await saveAllNow(username: username, sessionUID: sessionUID, messages: messages, mathJSON: mathJSON)
     }
 
     /// One-shot Save Data pipeline (match web intent):
-    /// 1) User vault/memory snapshot → Autumn-Ash-{username}
+    /// 1) User vault/memory snapshot → Autumn-Ash-{username} (includes math session)
     /// 2) Backup Autumn LEATR / grammar-study / optimize notes (local vault + GAS ashwrite best-effort)
     /// 3) Analyze recent chat sentences for self-optimizations (no admin required)
     @MainActor
     @discardableResult
-    public static func saveAllNow(username: String, sessionUID: String, messages: [ChatMessage] = []) async -> Result<String, Error> {
+    public static func saveAllNow(username: String, sessionUID: String, messages: [ChatMessage] = [], mathJSON: String? = nil) async -> Result<String, Error> {
         let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !user.isEmpty,
               user.lowercased() != "guest",
@@ -286,20 +301,31 @@ public enum AutumnMemorySync {
 
         await UserVaultService.shared.setup(githubUsername: user)
 
+        let mathPayload: String? = mathJSON ?? {
+            let snap = MathWorkspaceHolder.current.snapshot()
+            guard let data = try? JSONEncoder().encode(snap) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }()
+
         // ── 1) User memory snapshot (web `_autosave` / `_ghAutosaveNow`) ──
         let publicMsgs = messages.filter { !$0.isInternal }.suffix(200)
-        let payload: [String: Any] = [
-            "version": "2.1",
+        var payload: [String: Any] = [
+            "version": "2.2",
             "username": user,
             "saved": ISO8601DateFormatter().string(from: Date()),
             "platform": "ios",
             "manual_save": true,
             "sid": sessionUID,
+            "hasMath": mathPayload != nil,
             "sessions": [[
                 "id": sessionUID,
                 "messages": publicMsgs.map { ["role": $0.role.rawValue, "content": $0.content] as [String: String] }
             ]]
         ]
+        if let mathPayload, let mathData = mathPayload.data(using: .utf8),
+           let mathObj = try? JSONSerialization.jsonObject(with: mathData) {
+            payload["math"] = mathObj
+        }
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else {
@@ -309,19 +335,26 @@ public enum AutumnMemorySync {
         guard vaultOK else {
             return .failure(SaveError.vaultWriteFailed)
         }
+        if let mathPayload {
+            await UserVaultService.shared.saveMathSnapshot(username: user, json: mathPayload)
+        }
 
         // ── 3) Self-optimize from recent user sentences (before packing backup) ──
         let userTexts = messages
             .filter { !$0.isInternal && $0.role == .user }
             .map(\.content)
-        let optimizeCount = await GrammarStudy.shared.optimizeFromSentences(userTexts)
+        var optimizeCount = await GrammarStudy.shared.optimizeFromSentences(userTexts)
+        let mathNotes = MathWorkspaceHolder.current.notes.map(\.prompt)
+        if !mathNotes.isEmpty {
+            optimizeCount += await GrammarStudy.shared.optimizeFromSentences(mathNotes)
+        }
 
         // ── 2) Autumn LEATR / grammar-study / optimize backup ──
         let study = await GrammarStudy.shared.packedPayload()
         let optimize = await GrammarStudy.shared.packedOptimizePayload()
         let stamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
-        let autumnBackup: [String: Any] = [
+        var autumnBackup: [String: Any] = [
             "version": "1.0",
             "kind": "autumn_leatr_backup",
             "saved": ISO8601DateFormatter().string(from: Date()),
@@ -331,11 +364,15 @@ public enum AutumnMemorySync {
             "grammarStudy": study,
             "optimize": optimize,
             "selfmodel": [
-                "notes": "iOS Save Data backup of Autumn LEATR/grammar-study state.",
+                "notes": "iOS Save Data backup of Autumn LEATR/grammar-study/math state.",
                 "optimizeCount": optimizeCount,
                 "updated": ISO8601DateFormatter().string(from: Date())
             ] as [String: Any]
         ]
+        if let mathPayload, let mathData = mathPayload.data(using: .utf8),
+           let mathObj = try? JSONSerialization.jsonObject(with: mathData) {
+            autumnBackup["math"] = mathObj
+        }
         if JSONSerialization.isValidJSONObject(autumnBackup),
            let bakData = try? JSONSerialization.data(withJSONObject: autumnBackup, options: [.sortedKeys]),
            let bakJSON = String(data: bakData, encoding: .utf8) {
@@ -376,13 +413,15 @@ public enum AutumnMemorySync {
                 "platform": "ios",
                 "updated": ISO8601DateFormatter().string(from: Date()),
                 "optimizeCount": optimizeCount,
-                "sid": sessionUID
+                "sid": sessionUID,
+                "hasMath": mathPayload != nil
             ] as [String: Any],
             message: "sentient: ios selfmodel save-data"
         )
         if selfOK { ashBits.append("selfmodel") }
 
         var parts = ["Data saved"]
+        if mathPayload != nil { parts.append("math snapshot") }
         if optimizeCount > 0 {
             parts.append("\(optimizeCount) self-optimize note\(optimizeCount == 1 ? "" : "s")")
         }

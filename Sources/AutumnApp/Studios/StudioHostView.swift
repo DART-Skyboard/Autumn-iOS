@@ -12,6 +12,16 @@ struct StudioHostView: View {
     var body: some View {
         if kind == .alc {
             ALCStudioView()
+        } else if kind == .mathSolver {
+            Color.clear.onAppear {
+                appNav.studio = nil
+                appNav.showMathSolver = true
+            }
+        } else if kind == .latexCanvas {
+            Color.clear.onAppear {
+                appNav.studio = nil
+                appNav.showLatexCanvas = true
+            }
         } else {
         ZStack(alignment: .topTrailing) {
             themeVM.chrome.base.ignoresSafeArea()
@@ -41,6 +51,8 @@ struct StudioHostView: View {
                     case .calc: CalcPanel()
                     case .emoMap: EmoMapPanel()
                     case .alc: ALCStudioView()
+                    case .mathSolver: MathSolverOverlay()
+                    case .latexCanvas: LatexCanvasOverlay()
                     }
                 }
             }
@@ -63,6 +75,8 @@ struct HelpStudioView: View {
                 help("SYS", "Right rail. System broadcast. dartsolarpunk can compose; writes go through GAS ashwrite.")
                 help("MANTIS / RADAR", "HUD tools. Flight sim (mn.html) and radar (mr.html) native views.")
                 help("ARCLAKE", "HUD tools. Chemistry studio first pass — not a standalone App Store app.")
+                help("MATH SOLVER", "fx on Ask Autumn, or TOOLS → MATH SOLVER. Assign special operator / physics field / math op per variable. Multi-prompt batch uses BRPN Foundation → Reflex → Performance.")
+                help("LATEX CANVAS", "Ask “show me an example of advanced LaTeX” to auto-open. Export TeX, MathML, transparent PNG, CSV, ODT.")
                 help("ADMIN", "dartsolarpunk only AND web leatr.xyz admin circuit live (admin/circuit.json within 90s). DATA / ASH / MESSAGES mailbox.")
             }.padding(16)
         }

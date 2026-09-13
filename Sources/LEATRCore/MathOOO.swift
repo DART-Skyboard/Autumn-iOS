@@ -2,70 +2,80 @@ import Foundation
 
 /// Builtin math in LEATR 25-order OOO (not a web lookup).
 /// Order 8 Parentheses/Geometry first, then 9 exponents, 10-11 * /, 12-13 + -.
-/// Port of autumn-grammar-engine.js _evalMathSpeak / math parser intent.
+/// Extended: variables, identities, glossary, BRPN 3-pass batch, symbols.
 public enum MathOOO {
 
     public static func isMathAsk(_ raw: String) -> Bool {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if s.isEmpty { return false }
-        if s.range(of: #"^\s*[-+]?\d"#, options: .regularExpression) != nil,
-           s.range(of: #"[+\-*/^x/()]|plus|minus|times|divided"#, options: .regularExpression) != nil {
-            return true
+        if s.range(of: #"\b(ash\s*star|ashstar|maze studio|how do you feel|how are you)\b"#, options: .regularExpression) != nil {
+            return false
         }
-        let verbs = ["what is", "what's", "calculate", "compute", "solve", "eval"]
-        if verbs.contains(where: { s.contains($0) }) &&
-            s.range(of: #"[0-9+\-*/^()]"#, options: .regularExpression) != nil {
+        if AlgebraIdentities.match(s) != nil { return true }
+        if s.range(of: #"\b(cube|square)\s+roots?\b"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"\broots?\s+of\b"#, options: .regularExpression) != nil && s.range(of: #"\d"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"\b(sqrt|cbrt|nthroot|sin|cos|tan|log|ln|gamma|zeta)\b"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"[ΔδΓγζπθλαβ]"#, options: .regularExpression) != nil { return true }
+        let hasDigit = s.range(of: #"\d"#, options: .regularExpression) != nil
+        let hasWordInt = GrammarIntegers.words.keys.contains(where: { s.range(of: "\\b\($0)\\b", options: .regularExpression) != nil })
+        let hasOp = s.range(of: #"[+\-*/x×÷^=()]"#, options: .regularExpression) != nil
+            || s.range(of: #"\b(plus|minus|times|multipl|divid|squared|cubed|to the power|equals)\b"#, options: .regularExpression) != nil
+        if (hasDigit || hasWordInt) && hasOp { return true }
+        let verbs = ["what is", "what's", "calculate", "compute", "solve", "eval", "expand"]
+        if verbs.contains(where: { s.contains($0) }) && (hasDigit || hasOp || hasWordInt) {
             return true
         }
         return s.range(of: #"^\s*[\d.(].*[+\-*/^]"#, options: .regularExpression) != nil
     }
 
+    /// Grammar-integer talk without operators is language, not a calculation.
+    public static func isGrammarIntegerTalk(_ raw: String) -> Bool {
+        let s = raw.lowercased()
+        let hasWord = GrammarIntegers.words.keys.contains(where: {
+            s.range(of: "\\b\($0)\\b", options: .regularExpression) != nil
+        })
+        guard hasWord else { return false }
+        return !isMathAsk(raw)
+    }
+
     public static func evalSpeak(_ raw: String) -> String? {
+        var ws = MathWorkspaceHolder.current
         let chunks = raw
             .split(whereSeparator: { $0 == "\n" || $0 == ";" })
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         let parts: [String]
         if chunks.count > 1 {
-            let mathy = chunks.filter { isMathAsk($0) || $0.range(of: #"[0-9(]"#, options: .regularExpression) != nil }
+            let mathy = chunks.filter { isMathAsk($0) || $0.range(of: #"[0-9(]"#, options: .regularExpression) != nil || $0.contains("=") }
             parts = mathy.isEmpty ? chunks : mathy
         } else {
             parts = chunks
         }
-        var lines: [String] = []
-        for part in parts {
-            guard let expr = nlToExpr(part) else { continue }
-            guard let val = evaluate(expr) else { continue }
-            lines.append(spoken(expr: expr, result: format(val)))
-        }
-        return lines.isEmpty ? nil : lines.joined(separator: " ")
+        let result = BRPNMathBatch.process(parts, workspace: &ws)
+        MathWorkspaceHolder.current = ws
+        let spoken = result.lines.isEmpty ? result.report : result.lines.joined(separator: "\n\n")
+        return spoken.isEmpty ? nil : spoken
     }
 
-    static func nlToExpr(_ raw: String) -> String? {
-        var s = raw.lowercased()
-        let replacements = [
-            "what is": "", "what's": "", "calculate": "", "compute": "",
-            "solve": "", "equals": "", "equal to": "",
-            "plus": "+", "minus": "-", "times": "*",
-            "multiplied by": "*", "divided by": "/", "over": "/",
-            "to the power of": "^", "squared": "^2", "cubed": "^3"
-        ]
-        for (a, b) in replacements { s = s.replacingOccurrences(of: a, with: b) }
-        s = s.filter { $0.isNumber || "+-*/^().".contains($0) || $0.isWhitespace }
-        s = s.replacingOccurrences(of: " ", with: "")
-        guard s.contains(where: { $0.isNumber }) else { return nil }
-        guard s.contains(where: { "+-*/^".contains($0) }) || s.contains("(") else { return nil }
-        return s.isEmpty ? nil : s
-    }
+    static func nlToExpr(_ raw: String) -> String? { MathNL.toExpr(raw) }
 
     public static func evaluate(_ expr: String) -> Double? {
-        var p = Parser(expr)
-        guard let v = p.parseExpr() else { return nil }
-        p.skip()
-        return p.i >= p.s.count ? v : nil
+        guard let node = MathParser.parseNode(expr) else {
+            // Fallback to legacy numeric-only parser
+            var p = LegacyParser(expr)
+            guard let v = p.parseExpr() else { return nil }
+            p.skip()
+            return p.i >= p.s.count ? v : nil
+        }
+        return MathEval.value(node, env: MathWorkspaceHolder.current.env)
     }
 
-    private struct Parser {
+    public static func evaluate(_ expr: String, env: [String: Double]) -> Double? {
+        guard let node = MathParser.parseNode(expr) else { return nil }
+        return MathEval.value(node, env: env)
+    }
+
+    private struct LegacyParser {
         let chars: [Character]
         var i = 0
         var s: [Character] { chars }
@@ -150,15 +160,14 @@ public enum MathOOO {
         }
     }
 
-    static func format(_ v: Double) -> String {
-        if v.isNaN || v.isInfinite { return "undefined" }
-        if abs(v - v.rounded()) < 1e-10 { return String(Int(v.rounded())) }
-        var s = String(format: "%.10g", v)
-        if s.hasSuffix(".0") { s = String(s.dropLast(2)) }
-        return s
-    }
+    static func format(_ v: Double) -> String { MathEval.format(v) }
 
     static func spoken(expr: String, result: String) -> String {
         "\(expr) = \(result). Geometry (parentheses) first, then exponents, multiply/divide, add/subtract — Natural Tool math orders, not the web."
     }
+}
+
+/// Process-wide math workspace so chat, solver, and Save Data share one project.
+public enum MathWorkspaceHolder {
+    public static var current = MathWorkspace()
 }

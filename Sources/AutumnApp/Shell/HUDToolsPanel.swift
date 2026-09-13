@@ -32,6 +32,8 @@ struct HUDToolsPanel: View {
                 .tracking(2)
                 .foregroundColor(chrome.accent.opacity(0.45))
             tool("CALC", key: .calc)
+            Button { appNav.showMathSolver = true; appNav.showHUDTools = false } label: { row("MATH SOLVER") }
+            Button { appNav.showLatexCanvas = true; appNav.showHUDTools = false } label: { row("LATEX") }
             tool("ARC EDGE", key: .arcEdge)
             tool("ARCLAKE", key: .arcLake)
             tool("EMO MAP", key: .emoMap)

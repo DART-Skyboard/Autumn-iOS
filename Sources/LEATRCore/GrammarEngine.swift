@@ -56,10 +56,15 @@ public actor GrammarEngine {
         let tokens = reflex.tokens
         let lower = raw.lowercased()
 
-        // 2. Math OOO before compose — geometry first
+        // 2. Glossary / math OOO before compose — geometry first
+        // Grammar integers ("two thoughts") stay language; numeric tokens are math.
         var mathSpeak: String? = nil
-        if MathOOO.isMathAsk(raw) {
+        if MathGlossary.looksLikeDefinitionAsk(raw), let def = MathGlossary.define(raw) {
+            mathSpeak = def
+        } else if MathOOO.isMathAsk(raw) {
             mathSpeak = MathOOO.evalSpeak(raw)
+        } else if MathOOO.isGrammarIntegerTalk(raw) {
+            mathSpeak = nil
         }
 
         // 3. Emotion / buoyancy / tool from lexical + FRP
@@ -160,6 +165,7 @@ public actor GrammarEngine {
         if conjunctions.contains(n) { return "conjunction" }
         if articles.contains(n) { return "determiner" }
         if interrogatives.contains(n) { return "interrogative" }
+        if GrammarIntegers.isWord(n) { return "grammar-integer" }
         if Double(n) != nil { return "number" }
         if let trained = trainedRoles[n] { return trained }
         return "content"
@@ -192,6 +198,10 @@ public actor GrammarEngine {
         }
         if lower.contains("leatr") || lower.contains("core cognition") {
             return "Core Cognition is frozen True. Magnetize open \(CoreCognition.openEq), close \(CoreCognition.closeEq). BRPN hierarchy \(CoreCognition.brpnHierarchy.joined(separator: " → ")). Reflex never loops."
+        }
+        if tokens.contains(where: { $0.role == "grammar-integer" }) && !tokens.contains(where: { $0.role == "number" }) {
+            let words = tokens.filter { $0.role == "grammar-integer" }.map(\.word).joined(separator: ", ")
+            return "Holding written integers (\(words)) as grammar, not math tokens. Ask to calculate or open fx Math Solver if you want the numeric path."
         }
         let content = tokens.filter { $0.role == "content" || $0.role == "noun" || $0.role == "verb" || $0.role == "adjective" }.map { $0.word }
         let topic = content.prefix(6).joined(separator: " ")
