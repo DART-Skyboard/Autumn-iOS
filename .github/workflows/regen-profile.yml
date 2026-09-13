@@ -1,0 +1,80 @@
+name: Regen Autumn Provisioning Profile
+
+on:
+  workflow_dispatch:
+
+jobs:
+  regen:
+    name: ASC regenerate AutumnGitHubFlow
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install App Store Connect API key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          KEY_SIZE=$(wc -c < ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8)
+          echo "API key: $KEY_SIZE bytes"
+          if [ "$KEY_SIZE" -lt 100 ]; then
+            echo "ERROR: APP_STORE_CONNECT_API_KEY_CONTENT empty or too small"
+            exit 1
+          fi
+
+      - name: Install Python deps
+        run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+
+      - name: Regenerate profile via ASC API
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: NQXQ595W59
+          ASC_KEY_PATH: ${{ runner.temp }}/placeholder
+          REGEN_OUT: ${{ runner.temp }}/regen-profile
+        run: |
+          export ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8"
+          export REGEN_OUT="${{ runner.temp }}/regen-profile"
+          python3 scripts/regen_autumn_profile.py
+          echo "--- meta ---"
+          cat "$REGEN_OUT/meta.json"
+          echo "UUID=$(cat "$REGEN_OUT/uuid.txt")" >> "$GITHUB_OUTPUT"
+          echo "uuid=$(cat "$REGEN_OUT/uuid.txt")" >> "$GITHUB_OUTPUT"
+        id: regen
+
+      - name: Update PROVISIONING_PROFILE_BASE64 secret
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          REGEN_OUT: ${{ runner.temp }}/regen-profile
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "WARN: GH_PAT missing — cannot gh secret set; artifact still uploaded"
+            exit 0
+          fi
+          gh secret set PROVISIONING_PROFILE_BASE64 \
+            --repo "${{ github.repository }}" \
+            < "$REGEN_OUT/PROVISIONING_PROFILE_BASE64.txt"
+          echo "Updated PROVISIONING_PROFILE_BASE64"
+          UUID=$(tr -d '\n' < "$REGEN_OUT/uuid.txt")
+          echo "New UUID=$UUID"
+          # Surface for step summary
+          {
+            echo "## Regen result"
+            echo "- New profile UUID: \`$UUID\`"
+            echo "- Secret PROVISIONING_PROFILE_BASE64 updated"
+            echo "- Update project.yml PROVISIONING_PROFILE if UUID changed"
+            cat "$REGEN_OUT/report.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload regen artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: autumn-regen-profile
+          path: ${{ runner.temp }}/regen-profile/
+          if-no-files-found: error
