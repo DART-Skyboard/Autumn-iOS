@@ -57,13 +57,11 @@ public struct WelcomeView: View {
                 // ── Auth buttons ──────────────────────────────────────
                 VStack(spacing: 12) {
 
-                    // ① Sign in with Apple
-                    SignInWithAppleButton(.signIn) { req in
-                        req.requestedScopes = [.fullName, .email]
-                    } onCompletion: { _ in
-                        authVM.signInWithApple()
-                    }
-                    .signInWithAppleButtonStyle(.white)
+                    // ① Sign in with Apple (UIViewRepresentable — Ashtree pattern)
+                    AppleSignInButton(
+                        onRequest: { authVM.prepareAppleRequest($0) },
+                        onCompletion: { authVM.handleAppleCompletion($0) }
+                    )
                     .frame(height: 52)
                     .cornerRadius(12)
 

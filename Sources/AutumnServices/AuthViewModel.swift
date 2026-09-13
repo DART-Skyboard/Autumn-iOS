@@ -1,5 +1,7 @@
 import SwiftUI
 import AuthenticationServices
+import CryptoKit
+import Security
 
 /// AuthViewModel — guest-first like the web app.
 /// GitHub: device flow + ASWebAuthenticationSession using the same OAuth App as leatr.xyz.
@@ -39,6 +41,10 @@ public final class AuthViewModel: NSObject, ObservableObject {
     private let displayNameKey = "autumn_apple_display_name"
     private let oauthTokenKey  = "github_oauth_token"
     private let oauthUserKey   = "github_username"
+
+    private var _currentNonce = ""
+    /// Strongly retain the ProfileSheet-driven ASAuthorizationController.
+    private var appleAuthController: ASAuthorizationController?
 
     public func restoreSession() {
         loadSavedAccounts()
@@ -97,13 +103,34 @@ public final class AuthViewModel: NSObject, ObservableObject {
     }
 
     // MARK: — Apple
+
+    /// Called from AppleSignInButton.onRequest — sets nonce BEFORE performRequests.
+    public func prepareAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        let rawNonce = generateNonce()
+        _currentNonce = rawNonce
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(rawNonce)
+    }
+
+    /// Called from AppleSignInButton.onCompletion (and legacy delegate).
+    public func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            applyAppleAuthorization(authorization)
+        case .failure(let error):
+            applyAppleError(error)
+        }
+    }
+
+    /// ProfileSheet row — create controller, prepare nonce, retain strongly, perform.
     public func signInWithApple() {
         error = nil
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
+        prepareAppleRequest(request)
         let controller = ASAuthorizationController(authorizationRequests: [request])
-        controller.delegate                    = self
+        controller.delegate = self
         controller.presentationContextProvider = self
+        appleAuthController = controller
         controller.performRequests()
     }
 
@@ -307,14 +334,27 @@ extension AuthViewModel:
     public func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .first(where: { $0.activationState == .foregroundActive })?
-            .windows.first(where: { $0.isKeyWindow }) ?? UIWindow()
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow } ?? UIWindow()
     }
 
     public func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
+        appleAuthController = nil
+        handleAppleCompletion(.success(authorization))
+    }
+
+    public func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithError error: Error
+    ) {
+        appleAuthController = nil
+        handleAppleCompletion(.failure(error))
+    }
+
+    fileprivate func applyAppleAuthorization(_ authorization: ASAuthorization) {
         switch authorization.credential {
         case let appleID as ASAuthorizationAppleIDCredential:
             let uid = appleID.user
@@ -344,10 +384,7 @@ extension AuthViewModel:
         }
     }
 
-    public func authorizationController(
-        controller: ASAuthorizationController,
-        didCompleteWithError error: Error
-    ) {
+    fileprivate func applyAppleError(_ error: Error) {
         let asErr = error as? ASAuthorizationError
         switch asErr?.code {
         case .canceled: return
@@ -360,6 +397,28 @@ extension AuthViewModel:
         default:
             self.error = error.localizedDescription
         }
+    }
+
+    fileprivate func generateNonce(length: Int = 32) -> String {
+        let charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._"
+        var result = ""
+        var remaining = length
+        while remaining > 0 {
+            var randoms = [UInt8](repeating: 0, count: 16)
+            _ = SecRandomCopyBytes(kSecRandomDefault, randoms.count, &randoms)
+            for r in randoms {
+                guard remaining > 0 else { break }
+                guard r < charset.count else { continue }
+                let idx = charset.index(charset.startIndex, offsetBy: Int(r))
+                result.append(charset[idx])
+                remaining -= 1
+            }
+        }
+        return result
+    }
+
+    fileprivate func sha256(_ input: String) -> String {
+        SHA256.hash(data: Data(input.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
 
