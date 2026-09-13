@@ -268,7 +268,7 @@ public enum AutumnMemorySync {
         public var errorDescription: String? {
             switch self {
             case .notSignedIn:
-                return "Connect GitHub to save data to Autumn-Ash-{username}."
+                return "Connect GitHub to save data to your Autumn-Ash vault."
             case .invalidPayload:
                 return "Could not build memory snapshot."
             case .vaultWriteFailed:
