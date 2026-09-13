@@ -119,9 +119,8 @@ public struct WelcomeView: View {
                 Spacer().frame(height: 48)
             }
         }
-        .sheet(isPresented: $showGitHubSheet, onDismiss: {
-            if !authVM.githubConnected { authVM.cancelGitHubAuth() }
-        }) {
+        // Keep device-flow poll alive on swipe-dismiss; Cancel/✕ calls cancelGitHubAuth.
+        .sheet(isPresented: $showGitHubSheet) {
             GitHubDeviceFlowSheet()
                 .environmentObject(authVM)
                 .environmentObject(themeVM)

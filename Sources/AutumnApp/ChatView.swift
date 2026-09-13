@@ -207,28 +207,8 @@ struct InputBar: View {
     var body: some View {
         VStack(spacing: 0) {
         PendingAttachmentStrip()
-        if inputFocused {
-            HStack {
-                Spacer()
-                Button {
-                    inputFocused = false
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil, from: nil, for: nil)
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(themeVM.current.accent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(themeVM.current.surface.opacity(0.95))
-                        .cornerRadius(10)
-                }
-                .accessibilityLabel("Hide keyboard")
-                .padding(.trailing, 16)
-                .padding(.bottom, 4)
-            }
-        }
+        // Keyboard collapse lives ONLY on ToolbarItemGroup(placement: .keyboard) —
+        // do not float a chevron chip above Ask Autumn when focused without a real keyboard (TF81).
         HStack(spacing: 8) {
             Button {
                 chatVM.toggleListening()

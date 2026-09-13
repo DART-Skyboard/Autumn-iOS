@@ -64,6 +64,16 @@ public struct AppShellView: View {
             keyboardUp = false
         }
         .animation(.easeInOut(duration: 0.25), value: appNav.showProfile)
+        .onChange(of: appNav.showProfile) { showing in
+            // Profile overlay must be gone before ASAuthorizationController presents —
+            // presenting from inside the overlay yields ASAuthorizationError.unknown.
+            if !showing && appNav.pendingAppleSignIn {
+                appNav.pendingAppleSignIn = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    authVM.performAppleSignInFromRootWindow()
+                }
+            }
+        }
         .animation(.easeInOut(duration: 0.25), value: appNav.showAdmin)
         .animation(.easeInOut(duration: 0.25), value: appNav.rightTab)
         .animation(.easeInOut(duration: 0.2), value: appNav.showHUDTools)
@@ -399,6 +409,8 @@ extension ThemeViewModel {
 @MainActor
 public final class AppNavigation: ObservableObject {
     @Published public var showProfile = false
+    /// Set by Profile before dismiss; AppShell runs SIWA from root after overlay closes.
+    @Published public var pendingAppleSignIn = false
     @Published public var showFeedback = false
     @Published public var showAdmin = false
     @Published public var leftTab: LeftTab = .none

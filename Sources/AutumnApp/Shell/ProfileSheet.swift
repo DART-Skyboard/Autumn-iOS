@@ -81,7 +81,8 @@ public struct ProfileSheet: View {
                     }
                 }
 
-                // Apple ID — same AppleSignInButton path as WelcomeView (not Profile-overlay ASAuthorizationController)
+                // Apple ID — dismiss Profile first, then SIWA from root key window (Ashtree-safe).
+                // In-overlay ASAuthorizationAppleIDButton → ASAuthorizationError.unknown (TF79).
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Apple ID").font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.45))
@@ -92,14 +93,26 @@ public struct ProfileSheet: View {
                     }
                     .padding(.horizontal, 14).padding(.top, 10)
                     if authVM.appleUserId.isEmpty {
-                        AppleSignInButton(
-                            onRequest: { authVM.prepareAppleRequest($0) },
-                            onCompletion: { authVM.handleAppleCompletion($0) }
-                        )
-                        .frame(height: 44)
-                        .cornerRadius(8)
+                        Button {
+                            authVM.error = nil
+                            appNav.pendingAppleSignIn = true
+                            appNav.showProfile = false
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "apple.logo")
+                                    .font(.system(size: 17, weight: .semibold))
+                                Text("Sign in with Apple")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(Color.white)
+                            .cornerRadius(8)
+                        }
                         .padding(.horizontal, 14)
                         .padding(.bottom, 6)
+                        .accessibilityLabel("Sign in with Apple")
                     }
                 }
 
@@ -185,9 +198,9 @@ public struct ProfileSheet: View {
         }
         .onAppear { tint.sample(url: authVM.githubAvatarURL) }
         .onChange(of: authVM.githubAvatarURL) { u in tint.sample(url: u) }
-        .sheet(isPresented: $showGitHubSheet, onDismiss: {
-            if !authVM.githubConnected { authVM.cancelGitHubAuth() }
-        }) {
+        // Do not cancelGitHubAuth on dismiss — Cancel/✕ owns cancel. Keep polling so
+        // closing/reopening the sheet (or Safari) does not burn the user_code.
+        .sheet(isPresented: $showGitHubSheet) {
             GitHubDeviceFlowSheet()
                 .environmentObject(authVM)
                 .environmentObject(themeVM)

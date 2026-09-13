@@ -133,8 +133,15 @@ public final class AuthViewModel: NSObject, ObservableObject {
         }
     }
 
-    /// ProfileSheet row — create controller, prepare nonce, retain strongly, perform.
+    /// Legacy no-op — AppleSignInButton (Welcome) owns the ASAuthorizationController.
+    /// Profile must dismiss its overlay first, then call performAppleSignInFromRootWindow().
     public func signInWithApple() {
+        // Intentionally empty (Ashtree IDEAuthViewModel pattern).
+    }
+
+    /// Present SIWA from the key window AFTER Profile overlay is fully dismissed.
+    /// Nested overlay/sheet presentation is the remaining .unknown failure mode vs Ashtree.
+    public func performAppleSignInFromRootWindow() {
         error = nil
         let request = ASAuthorizationAppleIDProvider().createRequest()
         prepareAppleRequest(request)
