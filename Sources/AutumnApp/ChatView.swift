@@ -4,6 +4,7 @@ import LEATRCore
 import AutumnServices
 import UniformTypeIdentifiers
 import UIKit
+import PhotosUI
 
 public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
@@ -198,7 +199,11 @@ struct InputBar: View {
     @EnvironmentObject var appNav: AppNavigation
     @FocusState var inputFocused: Bool
 
+    @State private var showAttachMenu = false
     @State private var showImporter = false
+    @State private var showPhotosPicker = false
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+
     private var canSend: Bool {
         !chatVM.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !chatVM.pendingAttachments.isEmpty
@@ -220,13 +225,14 @@ struct InputBar: View {
                     .cornerRadius(18)
             }
 
-            Button { showImporter = true } label: {
+            Button { showAttachMenu = true } label: {
                 Image(systemName: "paperclip")
                     .foregroundColor(themeVM.current.accent)
                     .frame(width: 36, height: 36)
                     .background(themeVM.current.surface)
                     .cornerRadius(18)
             }
+            .accessibilityLabel("Attach")
 
             Button { appNav.showMathSolver = true } label: {
                 Text("fx")
@@ -273,9 +279,25 @@ struct InputBar: View {
             Rectangle().frame(height: 1).foregroundColor(themeVM.current.accent.opacity(0.15)),
             alignment: .top
         )
+        .confirmationDialog("Attach", isPresented: $showAttachMenu, titleVisibility: .visible) {
+            Button("Photo Library") { showPhotosPicker = true }
+            Button("Choose Files") { showImporter = true }
+            Button("Cancel", role: .cancel) {}
+        }
+        .photosPicker(
+            isPresented: $showPhotosPicker,
+            selection: $photoPickerItems,
+            maxSelectionCount: 30,
+            matching: .any(of: [.images, .videos]),
+            photoLibrary: .shared()
+        )
+        .onChange(of: photoPickerItems) { items in
+            guard !items.isEmpty else { return }
+            Task { await importPickedPhotos(items) }
+        }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.item],
+            allowedContentTypes: ChatAttachContentTypes.chooseFiles,
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result {
@@ -299,5 +321,112 @@ struct InputBar: View {
                 .accessibilityLabel("Hide keyboard")
             }
         }
+    }
+
+    /// Copy PhotosPicker items into temp files, then reuse importFiles (pending strip + send).
+    private func importPickedPhotos(_ items: [PhotosPickerItem]) async {
+        var urls: [URL] = []
+        for item in items {
+            if let url = await Self.materializePhotoItem(item) {
+                urls.append(url)
+            }
+        }
+        await MainActor.run {
+            if !urls.isEmpty {
+                chatVM.importFiles(from: urls)
+            }
+            photoPickerItems = []
+        }
+    }
+
+    private static func materializePhotoItem(_ item: PhotosPickerItem) async -> URL? {
+        // File copy first (videos); Data fallback for stills / HEIC.
+        if let file = try? await item.loadTransferable(type: AutumnPickedFile.self) {
+            return file.url
+        }
+        guard let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty else {
+            return nil
+        }
+        let ext: String = {
+            if let t = item.supportedContentTypes.first {
+                if let e = t.preferredFilenameExtension { return e }
+                if t.conforms(to: .movie) || t.conforms(to: .video) { return "mp4" }
+                if t.conforms(to: .heic) { return "heic" }
+                if t.conforms(to: .png) { return "png" }
+                if t.conforms(to: .gif) { return "gif" }
+                if t.conforms(to: .webP) { return "webp" }
+            }
+            return "jpg"
+        }()
+        let name = (item.itemIdentifier ?? UUID().uuidString)
+            .replacingOccurrences(of: "/", with: "_")
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("autumn-photo-\(name)-\(UUID().uuidString.prefix(8)).\(ext)")
+        do {
+            try data.write(to: dest, options: .atomic)
+            return dest
+        } catch {
+            return nil
+        }
+    }
+}
+
+/// PhotosPicker → temp URL via FileRepresentation (keeps large videos off Data).
+private struct AutumnPickedFile: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .item) { file in
+            SentTransferredFile(file.url)
+        } importing: { received in
+            let dest = FileManager.default.temporaryDirectory
+                .appendingPathComponent("autumn-pick-\(UUID().uuidString)-\(received.file.lastPathComponent)")
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
+            try FileManager.default.copyItem(at: received.file, to: dest)
+            return Self(url: dest)
+        }
+    }
+}
+
+// MARK: — Broad UTTypes for Choose Files (explicit + catch-all)
+enum ChatAttachContentTypes {
+    static var chooseFiles: [UTType] {
+        var types: [UTType] = [
+            // Images (incl. HEIC/HDR-capable containers)
+            .jpeg, .png, .gif, .webP, .heic, .heif, .tiff, .bmp, .svg, .rawImage, .image,
+            // Video
+            .movie, .mpeg4Movie, .quickTimeMovie, .avi, .video,
+            // 3D
+            .usdz, .threeDContent,
+            // Code / text
+            .plainText, .utf8PlainText, .sourceCode,
+            .swiftSource, .cSource, .cPlusPlusSource, .pythonScript, .javaScript,
+            .html, .json, .xml, .yaml, .shellScript, .assemblyCode,
+            // Docs / catch-all so nothing capable is blocked
+            .pdf, .rtf, .commaSeparatedText, .data, .item,
+        ]
+        // Optional / extension-backed types (nil-safe)
+        let extras: [String] = [
+            "hdr", "exr", "dng", "cr2", "nef", "arw", "orf", "rw2", "raf",
+            "mkv", "webm", "m4v",
+            "glb", "gltf", "obj", "stl", "fbx", "dae", "reality", "usd", "usda", "usdc",
+            "md", "ts", "tsx", "jsx", "rs", "go", "rb", "kt", "java", "css", "sql", "toml", "ini", "php", "m", "mm", "h", "hpp",
+            "step", "stp", "iges", "igs", "dwg", "dxf",
+        ]
+        for ext in extras {
+            if let t = UTType(filenameExtension: ext) { types.append(t) }
+        }
+        if let reality = UTType("com.apple.reality") { types.append(reality) }
+        if let gltf = UTType("model.gltf-binary") ?? UTType(mimeType: "model/gltf-binary") {
+            types.append(gltf)
+        }
+        if let gltfJson = UTType("model.gltf+json") ?? UTType(mimeType: "model/gltf+json") {
+            types.append(gltfJson)
+        }
+        // Deduce hdrImage when the SDK exposes it
+        if let hdr = UTType("public.hdr-image") { types.append(hdr) }
+        return types
     }
 }

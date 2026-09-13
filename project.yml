@@ -91,6 +91,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UIApplicationSupportsIndirectInputEvents: true
+        NSPhotoLibraryUsageDescription: Attach photos and videos from your library to chat with Autumn
         NSMicrophoneUsageDescription: Voice input for AI conversation with Autumn
         NSSpeechRecognitionUsageDescription: Transcribe voice messages for the LEATR pipeline
         NSLocationWhenInUseUsageDescription: Used for Mantis Radar live ADS-B around you and contextual BRPN mapping
@@ -135,7 +136,7 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-        CURRENT_PROJECT_VERSION: "84"
+        CURRENT_PROJECT_VERSION: "85"
         MARKETING_VERSION: "1.0.2"
       configs:
         Debug:

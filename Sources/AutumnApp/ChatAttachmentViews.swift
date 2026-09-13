@@ -47,22 +47,31 @@ struct AttachmentThumb: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Group {
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    VStack(spacing: 2) {
-                        Text(attachment.glyph)
-                            .font(.system(size: size * 0.28))
-                        Text(attachment.badge)
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.85))
-                            .lineLimit(1)
+            ZStack {
+                Group {
+                    if let image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        VStack(spacing: 2) {
+                            Image(systemName: attachment.systemIcon)
+                                .font(.system(size: size * 0.32, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.92))
+                            Text(attachment.badge)
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.85))
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.white.opacity(0.08))
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.white.opacity(0.08))
+                }
+                if attachment.kind == .video, image != nil {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: size * 0.36))
+                        .foregroundColor(.white.opacity(0.95))
+                        .shadow(radius: 2)
                 }
             }
             .frame(width: size, height: size)
@@ -80,6 +89,7 @@ struct AttachmentThumb: View {
             }
         }
         .onAppear { loadPreview() }
+        .accessibilityLabel("\(attachment.fileName) \(attachment.badge)")
     }
 
     private func loadPreview() {

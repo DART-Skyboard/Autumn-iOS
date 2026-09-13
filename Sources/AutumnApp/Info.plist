@@ -50,6 +50,8 @@
     <true/>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Attach photos and videos from your library to chat with Autumn</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Voice input for AI conversation with Autumn</string>
     <key>NSSpeechRecognitionUsageDescription</key>

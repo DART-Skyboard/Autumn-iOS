@@ -45,14 +45,29 @@ public struct ChatAttachment: Identifiable, Sendable, Codable, Equatable {
 
     public static func kind(for ext: String) -> Kind {
         let e = ext.lowercased()
-        if ["png","jpg","jpeg","gif","webp","bmp","heic","heif","tif","tiff","svg"].contains(e) { return .image }
+        if ["png","jpg","jpeg","gif","webp","bmp","heic","heif","tif","tiff","svg",
+            "hdr","exr","dng","cr2","nef","arw","orf","rw2","raf","raw"].contains(e) { return .image }
         if ["mp4","mov","m4v","webm","avi","mkv"].contains(e) { return .video }
         if ["mp3","wav","ogg","flac","m4a","aac","opus","aiff","caf"].contains(e) { return .audio }
-        if ["glb","gltf","obj","stl","fbx","dae","usdz","usda","usdc","ply","3ds","blend"].contains(e) { return .model3d }
+        if ["glb","gltf","obj","stl","fbx","dae","usdz","usda","usdc","usd","ply","3ds","blend","reality","scn"].contains(e) { return .model3d }
         if ["step","stp","iges","igs","sat","dwg","dxf","3dm","sldprt","sldasm","ipt","iam","prt","catpart","catproduct","x_t","x_b"].contains(e) { return .cad }
-        if ["html","htm","js","ts","json","css","xml","yaml","yml","py","java","c","cpp","h","hpp","rs","rb","go","php","sh","swift","sql","toml","ini","md","kt"].contains(e) { return .script }
+        if ["html","htm","js","jsx","ts","tsx","json","css","xml","yaml","yml","py","java","c","cpp","cc","cxx","h","hpp","rs","rb","go","php","sh","bash","zsh","swift","sql","toml","ini","md","kt","m","mm","asm","s"].contains(e) { return .script }
         if ["pdf","txt","doc","docx","rtf","odt","csv","log","pages"].contains(e) { return .document }
         return .other
+    }
+
+    /// SF Symbol for pending strip / bubble when no image/video thumb.
+    public var systemIcon: String {
+        switch kind {
+        case .image: return "photo"
+        case .video: return "video.fill"
+        case .audio: return "waveform"
+        case .model3d: return "cube"
+        case .cad: return "square.stack.3d.up"
+        case .script: return "chevron.left.forwardslash.chevron.right"
+        case .document: return "doc.text"
+        case .other: return "paperclip"
+        }
     }
 
     public var badge: String {
