@@ -13,9 +13,8 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
-      - name: pip
-        run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
-      - name: List TF feedback
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - name: List TF screenshot feedback
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           ASC_KEY_ID: NQXQ595W59
@@ -28,40 +27,43 @@ jobs:
           key=Path(os.environ["ASC_KEY_PATH"]).read_text()
           now=int(time.time())
           token=jwt.encode({"iss":ISSUER,"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"}, key, algorithm="ES256", headers={"alg":"ES256","kid":KEY_ID,"typ":"JWT"})
-          H={"Authorization":f"Bearer {token}","Content-Type":"application/json"}
+          H={"Authorization":f"Bearer {token}"}
           API="https://api.appstoreconnect.apple.com/v1"
-          def get(path, **params):
-            r=requests.get(API+path if path.startswith("/") else path, headers=H, params=params or None, timeout=90)
+          def get(path, params=None):
+            r=requests.get(API+path, headers=H, params=params, timeout=90)
             print(path, r.status_code)
-            if r.status_code>=400: print(r.text[:4000]); return None
+            if r.status_code>=400:
+              print(r.text[:3000]); return None
             return r.json() if r.content else None
-          apps=get("/apps", **{"filter[bundleId]":"com.dartmeadow.autumn"})
+          apps=get("/apps", {"filter[bundleId]":"com.dartmeadow.autumn"})
           app_id=(apps or {}).get("data",[{}])[0].get("id")
           print("APP", app_id)
-          if not app_id: raise SystemExit(1)
-          # Probe known / likely feedback endpoints
-          for path in [
-            f"/apps/{app_id}/betaFeedbacks",
-            f"/apps/{app_id}/customerReviews",
-            "/betaFeedbacks",
-            "/betaFeedbackCrashSubmissions",
-            f"/apps/{app_id}/betaFeedbackCrashSubmissions",
-            "/betaTesterFeedbacks",
-          ]:
-            j=get(path, **{"limit":50})
-            if not j: continue
-            print("KEYS", list(j.keys()))
-            data=j.get("data") or []
-            print("COUNT", len(data))
-            for item in data[:15]:
-              attrs=item.get("attributes") or {}
-              print(json.dumps({"id":item.get("id"),"type":item.get("type"),"attrs":{k:attrs.get(k) for k in list(attrs)[:20]}}, default=str)[:2000])
-            # included screenshots
-            for inc in (j.get("included") or [])[:10]:
-              print("INC", inc.get("type"), (inc.get("attributes") or {}) )
-          # builds for build 86
-          builds=get(f"/apps/{app_id}/builds", **{"limit":10, "sort":"-uploadedDate"})
-          for b in (builds or {}).get("data") or []:
-            a=b.get("attributes") or {}
-            print("BUILD", b.get("id"), a.get("version"), a.get("uploadedDate"), a.get("processingState"))
+          fields="createdDate,comment,email,deviceModel,osVersion,locale,batteryPercentage,buildBundleId,screenshots,build,tester"
+          j=get(f"/apps/{app_id}/betaFeedbackScreenshotSubmissions", {
+            "limit":25,
+            "sort":"-createdDate",
+            f"fields[betaFeedbackScreenshotSubmissions]":fields,
+            "include":"build,tester",
+            "fields[builds]":"version,uploadedDate,processingState",
+          })
+          if not j: raise SystemExit(1)
+          print("COUNT", len(j.get("data") or []))
+          builds={i["id"]:i for i in (j.get("included") or []) if i.get("type")=="builds"}
+          for item in (j.get("data") or [])[:20]:
+            a=item.get("attributes") or {}
+            bid=(item.get("relationships") or {}).get("build",{}).get("data",{}) or {}
+            bid=bid.get("id") if isinstance(bid,dict) else None
+            bv=(builds.get(bid) or {}).get("attributes",{})
+            shots=a.get("screenshots") or []
+            print(json.dumps({
+              "id":item.get("id"),
+              "created":a.get("createdDate"),
+              "comment":a.get("comment"),
+              "email":a.get("email"),
+              "device":a.get("deviceModel"),
+              "os":a.get("osVersion"),
+              "buildVersion":bv.get("version"),
+              "screenshotCount":len(shots) if isinstance(shots,list) else shots,
+              "screenshots":shots[:3] if isinstance(shots,list) else shots,
+            }, default=str)[:3500])
           PY
