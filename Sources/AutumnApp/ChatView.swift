@@ -403,7 +403,7 @@ enum ChatAttachContentTypes {
             // Code / text
             .plainText, .utf8PlainText, .sourceCode,
             .swiftSource, .cSource, .cPlusPlusSource, .pythonScript, .javaScript,
-            .html, .json, .xml, .yaml, .shellScript, .assemblyCode,
+            .html, .json, .xml, .yaml, .shellScript,
             // Docs / catch-all so nothing capable is blocked
             .pdf, .rtf, .commaSeparatedText, .data, .item,
         ]
@@ -412,7 +412,7 @@ enum ChatAttachContentTypes {
             "hdr", "exr", "dng", "cr2", "nef", "arw", "orf", "rw2", "raf",
             "mkv", "webm", "m4v",
             "glb", "gltf", "obj", "stl", "fbx", "dae", "reality", "usd", "usda", "usdc",
-            "md", "ts", "tsx", "jsx", "rs", "go", "rb", "kt", "java", "css", "sql", "toml", "ini", "php", "m", "mm", "h", "hpp",
+            "md", "ts", "tsx", "jsx", "rs", "go", "rb", "kt", "java", "css", "sql", "toml", "ini", "php", "m", "mm", "h", "hpp", "asm", "s",
             "step", "stp", "iges", "igs", "dwg", "dxf",
         ]
         for ext in extras {
