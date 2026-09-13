@@ -113,7 +113,7 @@ jobs:
 
           def get_all(path, params=None):
               params = dict(params or {})
-              params.setdefault("limit", 200)
+              params.setdefault("limit", 50)
               data = []
               included = []
               page = get(path, params)
@@ -174,11 +174,27 @@ jobs:
           for ident, b in by_ident.items():
               bid = b["id"]
               log(f"### `{ident}`")
+              caps = []
               try:
-                  caps, _ = get_all(f"/bundleIds/{bid}/bundleIdCapabilities")
+                  # Relationship endpoints reject `limit` (PARAMETER_ERROR.ILLEGAL)
+                  page = get(f"/bundleIds/{bid}/bundleIdCapabilities")
+                  caps = list(page.get("data") or [])
+                  while page.get("links", {}).get("next"):
+                      page = get(page["links"]["next"])
+                      caps.extend(page.get("data") or [])
               except Exception as e:
-                  log(f"- ERROR fetching capabilities: {e}")
-                  caps = []
+                  log(f"- WARN relationship endpoint: {e}")
+                  try:
+                      detail = get(f"/bundleIds/{bid}", {"include": "bundleIdCapabilities"})
+                      included = detail.get("included") or []
+                      caps = [x for x in included if x.get("type") == "bundleIdCapabilities"]
+                      if not caps:
+                          log(f"- include=bundleIdCapabilities returned {len(included)} included objects")
+                          for x in included[:20]:
+                              log(f"  - included type={x.get('type')} id={x.get('id')} attrs={json.dumps(x.get('attributes'))[:180]}")
+                  except Exception as e2:
+                      log(f"- ERROR alternate include fetch: {e2}")
+                      caps = []
               cmap = {}
               for c in caps:
                   ctype = c.get("attributes", {}).get("capabilityType") or "?"
@@ -336,6 +352,37 @@ jobs:
               autumn_profile_siwa,
               "required for device SIWA sheet; regenerate if FAIL",
           )
+          autumn_profile_active = False
+          autumn_missing_icloud_in_profile = False
+          for p in matched:
+              name = p.get("attributes", {}).get("name", "")
+              if "AutumnGitHubFlow" in name or name == "AutumnGitHubFlow":
+                  st = p.get("attributes", {}).get("profileState")
+                  autumn_profile_active = (st == "ACTIVE")
+                  check("AutumnGitHubFlow profileState ACTIVE", autumn_profile_active, f"state={st}")
+                  uuid = p.get("attributes", {}).get("uuid")
+                  pp = Path(f"/tmp/profile_{uuid}.mobileprovision")
+                  if pp.exists() and autumn_ent.exists():
+                      try:
+                          import subprocess, plistlib
+                          xml = subprocess.check_output(
+                              ["openssl", "smime", "-inform", "der", "-verify", "-noverify", "-in", str(pp)],
+                              stderr=subprocess.DEVNULL,
+                          )
+                          # crude: compare ubiquity keys
+                          app_txt = autumn_ent.read_text()
+                          prof_txt = xml.decode("utf-8", errors="replace")
+                          for ukey in ("com.apple.developer.ubiquity-container-identifiers",
+                                       "com.apple.developer.ubiquity-kvstore-identifier"):
+                              if ukey in app_txt and ukey not in prof_txt:
+                                  autumn_missing_icloud_in_profile = True
+                      except Exception:
+                          pass
+          check(
+              "Autumn app iCloud keys ⊆ profile (no Arc Lake poison)",
+              not autumn_missing_icloud_in_profile,
+              "app requests ubiquity-* but profile lacks them — can invalidate SIWA blob",
+          )
 
           # Cap parity notes
           for cap in sorted(INTERESTING_CAPS):
@@ -351,13 +398,18 @@ jobs:
           fails = [r for r in results if r[0] == "FAIL"]
           log("")
           log("## 6. Next concrete fix")
-          if not autumn_siwa:
-              log("- **PRIMARY GAP**: Enable `SIGN_IN_WITH_APPLE` on App ID `com.dartmeadow.autumn` in ASC (API: POST bundleIdCapabilities, or Developer portal → Identifiers → Autumn → Sign In with Apple → Enable → Save).")
-              log("- Then regenerate/download profile `AutumnGitHubFlow` (or recreate) so entitlements include `com.apple.developer.applesignin`, update `PROVISIONING_PROFILE_BASE64` secret if used.")
+          if autumn_missing_icloud_in_profile:
+              log("- **PRIMARY GAP (proven)**: `AutumnApp.entitlements` requests iCloud ubiquity keys that `AutumnGitHubFlow` does **not** grant. Ashtree works with minimal SIWA+network+keychain only. Either enable iCloud on the App ID and regenerate the profile, OR strip ubiquity keys from Autumn entitlements to match Ashtree (safer short-term for SIWA).")
+          if not autumn_profile_active:
+              log("- **PRIMARY GAP (proven)**: profile `AutumnGitHubFlow` is **INVALID** (Ashtree `AshtreeIDEAppStore` is ACTIVE). Regenerate/recreate IOS_APP_STORE profile for `com.dartmeadow.autumn`, update `PROVISIONING_PROFILE_BASE64` + `PROVISIONING_PROFILE` UUID in project.yml.")
+          if not autumn_siwa and AUTUMN_BUNDLE in by_ident and "SIGN_IN_WITH_APPLE" not in a_caps and a_caps:
+              log("- Enable `SIGN_IN_WITH_APPLE` on App ID if capability list is authoritative.")
+          elif not autumn_siwa and not a_caps:
+              log("- Capability list empty/API error — do **not** treat as proof SIWA is off; profile already contains `com.apple.developer.applesignin`. Prefer profile+entitlements evidence.")
           elif not autumn_profile_siwa:
-              log("- App ID has SIWA, but **profile lacks SIWA entitlement** → regenerate `AutumnGitHubFlow` / App Store distribution profile after capability change, refresh CI secret.")
-          else:
-              log("- ASC App ID + profile look SIWA-ready. If device still fails, gap is client (dismiss-before-SIWA / Services ID / error handling), not entitlement guess.")
+              log("- App ID/profile SIWA entitlement missing → regenerate profile after enabling SIWA on App ID.")
+          elif autumn_profile_active and autumn_profile_siwa and not autumn_missing_icloud_in_profile:
+              log("- ASC App ID + ACTIVE profile look SIWA-ready. If device still fails, gap is client (dismiss-before-SIWA / Services ID / error handling), not entitlement guess.")
           log("- Do **not** ship speculative TestFlight entitlement changes until this checklist is green for Autumn SIWA.")
           log("")
           log(f"**Summary: {len(results) - len(fails)} PASS / {len(fails)} FAIL**")
