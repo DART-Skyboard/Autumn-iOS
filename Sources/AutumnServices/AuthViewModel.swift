@@ -33,6 +33,14 @@ public final class AuthViewModel: NSObject, ObservableObject {
         }()
     }
 
+    /// Web `_aut_sid` — one sid per install so we do not mint a new live orb every launch.
+    public var sessionSID: String {
+        if let s = UserDefaults.standard.string(forKey: "autumn_session_sid"), !s.isEmpty { return s }
+        let s = sessionUID + "_t" + String(Int(Date().timeIntervalSince1970), radix: 36)
+        UserDefaults.standard.set(s, forKey: "autumn_session_sid")
+        return s
+    }
+
     public var adminAllowed: Bool {
         githubConnected && githubUsername.lowercased() == AutumnConfig.adminUsername
     }

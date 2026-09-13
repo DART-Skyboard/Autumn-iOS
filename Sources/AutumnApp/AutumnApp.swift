@@ -45,6 +45,8 @@ struct AutumnApp: App {
                 .environment(\.managedObjectContext, persistence.context)
                 .onAppear {
                     chatVM.memoryOwner = authVM.sessionUID
+                    chatVM.sessionSID = authVM.sessionSID
+                    sceneVM.bindIdentity(uid: authVM.sessionUID, sid: authVM.sessionSID)
                     Task {
                         await mistVM.authenticateLocalPlayer()
                         await journalVM.loadFromCoreData()
@@ -54,6 +56,8 @@ struct AutumnApp: App {
                 }
                 .onChange(of: authVM.githubUsername) { _ in
                     chatVM.memoryOwner = authVM.sessionUID
+                    chatVM.sessionSID = authVM.sessionSID
+                    sceneVM.bindIdentity(uid: authVM.sessionUID, sid: authVM.sessionSID)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .autumnAshStar)) { _ in
                     _ = sceneVM.fireAshStar(thought: "", force: true)

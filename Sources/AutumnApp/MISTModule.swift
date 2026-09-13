@@ -13,6 +13,10 @@ public final class MISTModule: ObservableObject {
     @Published public var activeSignals: [MISTSignal] = []
     @Published public var ashStarActive = false
 
+    /// Web `_ashNodes._localUid` — sid of this device session (not a per-chat ghost).
+    public var localUid: String = "ios-guest"
+    public var localSid: String = "ios-guest"
+
     private var timer: Timer?
 
     public struct MISTSignal: Identifiable {
@@ -32,6 +36,11 @@ public final class MISTModule: ObservableObject {
         await fetchPresence()
     }
 
+    public func bindIdentity(uid: String, sid: String) {
+        localUid = uid
+        localSid = sid
+    }
+
     private func startPolling() {
         timer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.fetchPresence() }
@@ -39,24 +48,107 @@ public final class MISTModule: ObservableObject {
     }
 
     private func fetchPresence() async {
+        // Heartbeat this device into the shared CacheService (web writenode).
+        await AutumnGASClient.shared.writeNode(sid: localSid, uid: localUid, label: localUid)
+        await AutumnGASClient.shared.writeSession(uid: localUid, sid: localSid, extra: [
+            "type": "presence",
+            "platform": "ios"
+        ])
+
         var collected: [MISTSignal] = []
-        // Public presence.json (web)
-        if let url = URL(string: "https://raw.githubusercontent.com/DART-Skyboard/Autumn/main/presence.json"),
-           let (data, _) = try? await URLSession.shared.data(from: url),
-           let json = try? JSONSerialization.jsonObject(with: data) {
-            collected.append(contentsOf: parse(json))
+        // PRIMARY: GAS readnodes — same source as web `_pollAshNodes`.
+        let nodes = await AutumnGASClient.shared.readNodes()
+        if !nodes.isEmpty {
+            collected.append(contentsOf: parseSessionRows(nodes))
         }
-        // GAS ashread of mist events
+        // SECONDARY: GAS sessions (full heartbeat + mist/ashstar).
+        if collected.isEmpty {
+            let sessions = await AutumnGASClient.shared.readSessions()
+            collected.append(contentsOf: parseSessionRows(sessions))
+            ingestAshStarsFromSessions(sessions)
+        }
+        // TERTIARY: public GitHub session listing (web fallback, no PAT).
+        if collected.isEmpty {
+            collected.append(contentsOf: await fetchGitHubSessions())
+        }
+        // Mist events are FX / ashstar only — never user buoyancy nodes.
         if let gas = await AutumnGASClient.shared.ashread(path: "ashtree/mist/events.json") {
-            collected.append(contentsOf: parse(gas))
             ingestAshStars(gas)
         }
+
         let now = Date().timeIntervalSince1970 * 1000
-        let fresh = collected.filter { now - ($0.timestamp.timeIntervalSince1970 * 1000) < STALE_MS }
-        // de-dupe by uid
+        let sessionStale: Double = 6 * 60 * 1000 // web STALE_MS
+        let fresh = collected.filter { now - ($0.timestamp.timeIntervalSince1970 * 1000) < sessionStale }
         var seen: [String: MISTSignal] = [:]
-        for s in fresh { seen[s.uid] = s }
+        for s in fresh {
+            if isLocal(s.uid) { continue }
+            seen[s.uid] = s
+        }
         activeSignals = Array(seen.values)
+    }
+
+    private func isLocal(_ id: String) -> Bool {
+        id == localUid || id == localSid
+    }
+
+    /// Web session row: `{ sid, uid, ts }` — skip rows with no identity (do not mint UUIDs).
+    private func parseSessionRows(_ rows: [[String: Any]]) -> [MISTSignal] {
+        let now = Date()
+        return rows.compactMap { node in
+            let sid = (node["sid"] as? String) ?? ""
+            let uid = (node["uid"] as? String) ?? ""
+            let nodeId = sid.isEmpty ? uid : sid
+            guard !nodeId.isEmpty else { return nil }
+            var tsMs: Double = now.timeIntervalSince1970 * 1000
+            if let t = node["ts"] as? Double { tsMs = t }
+            else if let t = node["ts"] as? Int { tsMs = Double(t) }
+            else if let t = node["timestamp"] as? Double { tsMs = t }
+            else if let t = node["timestamp"] as? Int { tsMs = Double(t) }
+            else if let t = node["ts"] as? String, let d = ISO8601DateFormatter().date(from: t) {
+                tsMs = d.timeIntervalSince1970 * 1000
+            }
+            let isAsh = nodeId.lowercased() == "autumn" || uid.lowercased() == "autumn" || (node["type"] as? String) == "ash"
+            return MISTSignal(
+                id: nodeId,
+                uid: nodeId,
+                position: SIMD3<Float>(0, 0, 0),
+                intensity: 1,
+                timestamp: Date(timeIntervalSince1970: tsMs / 1000),
+                isAsh: isAsh
+            )
+        }
+    }
+
+    private func ingestAshStarsFromSessions(_ rows: [[String: Any]]) {
+        for s in rows {
+            guard let asStar = s["ashStar"] as? [String: Any], asStar["ts"] != nil else { continue }
+            var row = asStar
+            if (row["type"] as? String)?.isEmpty != false { row["type"] = "ashstar" }
+            if row["uid"] == nil { row["uid"] = s["sid"] ?? s["uid"] ?? "autumn" }
+            ingestAshStars(row)
+        }
+    }
+
+    private func fetchGitHubSessions() async -> [MISTSignal] {
+        guard let url = URL(string: "https://api.github.com/repos/DART-Skyboard/leatr-ash/contents/ashtree/sessions") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 8
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let files = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        let mine = localSid + ".json"
+        let recent = files
+            .filter { ($0["name"] as? String)?.hasSuffix(".json") == true && ($0["name"] as? String) != mine }
+            .prefix(20)
+        var out: [MISTSignal] = []
+        for f in recent {
+            guard let dl = f["download_url"] as? String, let u = URL(string: dl) else { continue }
+            guard let (d, _) = try? await URLSession.shared.data(from: u),
+                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { continue }
+            out.append(contentsOf: parseSessionRows([json]))
+        }
+        return out
     }
 
     private func parse(_ json: Any) -> [MISTSignal] {
@@ -68,7 +160,8 @@ public final class MISTModule: ObservableObject {
         }
         let now = Date()
         return arr.compactMap { node in
-            let uid = (node["uid"] as? String) ?? (node["id"] as? String) ?? (node["sid"] as? String) ?? UUID().uuidString
+            let uid = (node["uid"] as? String) ?? (node["id"] as? String) ?? (node["sid"] as? String) ?? ""
+            guard !uid.isEmpty else { return nil }
             var tsMs: Double = now.timeIntervalSince1970 * 1000
             if let t = node["timestamp"] as? Double { tsMs = t }
             else if let t = node["ts"] as? Double { tsMs = t }
@@ -141,7 +234,8 @@ public final class MISTModule: ObservableObject {
                 response: "slot \(slot)",
                 emotion: slot == 1 ? "inspiring" : (slot == 2 ? "love" : "spiritual"),
                 buoyancy: 0.7,
-                uid: uid
+                uid: uid,
+                sid: localSid
             )
         }
     }
@@ -181,7 +275,8 @@ public final class MISTModule: ObservableObject {
                 response: "star",
                 emotion: "inspiring",
                 buoyancy: 0.8,
-                uid: uid
+                uid: uid,
+                sid: localSid
             )
             await MainActor.run { self.ashStarActive = false }
         }

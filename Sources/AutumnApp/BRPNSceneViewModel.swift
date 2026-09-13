@@ -18,11 +18,23 @@ public final class BRPNSceneViewModel: ObservableObject {
     @Published public var quantumSocket: Double = 6.9120
     @Published public var mazeCanSolve = false
     @Published public var isSolving = false
-    /// JS: `_mantisNodeMax` default 100 — node cap HUD 10/50/100/300/1200/2e6
-    @Published public var mantisNodeMax: Int = 100
+    /// Web NODES HUD steps 10/50/100/300/1200/2e6. User-orb default 300 (Justin).
+    /// Web `_mantisNodeMax` JS default is 100 (radar contacts); user orbs use this cap.
+    @Published public var mantisNodeMax: Int = 300
+    /// LIVE FEED — hide/show remote live-user buoyancy orbs. Persist (web has no toggle).
+    @Published public var liveFeedEnabled: Bool = UserDefaults.standard.object(forKey: "autumn_live_feed") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(liveFeedEnabled, forKey: "autumn_live_feed")
+            applyLiveFeedVisibility()
+            if liveFeedEnabled { Task { await pollPresence() } }
+        }
+    }
+    public var localUid: String = "ios-guest"
+    public var localSid: String = "ios-guest"
     private var lastAshFire: Date = .distantPast
     private var lastJournalStar: Date = .distantPast
     private var ashStarBroadcastIds: Set<String> = []
+    private var sessionOrder: [String] = []
     public var connectedUids: [String] { Array(sessionGroupNodes.keys) }
 
     public let scene = SCNScene()
@@ -60,6 +72,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         shells.removeAll()
         particleNodes.removeAll()
         sessionGroupNodes.removeAll()
+        sessionOrder.removeAll()
         pathMeshNodes.removeAll()
         toolPivots.removeAll()
         mantisNodes.removeAll()
@@ -363,13 +376,41 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     // MARK: — Remote session icosahedrons  JS _makeSessionGroup IcosahedronGeometry(r,1)
+    public func bindIdentity(uid: String, sid: String) {
+        localUid = uid
+        localSid = sid
+        sessionId = String(sid.suffix(8)).uppercased()
+        MISTModule.shared.bindIdentity(uid: uid, sid: sid)
+    }
+
+    public func applyNodeCap() {
+        while sessionGroupNodes.count > max(1, mantisNodeMax) {
+            if let k = sessionOrder.first { removeRemoteNode(uid: k) } else { break }
+        }
+        applyLiveFeedVisibility()
+    }
+
+    public func applyLiveFeedVisibility() {
+        let hide = !liveFeedEnabled
+        for n in sessionGroupNodes.values { n.isHidden = hide }
+        splineGroup?.isHidden = hide
+        if hide {
+            activeNodes = 1
+        } else {
+            activeNodes = 1 + sessionGroupNodes.count
+        }
+    }
+
     public func addRemoteNode(uid: String, emotion: String = "neutral") {
+        if uid == localUid || uid == localSid { return }
         if sessionGroupNodes[uid] != nil { return }
         // Node-cap HUD: drop oldest live orbs so weaker devices stay fluid.
         while sessionGroupNodes.count >= max(1, mantisNodeMax) {
-            if let k = sessionGroupNodes.keys.first {
+            let k = sessionOrder.first ?? sessionGroupNodes.keys.first
+            if let k {
                 sessionGroupNodes[k]?.removeFromParentNode()
                 sessionGroupNodes.removeValue(forKey: k)
+                sessionOrder.removeAll { $0 == k }
                 activeNodes = max(1, activeNodes - 1)
             } else { break }
         }
@@ -386,9 +427,18 @@ public final class BRPNSceneViewModel: ObservableObject {
         cg.materials = [ThreeJSGeometry.wireMat(colors[0], opacity: 0.55)]
         group.addChildNode(SCNNode(geometry: cg))
         group.position = SCNVector3(pos.x, pos.y, pos.z)
+        group.isHidden = !liveFeedEnabled
         scene.rootNode.addChildNode(group)
         sessionGroupNodes[uid] = group
-        activeNodes += 1
+        sessionOrder.append(uid)
+        if liveFeedEnabled { activeNodes += 1 }
+    }
+
+    private func removeRemoteNode(uid: String) {
+        sessionGroupNodes[uid]?.removeFromParentNode()
+        sessionGroupNodes.removeValue(forKey: uid)
+        sessionOrder.removeAll { $0 == uid }
+        activeNodes = max(1, liveFeedEnabled ? 1 + sessionGroupNodes.count : 1)
     }
 
     /// JS: _brpnInjectMantisContacts — aircraft TetrahedronGeometry(0.032,0), satellite OctahedronGeometry(0.045,0)
@@ -578,14 +628,30 @@ public final class BRPNSceneViewModel: ObservableObject {
     public func teardown() { presenceTimer?.invalidate(); Self.shared = nil }
 
     private func pollPresence() async {
+        MISTModule.shared.bindIdentity(uid: localUid, sid: localSid)
         await MISTModule.shared.refresh()
         let signals = MISTModule.shared.activeSignals
-        for sig in signals {
-            if sessionGroupNodes[sig.uid] == nil {
-                addRemoteNode(uid: sig.uid, emotion: sig.isAsh ? "inspiring" : "neutral")
-            }
+        let live = Set(signals.map(\.uid).filter { $0 != localUid && $0 != localSid })
+        for uid in Array(sessionOrder) where !live.contains(uid) {
+            removeRemoteNode(uid: uid)
         }
-        rebuildSplines()
+        if liveFeedEnabled {
+            for sig in signals {
+                if sig.uid == localUid || sig.uid == localSid { continue }
+                if sessionGroupNodes[sig.uid] == nil {
+                    addRemoteNode(uid: sig.uid, emotion: sig.isAsh ? "inspiring" : "neutral")
+                } else {
+                    sessionGroupNodes[sig.uid]?.isHidden = false
+                }
+            }
+            while sessionGroupNodes.count > max(1, mantisNodeMax) {
+                if let k = sessionOrder.first { removeRemoteNode(uid: k) } else { break }
+            }
+        } else {
+            for n in sessionGroupNodes.values { n.isHidden = true }
+        }
+        applyLiveFeedVisibility()
+        if liveFeedEnabled { rebuildSplines() }
         maybeAutumnStar()
     }
 

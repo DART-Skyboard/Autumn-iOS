@@ -23,6 +23,25 @@ public struct BRPNSceneView: View {
             VStack {
                 Spacer()
                 VStack(spacing: 6) {
+                    // LIVE FEED — hide remotes / keep local orb + tool FX
+                    Button { sceneVM.liveFeedEnabled.toggle() } label: {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white.opacity(0.28))
+                                .frame(width: 6, height: 6)
+                            Text(sceneVM.liveFeedEnabled ? "LIVE FEED ON" : "LIVE FEED OFF")
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .tracking(1.2)
+                                .foregroundColor(sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white.opacity(0.45))
+                            Text(sceneVM.liveFeedEnabled ? "· \(max(1, sceneVM.activeNodes)) LIVE" : "· LOCAL ONLY")
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundColor(Color.cyan.opacity(0.45))
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background((sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white).opacity(0.06))
+                        .overlay(RoundedRectangle(cornerRadius: 3).stroke((sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white).opacity(0.22), lineWidth: 1))
+                    }
+
                     // Node cap — JS #node-cap-track in #multi-user-bar (on-scene HUD)
                     HStack(spacing: 4) {
                         Text("NODES")
@@ -32,6 +51,7 @@ public struct BRPNSceneView: View {
                         ForEach(nodeCapVals, id: \.0) { val, label in
                             Button {
                                 sceneVM.mantisNodeMax = val
+                                sceneVM.applyNodeCap()
                             } label: {
                                 Text(label)
                                     .font(.system(size: 8, weight: sceneVM.mantisNodeMax == val ? .bold : .regular, design: .monospaced))
