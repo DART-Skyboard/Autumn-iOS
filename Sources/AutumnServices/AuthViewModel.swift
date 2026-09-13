@@ -133,23 +133,16 @@ public final class AuthViewModel: NSObject, ObservableObject {
         }
     }
 
-    /// Legacy no-op — AppleSignInButton (Welcome) owns the ASAuthorizationController.
-    /// Profile must dismiss its overlay first, then call performAppleSignInFromRootWindow().
+    /// Legacy no-op — AppleSignInButton owns the ASAuthorizationController
+    /// (Welcome + Profile). Never start SIWA outside the button's tap gesture.
     public func signInWithApple() {
         // Intentionally empty (Ashtree IDEAuthViewModel pattern).
     }
 
-    /// Present SIWA from the key window AFTER Profile overlay is fully dismissed.
-    /// Nested overlay/sheet presentation is the remaining .unknown failure mode vs Ashtree.
+    /// Removed (TF84): dismiss-then-perform started ASAuthorizationController outside
+    /// the user gesture → .unknown. Profile now uses in-sheet AppleSignInButton.
     public func performAppleSignInFromRootWindow() {
-        error = nil
-        let request = ASAuthorizationAppleIDProvider().createRequest()
-        prepareAppleRequest(request)
-        let controller = ASAuthorizationController(authorizationRequests: [request])
-        controller.delegate = self
-        controller.presentationContextProvider = self
-        appleAuthController = controller
-        controller.performRequests()
+        // Intentionally empty — keep symbol for any stale call sites.
     }
 
     public func switchAppleAccount(to account: SavedAccount) {

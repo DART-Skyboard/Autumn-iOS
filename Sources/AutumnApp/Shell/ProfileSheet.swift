@@ -81,8 +81,8 @@ public struct ProfileSheet: View {
                     }
                 }
 
-                // Apple ID — dismiss Profile first, then SIWA from root key window (Ashtree-safe).
-                // In-overlay ASAuthorizationAppleIDButton → ASAuthorizationError.unknown (TF79).
+                // Apple ID — real AppleSignInButton (Ashtree pattern): controller starts
+                // inside the button tap (same gesture). Do NOT dismiss Profile first.
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Apple ID").font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.45))
@@ -93,23 +93,22 @@ public struct ProfileSheet: View {
                     }
                     .padding(.horizontal, 14).padding(.top, 10)
                     if authVM.appleUserId.isEmpty {
-                        Button {
-                            authVM.error = nil
-                            appNav.pendingAppleSignIn = true
-                            appNav.showProfile = false
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "apple.logo")
-                                    .font(.system(size: 17, weight: .semibold))
-                                Text("Sign in with Apple")
-                                    .font(.system(size: 15, weight: .semibold))
+                        AppleSignInButton(
+                            onRequest: { req in
+                                authVM.error = nil
+                                authVM.prepareAppleRequest(req)
+                            },
+                            onCompletion: { result in
+                                authVM.handleAppleCompletion(result)
+                                // Success: dismiss Profile. Cancel: silent. Failure: keep Profile + show error.
+                                if case .success = result {
+                                    appNav.showProfile = false
+                                }
                             }
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(Color.white)
-                            .cornerRadius(8)
-                        }
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .cornerRadius(8)
                         .padding(.horizontal, 14)
                         .padding(.bottom, 6)
                         .accessibilityLabel("Sign in with Apple")
