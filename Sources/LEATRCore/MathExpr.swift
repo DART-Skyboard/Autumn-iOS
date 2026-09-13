@@ -2,7 +2,7 @@ import Foundation
 
 /// Expression tree for LEATR math — nested parens, OOO, symbols, algebra.
 /// Geometry (parentheses) first, then exponents, multiply/divide, add/subtract.
-public enum MathNode: Equatable, Sendable {
+public indirect enum MathNode: Equatable, Sendable {
     case number(Double)
     case variable(String)
     case unary(String, MathNode)
