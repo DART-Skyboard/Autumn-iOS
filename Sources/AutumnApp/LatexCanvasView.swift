@@ -3,7 +3,7 @@ import UIKit
 import LEATRCore
 import AutumnServices
 
-/// LaTeX canvas overlay — generate examples on-canvas, export TeX / MathML / PNG / CSV / ODT.
+/// LaTeX canvas overlay — generate examples on-canvas, export TeX / MathML / PNG / SVG / CSV / ODT.
 struct LatexCanvasOverlay: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
@@ -29,6 +29,7 @@ struct LatexCanvasOverlay: View {
                         Button("LaTeX (.tex)") { exportTeX() }
                         Button("MathML (.mml)") { exportMathML() }
                         Button("PNG transparent") { exportPNG() }
+                        Button("SVG (.svg)") { exportSVG() }
                         Button("CSV spreadsheet") { exportCSV() }
                         Button("OpenDocument (.odt)") { exportODT() }
                     }
@@ -191,6 +192,51 @@ struct LatexCanvasOverlay: View {
         share(filename: "autumn-math.png", data: data, type: "png")
     }
 
+    /// Vector SVG from the same pretty()/layout text the canvas and PNG use (not a raster wrap).
+    private func exportSVG() {
+        let display = LatexGlyphCanvas.pretty(source)
+        let rawLines = display.components(separatedBy: .newlines)
+        let lines = rawLines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let contentLines = lines.isEmpty ? [display.isEmpty ? " " : display] : lines
+
+        let fontSize: CGFloat = 28
+        let lineHeight = fontSize * 1.35
+        let padding: CGFloat = 16
+        let maxChars = max(contentLines.map(\.count).max() ?? 1, 1)
+        // Serif math glyph advance ≈ 0.55em — sizes viewBox to content like the on-canvas layout.
+        let textWidth = CGFloat(maxChars) * fontSize * 0.55
+        let width = max(ceil(textWidth + padding * 2), 120)
+        let height = max(ceil(CGFloat(contentLines.count) * lineHeight + padding * 2), 64)
+
+        func xmlEscape(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+                .replacingOccurrences(of: "\"", with: "&quot;")
+                .replacingOccurrences(of: "'", with: "&apos;")
+        }
+
+        var textElems = ""
+        for (i, line) in contentLines.enumerated() {
+            let y = padding + fontSize + CGFloat(i) * lineHeight
+            let x = width / 2
+            textElems += """
+              <text x="\(String(format: "%.1f", x))" y="\(String(format: "%.1f", y))" text-anchor="middle" dominant-baseline="alphabetic" font-family="Georgia, 'Times New Roman', Times, serif" font-size="\(Int(fontSize))" font-weight="500" fill="#FFFFFF">\(xmlEscape(line))</text>
+
+            """
+        }
+
+        // Transparent background (matches PNG export intent); white glyphs for dark/canvas contrast.
+        let svg = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" width="\(Int(width))" height="\(Int(height))" viewBox="0 0 \(String(format: "%.1f", width)) \(String(format: "%.1f", height))">
+        <!-- Autumn LaTeX canvas — vector export from math layout text; transparent bg -->
+        \(textElems.trimmingCharacters(in: .whitespacesAndNewlines))
+        </svg>
+        """
+        share(filename: "autumn-math.svg", data: Data(svg.utf8), type: "svg")
+    }
+
     private func exportCSV() {
         var rows = ["kind,name,value"]
         rows.append("title,\(csv(title)),")
@@ -239,7 +285,7 @@ struct LatexCanvasOverlay: View {
 struct LatexGlyphCanvas: View {
     let source: String
     var body: some View {
-        let display = pretty()
+        let display = Self.pretty(source)
         VStack(spacing: 8) {
             Text(display)
                 .font(.system(size: 28, weight: .medium, design: .serif))
@@ -252,7 +298,8 @@ struct LatexGlyphCanvas: View {
         .padding(8)
     }
 
-    private func pretty() -> String {
+    /// Shared layout text used by on-canvas render, PNG ImageRenderer, and SVG vector export.
+    static func pretty(_ source: String) -> String {
         var s = source
         let reps = [
             ("\\cdot", "·"), ("\\times", "×"), ("\\pm", "±"),
