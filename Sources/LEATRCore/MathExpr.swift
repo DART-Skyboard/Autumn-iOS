@@ -174,10 +174,12 @@ public enum MathParser {
         let chars: [Character]
         var i = 0
         var atEnd: Bool {
-            skip()
-            return i >= chars.count
+            mutating get {
+                skip()
+                return i >= chars.count
+            }
         }
-        init(_ s: String) { chars = Array(normalize(s)) }
+        init(_ s: String) { chars = Array(Self.normalize(s)) }
 
         static func normalize(_ raw: String) -> String {
             var s = raw
