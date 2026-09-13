@@ -395,15 +395,24 @@ extension AuthViewModel:
     fileprivate func applyAppleError(_ error: Error) {
         let asErr = error as? ASAuthorizationError
         switch asErr?.code {
-        case .canceled: return
+        case .canceled:
+            // User dismissed the sheet — stay silent.
+            return
         case .unknown:
-            if appleUserId.isEmpty && !githubConnected {
-                self.error = "Sign in with Apple requires iCloud in Settings → Apple ID"
-            }
+            // Presentation/hierarchy failures often surface as .unknown; do not always blame iCloud.
+            self.error = "Sign in failed — try again from Welcome, or check Settings → Apple ID / iCloud"
         case .invalidResponse, .notHandled, .failed:
             self.error = "Sign in failed: \(error.localizedDescription)"
-        default:
+        case .notInteractive:
+            self.error = "Sign in failed — Apple Sign In is not available in this context. Try again from Welcome."
+        case nil:
             self.error = error.localizedDescription
+        default:
+            if let asErr {
+                self.error = "Sign in failed (\(asErr.code.rawValue)): \(error.localizedDescription)"
+            } else {
+                self.error = error.localizedDescription
+            }
         }
     }
 

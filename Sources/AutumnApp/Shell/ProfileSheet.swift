@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import AuthenticationServices
 import AutumnServices
 
 /// Profile: GitHub login, Enable/Disable Admin (dartsolarpunk only). Matches web gh-user-menu.
@@ -14,6 +13,7 @@ public struct ProfileSheet: View {
     @StateObject private var tint = AvatarTintSampler()
     @State private var saveBusy = false
     @State private var saveBanner: SaveBanner?
+    @State private var showGitHubSheet = false
 
     private struct SaveBanner: Equatable {
         let text: String
@@ -81,18 +81,30 @@ public struct ProfileSheet: View {
                     }
                 }
 
-                row("Apple ID", authVM.appleUserId.isEmpty ? "Not signed in" : authVM.username) { authVM.signInWithApple() }
-                row("GitHub", authVM.githubConnected ? authVM.githubUsername : "Tap to connect") {
-                    Task { await authVM.startGitHubAuth() }
-                }
-                if authVM.deviceFlowCode != nil {
-                    Text("Device code: \(authVM.deviceFlowCode!.userCode)")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(chrome.accent)
-                        .padding(.horizontal, 14).padding(.vertical, 6)
-                    Text("Enter this code at github.com/login/device (opened in-app).")
-                        .font(.system(size: 10)).foregroundColor(.white.opacity(0.5))
+                // Apple ID — same AppleSignInButton path as WelcomeView (not Profile-overlay ASAuthorizationController)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Apple ID").font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.45))
+                        Spacer()
+                        Text(authVM.appleUserId.isEmpty ? "Not signed in" : authVM.username)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    .padding(.horizontal, 14).padding(.top, 10)
+                    if authVM.appleUserId.isEmpty {
+                        AppleSignInButton(
+                            onRequest: { authVM.prepareAppleRequest($0) },
+                            onCompletion: { authVM.handleAppleCompletion($0) }
+                        )
+                        .frame(height: 44)
+                        .cornerRadius(8)
                         .padding(.horizontal, 14)
+                        .padding(.bottom, 6)
+                    }
+                }
+
+                row("GitHub", authVM.githubConnected ? authVM.githubUsername : "Tap to connect") {
+                    showGitHubSheet = true
                 }
                 if let err = authVM.error {
                     Text(err).font(.system(size: 10)).foregroundColor(.red).padding(.horizontal, 14)
@@ -173,6 +185,11 @@ public struct ProfileSheet: View {
         }
         .onAppear { tint.sample(url: authVM.githubAvatarURL) }
         .onChange(of: authVM.githubAvatarURL) { u in tint.sample(url: u) }
+        .sheet(isPresented: $showGitHubSheet) {
+            GitHubDeviceFlowSheet()
+                .environmentObject(authVM)
+                .environmentObject(themeVM)
+        }
     }
 
     private func runSaveData() async {
