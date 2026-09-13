@@ -312,10 +312,11 @@ jobs:
               ASHTREE_BUNDLE in by_ident,
               by_ident.get(ASHTREE_BUNDLE, {}).get("id", "not found"),
           )
-          autumn_siwa = "SIGN_IN_WITH_APPLE" in a_caps
-          ashtree_siwa = "SIGN_IN_WITH_APPLE" in s_caps
-          check("Autumn has SIGN_IN_WITH_APPLE capability", autumn_siwa, str(a_caps.get("SIGN_IN_WITH_APPLE")))
-          check("Ashtree has SIGN_IN_WITH_APPLE capability (reference)", ashtree_siwa, str(s_caps.get("SIGN_IN_WITH_APPLE")))
+          # ASC API uses capabilityType APPLE_ID_AUTH (not SIGN_IN_WITH_APPLE)
+          autumn_siwa = "APPLE_ID_AUTH" in a_caps or "SIGN_IN_WITH_APPLE" in a_caps
+          ashtree_siwa = "APPLE_ID_AUTH" in s_caps or "SIGN_IN_WITH_APPLE" in s_caps
+          check("Autumn has APPLE_ID_AUTH / SIWA capability", autumn_siwa, str(a_caps.get("APPLE_ID_AUTH") or a_caps.get("SIGN_IN_WITH_APPLE")))
+          check("Ashtree has APPLE_ID_AUTH / SIWA capability (reference)", ashtree_siwa, str(s_caps.get("APPLE_ID_AUTH") or s_caps.get("SIGN_IN_WITH_APPLE")))
           check(
               "Autumn repo entitlements declare com.apple.developer.applesignin",
               autumn_ent.exists() and "com.apple.developer.applesignin" in autumn_ent.read_text(),
@@ -388,12 +389,17 @@ jobs:
           for cap in sorted(INTERESTING_CAPS):
               a = cap in a_caps
               s = cap in s_caps
-              if a or s:
-                  check(
-                      f"Capability parity `{cap}` (Autumn={a}, Ashtree={s})",
-                      a == s or (cap == "SIGN_IN_WITH_APPLE" and a),
-                      "Ashtree reference; Autumn may intentionally differ on iCloud/push",
-                  )
+              if not (a or s):
+                  continue
+              if cap in ("ICLOUD", "PUSH_NOTIFICATIONS", "KEYCHAIN_SHARING"):
+                  # informational — Autumn may exceed Ashtree; only FAIL if SIWA-related
+                  log(f"- **INFO**: Capability `{cap}` (Autumn={a}, Ashtree={s}) — not a SIWA blocker by itself")
+                  continue
+              check(
+                  f"Capability parity `{cap}` (Autumn={a}, Ashtree={s})",
+                  a == s or (cap in ("SIGN_IN_WITH_APPLE", "APPLE_ID_AUTH") and a),
+                  "Ashtree reference",
+              )
 
           fails = [r for r in results if r[0] == "FAIL"]
           log("")
