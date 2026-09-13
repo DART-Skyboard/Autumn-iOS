@@ -63,19 +63,21 @@ public struct AdminDrawerView: View {
 
     private var ashTab: some View {
         VStack(spacing: 0) {
-            Text("ASH · Grammar Study")
+            Text("ASH · Grammar Study + Training")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundColor(themeVM.chrome.accent)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
-            GrammarStudyButton(adminLog: $adminLog)
-                .padding(.horizontal, 12)
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 12) {
+                    GrammarStudyButton(adminLog: $adminLog)
+                    AdminGrammarPromptPanel(adminLog: $adminLog)
+                    AdminTrainingCatalogPanel(adminLog: $adminLog)
+                    Divider().background(Color.white.opacity(0.15))
                     ForEach(adminLog.indices, id: \.self) { i in
                         Text(adminLog[i]).font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.85)).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                }.padding(12)
+                }.padding(.horizontal, 12).padding(.bottom, 12)
             }
             HStack {
                 TextField("[H] admin chat", text: $adminInput)

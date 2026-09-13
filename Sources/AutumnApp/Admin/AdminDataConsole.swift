@@ -213,3 +213,241 @@ struct GrammarStudyButton: View {
         running = false
     }
 }
+
+// MARK: — Custom grammar prompt (persists like web ASH prompt field)
+
+struct AdminGrammarPromptPanel: View {
+    @Binding var adminLog: [String]
+    @State private var prompt = ""
+    @State private var status = ""
+    @State private var crossRef = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("CUSTOM GRAMMAR PROMPT")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.white.opacity(0.45))
+            TextEditor(text: $prompt)
+                .frame(minHeight: 72, maxHeight: 120)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.white)
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .background(Color.white.opacity(0.06))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.25), lineWidth: 1))
+                .cornerRadius(6)
+            HStack {
+                Button {
+                    Task {
+                        await GrammarStudy.shared.setCustomPrompt(prompt)
+                        status = await GrammarStudy.shared.status()
+                        adminLog.append(status)
+                    }
+                } label: {
+                    Text("SAVE PROMPT")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(hex: "#00e5ff"))
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .background(Color.cyan.opacity(0.08))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.35), lineWidth: 1))
+                }
+                if !status.isEmpty {
+                    Text(status)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.5))
+                        .lineLimit(2)
+                }
+            }
+            Text("CROSS-REF NOTE")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.white.opacity(0.45))
+            TextField("e.g. aerospace ↔ script-reference-types/aerospace", text: $crossRef)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(.white)
+                .padding(8)
+                .background(Color.white.opacity(0.06))
+                .cornerRadius(6)
+            Button {
+                let note = crossRef.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !note.isEmpty else { return }
+                Task {
+                    let ok = await GrammarStudy.shared.appendOptimize(
+                        GrammarOptimizeNote(role: "cross_ref", token: String(note.prefix(24)), pos: "training_xref")
+                    )
+                    let msg = ok
+                        ? "Cross-ref noted in grammar optimize: \(note)"
+                        : "Cross-ref already present or token unsafe."
+                    adminLog.append(msg)
+                    UserDefaults.standard.set(note, forKey: "autumn_admin_training_xref_v1")
+                    crossRef = ""
+                }
+            } label: {
+                Text("ADD CROSS-REF")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "#ffb347"))
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.08))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+            }
+        }
+        .task {
+            prompt = await GrammarStudy.shared.customPrompt
+            crossRef = UserDefaults.standard.string(forKey: "autumn_admin_training_xref_v1") ?? ""
+        }
+    }
+}
+
+// MARK: — leatr-ash training branch catalogs (public raw)
+
+struct AdminTrainingCatalogPanel: View {
+    @Binding var adminLog: [String]
+    @State private var section: Section = .grammarCategories
+    @State private var selectedSlug: String?
+    @State private var catalogPreview = ""
+    @State private var loading = false
+    @State private var error: String?
+
+    enum Section: String, CaseIterable {
+        case grammarCategories = "grammar-categories"
+        case scriptRefs = "script-reference-types"
+        var title: String {
+            switch self {
+            case .grammarCategories: return "GRAMMAR*"
+            case .scriptRefs: return "SCRIPT REFS"
+            }
+        }
+        var pathPrefix: String {
+            switch self {
+            case .grammarCategories: return "grammar-categories"
+            case .scriptRefs: return "script-reference-types"
+            }
+        }
+    }
+
+    /// Curated slug lists from leatr-ash `training` branch (Training/README).
+    private var slugs: [String] {
+        switch section {
+        case .grammarCategories:
+            return [
+                "advertising", "aerospace", "agility", "architecture", "art", "audio",
+                "biology", "business", "chemistry", "economics", "emotion", "empathy",
+                "engineering", "fiction", "film", "gaming", "geology", "law", "llm",
+                "math", "music", "mythology", "nature", "nonfiction", "poetry",
+                "psychology", "science", "security", "sociology", "technology", "travel"
+            ]
+        case .scriptRefs:
+            return [
+                "aerospace", "animation", "apple", "ar", "architecture", "art", "audio", "aviation"
+            ]
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("TRAINING · leatr-ash/training")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.white.opacity(0.45))
+            HStack(spacing: 6) {
+                ForEach(Section.allCases, id: \.rawValue) { s in
+                    Button {
+                        section = s
+                        selectedSlug = nil
+                        catalogPreview = ""
+                        error = nil
+                    } label: {
+                        Text(s.title)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(section == s ? Color(hex: "#00e5ff") : .white.opacity(0.45))
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .background(section == s ? Color.cyan.opacity(0.1) : Color.clear)
+                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.cyan.opacity(section == s ? 0.4 : 0.15), lineWidth: 1))
+                    }
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(slugs, id: \.self) { slug in
+                        Button {
+                            Task { await loadCatalog(slug) }
+                        } label: {
+                            Text(slug)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(selectedSlug == slug ? .black : .white.opacity(0.8))
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(selectedSlug == slug ? Color(hex: "#00e5ff") : Color.white.opacity(0.08))
+                                .cornerRadius(4)
+                        }
+                        .disabled(loading)
+                    }
+                }
+            }
+            if loading {
+                Text("Loading catalog…")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            if let error {
+                Text(error)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(Color(hex: "#ff6688"))
+            }
+            if !catalogPreview.isEmpty {
+                Text(catalogPreview)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.75))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(6)
+            }
+            Text("Catalogs are public refs on branch training — workers seed ≥20 open-license refs per topic.")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.white.opacity(0.35))
+        }
+    }
+
+    private func loadCatalog(_ slug: String) async {
+        loading = true
+        error = nil
+        selectedSlug = slug
+        catalogPreview = ""
+        let urlStr = "\(AutumnConfig.trainingRawBase)/\(section.pathPrefix)/\(slug)/refs/catalog.json"
+        guard let url = URL(string: urlStr) else {
+            error = "Bad catalog URL"
+            loading = false
+            return
+        }
+        do {
+            let (data, resp) = try await URLSession.shared.data(from: url)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            guard code == 200 else {
+                error = "HTTP \(code) for \(slug)"
+                loading = false
+                return
+            }
+            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                error = "Invalid JSON"
+                loading = false
+                return
+            }
+            let meta = obj["_meta"] as? [String: Any] ?? [:]
+            let refs = obj["refs"] as? [[String: Any]] ?? []
+            let topic = meta["topic"] as? String ?? slug
+            let count = meta["ref_count"] as? Int ?? refs.count
+            let sources = (meta["sources"] as? [String])?.joined(separator: ", ") ?? "—"
+            var lines = ["\(topic) · \(count) refs · \(sources)"]
+            for r in refs.prefix(6) {
+                let title = r["title"] as? String ?? "?"
+                let license = r["license"] as? String ?? ""
+                lines.append("• \(title) (\(license))")
+            }
+            if refs.count > 6 { lines.append("… +\(refs.count - 6) more") }
+            catalogPreview = lines.joined(separator: "\n")
+            adminLog.append("Training catalog loaded: \(section.pathPrefix)/\(slug) (\(count) refs)")
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loading = false
+    }
+}

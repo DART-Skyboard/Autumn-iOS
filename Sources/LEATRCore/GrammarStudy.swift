@@ -13,6 +13,21 @@ public struct GrammarStudyIndex: Sendable, Codable {
     public var notes: String
 }
 
+/// Optimize note — port of web `_gsAppendOptimize` chunk notes.
+public struct GrammarOptimizeNote: Sendable, Codable, Equatable {
+    public var role: String
+    public var token: String
+    public var pos: String
+    public var updated: String
+
+    public init(role: String, token: String, pos: String, updated: String = ISO8601DateFormatter().string(from: Date())) {
+        self.role = role
+        self.token = token
+        self.pos = pos
+        self.updated = updated
+    }
+}
+
 public actor GrammarStudy {
     public static let shared = GrammarStudy()
 
@@ -20,10 +35,24 @@ public actor GrammarStudy {
     public private(set) var running = false
     public private(set) var index: GrammarStudyIndex?
     public private(set) var wordRoles: [String: String] = [:]
+    public private(set) var optimizeNotes: [GrammarOptimizeNote] = []
+    public private(set) var customPrompt: String = ""
     public private(set) var lastStatus = "Grammar study — not trained. First run uses the button."
 
     private let persistKey = "autumn_grammar_study_index_v1"
     private let rolesKey = "autumn_grammar_study_roles_v1"
+    private let optimizeKey = "autumn_grammar_study_optimize_v1"
+    private let promptKey = "autumn_grammar_study_custom_prompt_v1"
+
+    private static let slang: Set<String> = [
+        "hi", "hey", "hello", "yo", "sup", "wassup", "yeah", "yep", "nah", "nope",
+        "ok", "okay", "thanks", "ty", "wow", "whoa", "hmm", "huh"
+    ]
+    private static let stop: Set<String> = [
+        "the", "a", "an", "and", "or", "but", "to", "of", "in", "on", "at", "for",
+        "is", "are", "was", "were", "be", "been", "am", "i", "you", "he", "she",
+        "it", "we", "they", "me", "my", "your", "this", "that", "with", "as", "from"
+    ]
 
     public init() {
         if let data = UserDefaults.standard.data(forKey: persistKey),
@@ -35,6 +64,11 @@ public actor GrammarStudy {
            let roles = try? JSONDecoder().decode([String: String].self, from: data) {
             wordRoles = roles
         }
+        if let data = UserDefaults.standard.data(forKey: optimizeKey),
+           let notes = try? JSONDecoder().decode([GrammarOptimizeNote].self, from: data) {
+            optimizeNotes = notes
+        }
+        customPrompt = UserDefaults.standard.string(forKey: promptKey) ?? ""
         if trained {
             lastStatus = "Grammar study trained. File created (ashtree/grammar-study/index.json)."
         }
@@ -44,6 +78,100 @@ public actor GrammarStudy {
     public func isRunning() -> Bool { running }
     public func status() -> String { lastStatus }
     public func role(for word: String) -> String? { wordRoles[word.lowercased()] }
+
+    /// Persist admin custom grammar prompt (web ASH custom prompt field).
+    public func setCustomPrompt(_ text: String) {
+        customPrompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        UserDefaults.standard.set(customPrompt, forKey: promptKey)
+        lastStatus = customPrompt.isEmpty
+            ? "Custom grammar prompt cleared."
+            : "Custom grammar prompt saved (\(customPrompt.count) chars)."
+    }
+
+    /// Append optimize notes — port of `_gsAppendOptimize`. Dedupes by token+role.
+    @discardableResult
+    public func appendOptimize(_ note: GrammarOptimizeNote) -> Bool {
+        let token = safeToken(note.token)
+        guard !token.isEmpty else { return false }
+        if optimizeNotes.contains(where: { $0.token == token && $0.role == note.role }) {
+            return false
+        }
+        var n = note
+        n.token = token
+        optimizeNotes.append(n)
+        if optimizeNotes.count > 400 {
+            optimizeNotes = Array(optimizeNotes.suffix(400))
+        }
+        if wordRoles[token] == nil {
+            wordRoles[token] = note.pos
+        }
+        persistOptimizeAndRoles()
+        return true
+    }
+
+    /// Analyze recent chat sentences for self-optimizations (web `_gsListenTurn` / `_gsAppendOptimize`).
+    /// Public turns only — does not require admin. Returns count of new notes.
+    @discardableResult
+    public func optimizeFromSentences(_ texts: [String], limit: Int = 40) -> Int {
+        var added = 0
+        var notesThisPass = 0
+        for raw in texts.suffix(limit) {
+            let src = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !src.isEmpty else { continue }
+            notesThisPass = 0
+            let tokens = src.lowercased()
+                .split { !$0.isLetter && $0 != "'" && $0 != "-" }
+                .map(String.init)
+                .filter { $0.count >= 2 && $0.count <= 16 }
+            for tok in tokens.prefix(12) {
+                if notesThisPass >= 3 { break }
+                guard let safe = Optional(safeToken(tok)), !safe.isEmpty else { continue }
+                if wordRoles[safe] != nil { continue }
+                if Self.stop.contains(safe) { continue }
+                var role = "pattern"
+                var pos = "pattern"
+                if Self.slang.contains(safe) {
+                    role = "interjection"
+                    pos = "slang_greeting"
+                } else if safe.allSatisfy({ $0.isNumber }) || ["one","two","three","four","five","six","seven","eight","nine","ten","zero"].contains(safe) {
+                    role = "number"
+                    pos = "numeral"
+                } else if safe.count < 4 {
+                    continue
+                }
+                if appendOptimize(GrammarOptimizeNote(role: role, token: safe, pos: pos)) {
+                    added += 1
+                    notesThisPass += 1
+                }
+            }
+            let punct = src.filter { ".?!;:,…—-".contains($0) }
+            if notesThisPass < 3, let p = punct.first {
+                let tok = String(p)
+                if appendOptimize(GrammarOptimizeNote(role: "punctuation", token: tok, pos: "punct")) {
+                    added += 1
+                }
+            }
+        }
+        if added > 0 {
+            lastStatus = "Self-optimize: \(added) linguistic note\(added == 1 ? "" : "s") persisted."
+        } else {
+            lastStatus = "Self-optimize: no new patterns in recent chat."
+        }
+        return added
+    }
+
+    public func packedOptimizePayload() -> [String: Any] {
+        [
+            "id": "chunk-optimize",
+            "role": "optimize",
+            "v": 1,
+            "updated": ISO8601DateFormatter().string(from: Date()),
+            "notes": optimizeNotes.map {
+                ["role": $0.role, "token": $0.token, "pos": $0.pos, "updated": $0.updated] as [String: String]
+            },
+            "platform": "ios"
+        ]
+    }
 
     /// Chunked self-talk dictionary train. Never loops. Never mixes users.
     public func run(onProgress: @Sendable (String) -> Void = { _ in }) async throws {
@@ -133,8 +261,30 @@ public actor GrammarStudy {
             "sections": index?.sections ?? [],
             "wordRoleCount": index?.wordRoleCount ?? 0,
             "notes": index?.notes ?? "",
+            "optimizeCount": optimizeNotes.count,
+            "customPromptChars": customPrompt.count,
             "platform": "ios"
         ]
+    }
+
+    private func persistOptimizeAndRoles() {
+        if let data = try? JSONEncoder().encode(optimizeNotes) {
+            UserDefaults.standard.set(data, forKey: optimizeKey)
+        }
+        if let data = try? JSONEncoder().encode(wordRoles) {
+            UserDefaults.standard.set(data, forKey: rolesKey)
+        }
+    }
+
+    private func safeToken(_ raw: String) -> String {
+        let t = raw.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .filter { $0.isLetter || $0.isNumber || ".'-…?!;:,—".contains($0) }
+        if t.count > 24 { return "" }
+        // PII-ish: emails / long digits
+        if t.contains("@") { return "" }
+        if t.filter(\.isNumber).count >= 7 { return "" }
+        return t
     }
 
     private func yield() async throws {

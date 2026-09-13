@@ -1,4 +1,5 @@
 import Foundation
+import LEATRCore
 
 // MARK: — UserVaultService
 // Shared vault service used by both Autumn and ArcLake.
@@ -11,6 +12,7 @@ import Foundation
 //     memory/         — Autumn chat memory chunks
 //     projects/       — Autumn projects
 //     exports/        — Autumn exports
+//     ash-shard/      — Autumn LEATR/grammar backup shards
 //     ArcLake/        — ArcLake subfolder
 //       models/       — exported GLB / 3D model files
 //       sessions/     — saved molecular sessions
@@ -92,7 +94,8 @@ public actor UserVaultService {
         return text
     }
 
-    public func saveMemorySnapshot(username: String, json: String) async {
+    @discardableResult
+    public func saveMemorySnapshot(username: String, json: String) async -> Bool {
         await write(folder: .memory, filename: "chunk_001.json", content: json, githubUsername: username)
     }
 
@@ -129,29 +132,45 @@ public actor UserVaultService {
     }
 
     // MARK: — Write (iCloud + GitHub mirror)
+    @discardableResult
     public func write(
         folder: VaultFolder,
         filename: String,
         content: String,
         githubUsername: String? = nil
-    ) async {
+    ) async -> Bool {
+        var wroteLocal = false
         if let root = _vaultURL {
             let url = root
                 .appendingPathComponent(folder.path)
                 .appendingPathComponent(filename)
-            try? content.write(to: url, atomically: true, encoding: .utf8)
+            do {
+                try content.write(to: url, atomically: true, encoding: .utf8)
+                wroteLocal = true
+            } catch {
+                print("[UserVault] local write failed: \(error)")
+            }
         }
+        var wroteRemote = false
         if let gh = githubUsername, !gh.isEmpty {
             let repo = Self.repoName(for: gh)
             let path = "\(folder.path)/\(filename)"
             let sha = (try? await github.readFile(
                 owner: gh, repo: repo, path: path))?.sha
-            try? await github.writeFile(
-                owner: gh, repo: repo,
-                path: path, content: content,
-                message: "sync: \(filename)", sha: sha
-            )
+            do {
+                try await github.writeFile(
+                    owner: gh, repo: repo,
+                    path: path, content: content,
+                    message: "sync: \(filename)", sha: sha
+                )
+                wroteRemote = true
+            } catch {
+                print("[UserVault] GitHub write failed: \(error)")
+            }
         }
+        // Success if we mirrored to GitHub, or at least wrote locally when no GH user.
+        if let gh = githubUsername, !gh.isEmpty { return wroteRemote || wroteLocal }
+        return wroteLocal
     }
 
     // MARK: — Write Data (for binary files like GLB exports)
@@ -223,22 +242,58 @@ public enum VaultFolder: String, CaseIterable {
 }
 
 
-/// Web `_autosave` / `_ensureUserRepo` — snapshot into Autumn-Ash-{username}.
+/// Web `_autosave` / `_ensureUserRepo` / `_ghAutosaveNow` — snapshot into Autumn-Ash-{username},
+/// plus Autumn LEATR backup + grammar self-optimize (one-shot Save Data).
 public enum AutumnMemorySync {
+    public enum SaveError: LocalizedError {
+        case notSignedIn
+        case invalidPayload
+        case vaultWriteFailed
+
+        public var errorDescription: String? {
+            switch self {
+            case .notSignedIn:
+                return "Connect GitHub to save data to Autumn-Ash-{username}."
+            case .invalidPayload:
+                return "Could not build memory snapshot."
+            case .vaultWriteFailed:
+                return "Vault write failed — check GitHub connection and try again."
+            }
+        }
+    }
+
+    /// Legacy entry — returns status string for UI toasts.
     @MainActor
-    public static func saveNow(username: String, sessionUID: String, messages: [ChatMessage] = []) async {
+    @discardableResult
+    public static func saveNow(username: String, sessionUID: String, messages: [ChatMessage] = []) async -> Result<String, Error> {
+        await saveAllNow(username: username, sessionUID: sessionUID, messages: messages)
+    }
+
+    /// One-shot Save Data pipeline (match web intent):
+    /// 1) User vault/memory snapshot → Autumn-Ash-{username}
+    /// 2) Backup Autumn LEATR / grammar-study / optimize notes (local vault + GAS ashwrite best-effort)
+    /// 3) Analyze recent chat sentences for self-optimizations (no admin required)
+    @MainActor
+    @discardableResult
+    public static func saveAllNow(username: String, sessionUID: String, messages: [ChatMessage] = []) async -> Result<String, Error> {
         let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !user.isEmpty,
               user.lowercased() != "guest",
               !user.hasPrefix("ios-"),
-              !user.hasPrefix("apple-") else { return }
+              !user.hasPrefix("apple-") else {
+            return .failure(SaveError.notSignedIn)
+        }
+
         await UserVaultService.shared.setup(githubUsername: user)
+
+        // ── 1) User memory snapshot (web `_autosave` / `_ghAutosaveNow`) ──
         let publicMsgs = messages.filter { !$0.isInternal }.suffix(200)
         let payload: [String: Any] = [
             "version": "2.1",
             "username": user,
             "saved": ISO8601DateFormatter().string(from: Date()),
             "platform": "ios",
+            "manual_save": true,
             "sid": sessionUID,
             "sessions": [[
                 "id": sessionUID,
@@ -247,7 +302,95 @@ public enum AutumnMemorySync {
         ]
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload),
-              let json = String(data: data, encoding: .utf8) else { return }
-        await UserVaultService.shared.saveMemorySnapshot(username: user, json: json)
+              let json = String(data: data, encoding: .utf8) else {
+            return .failure(SaveError.invalidPayload)
+        }
+        let vaultOK = await UserVaultService.shared.saveMemorySnapshot(username: user, json: json)
+        guard vaultOK else {
+            return .failure(SaveError.vaultWriteFailed)
+        }
+
+        // ── 3) Self-optimize from recent user sentences (before packing backup) ──
+        let userTexts = messages
+            .filter { !$0.isInternal && $0.role == .user }
+            .map(\.content)
+        let optimizeCount = await GrammarStudy.shared.optimizeFromSentences(userTexts)
+
+        // ── 2) Autumn LEATR / grammar-study / optimize backup ──
+        let study = await GrammarStudy.shared.packedPayload()
+        let optimize = await GrammarStudy.shared.packedOptimizePayload()
+        let stamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let autumnBackup: [String: Any] = [
+            "version": "1.0",
+            "kind": "autumn_leatr_backup",
+            "saved": ISO8601DateFormatter().string(from: Date()),
+            "platform": "ios",
+            "sid": sessionUID,
+            "username": user,
+            "grammarStudy": study,
+            "optimize": optimize,
+            "selfmodel": [
+                "notes": "iOS Save Data backup of Autumn LEATR/grammar-study state.",
+                "optimizeCount": optimizeCount,
+                "updated": ISO8601DateFormatter().string(from: Date())
+            ] as [String: Any]
+        ]
+        if JSONSerialization.isValidJSONObject(autumnBackup),
+           let bakData = try? JSONSerialization.data(withJSONObject: autumnBackup, options: [.sortedKeys]),
+           let bakJSON = String(data: bakData, encoding: .utf8) {
+            _ = await UserVaultService.shared.write(
+                folder: .shard,
+                filename: "autumn-backup-\(stamp).json",
+                content: bakJSON,
+                githubUsername: user
+            )
+            _ = await UserVaultService.shared.write(
+                folder: .shard,
+                filename: "autumn-leatr-latest.json",
+                content: bakJSON,
+                githubUsername: user
+            )
+        }
+
+        // Best-effort ashwrite to leatr-ash (same paths web uses). May no-op without circuit/PAT proxy.
+        var ashBits: [String] = []
+        let studyOK = await AutumnGASClient.shared.ashwriteReplace(
+            path: AutumnConfig.grammarStudyPath,
+            uid: user,
+            payload: study,
+            message: "grammar study: ios save-data backup"
+        )
+        if studyOK { ashBits.append("grammar-study") }
+        let optOK = await AutumnGASClient.shared.ashwriteReplace(
+            path: AutumnConfig.grammarOptimizePath,
+            uid: user,
+            payload: optimize,
+            message: "grammar study: ios optimize notes"
+        )
+        if optOK { ashBits.append("optimize") }
+        let selfOK = await AutumnGASClient.shared.ashwriteReplace(
+            path: AutumnConfig.selfModelPath,
+            uid: user,
+            payload: [
+                "platform": "ios",
+                "updated": ISO8601DateFormatter().string(from: Date()),
+                "optimizeCount": optimizeCount,
+                "sid": sessionUID
+            ] as [String: Any],
+            message: "sentient: ios selfmodel save-data"
+        )
+        if selfOK { ashBits.append("selfmodel") }
+
+        var parts = ["Data saved"]
+        if optimizeCount > 0 {
+            parts.append("\(optimizeCount) self-optimize note\(optimizeCount == 1 ? "" : "s")")
+        }
+        if !ashBits.isEmpty {
+            parts.append("ash:\(ashBits.joined(separator: "+"))")
+        } else {
+            parts.append("Autumn backup in vault")
+        }
+        return .success(parts.joined(separator: " · "))
     }
 }

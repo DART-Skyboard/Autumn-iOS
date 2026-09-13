@@ -93,8 +93,13 @@ public final class ChatViewModel: ObservableObject {
         let isSync = lc.range(of: #"\b(backup|back up|sync memory|sync memories|sync all|sync everything|sync my memory|sync the memory|memory sync|commit memory|archive memory|save memory|save data|save all|save to github|sync to github|force save|push memory|push to github)\b"#, options: .regularExpression) != nil
         if isSync {
             isThinking = true
-            await AutumnMemorySync.saveNow(username: memoryOwner, sessionUID: sessionSID, messages: messages)
-            messages.append(ChatMessage(role: .assistant, content: "Memory archive synced to your Autumn-Ash vault."))
+            let save = await AutumnMemorySync.saveAllNow(username: memoryOwner, sessionUID: sessionSID, messages: messages)
+            switch save {
+            case .success(let msg):
+                messages.append(ChatMessage(role: .assistant, content: msg))
+            case .failure(let err):
+                messages.append(ChatMessage(role: .assistant, content: "Save failed: \(err.localizedDescription)"))
+            }
             isThinking = false
             sentienceState = .idle
             return

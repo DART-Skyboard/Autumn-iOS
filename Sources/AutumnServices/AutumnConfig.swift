@@ -24,6 +24,8 @@ public enum AutumnConfig {
     public static let mailboxFolders = ["inbox", "analysis", "read", "trash"]
 
     public static let journalPath = "ashtree/sentient/journal.json"
+    public static let schedulePath = "ashtree/sentient/scheduled.json"
+    public static let selfModelPath = "ashtree/sentient/selfmodel.json"
     public static let sessionsPrefix = "ashtree/sessions/"
 
     /// Admin gate — matches web `_autAdminAllowed` (dartsolarpunk only).
@@ -37,8 +39,12 @@ public enum AutumnConfig {
     public static let aclPath = "admin/acl.json"
     public static let usersPrefix = "ashtree/users"
     public static let grammarStudyPath = "ashtree/grammar-study/index.json"
+    public static let grammarOptimizePath = "ashtree/grammar-study/chunk-optimize.json"
+
+    /// Public raw base for leatr-ash `training` branch catalogs (no auth).
+    public static let trainingRawBase =
+        "https://raw.githubusercontent.com/DART-Skyboard/leatr-ash/training/Training"
 
     /// Public Movement quote proxy already published on movement-conjecture.html (not a secret).
     public static let movementQuoteGAS = "https://script.google.com/macros/s/AKfycbwTBiGJ3YTibAGAsrC5sZMuQO-PqY0yK8gmmc7zvp1zXnaWQJvaZoRFCi2xLiI7QgSwfA/exec"
 }
-

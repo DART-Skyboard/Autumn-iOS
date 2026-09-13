@@ -12,6 +12,13 @@ public struct ProfileSheet: View {
     @EnvironmentObject var circuit: AdminCircuitMonitor
     @EnvironmentObject var chatVM: ChatViewModel
     @StateObject private var tint = AvatarTintSampler()
+    @State private var saveBusy = false
+    @State private var saveBanner: SaveBanner?
+
+    private struct SaveBanner: Equatable {
+        let text: String
+        let ok: Bool
+    }
 
     public var body: some View {
         let chrome = themeVM.chrome
@@ -92,16 +99,26 @@ public struct ProfileSheet: View {
                 }
 
                 Button {
-                    Task {
-                        await AutumnMemorySync.saveNow(
-                            username: authVM.githubUsername,
-                            sessionUID: authVM.sessionUID,
-                            messages: chatVM.messages
-                        )
-                    }
+                    Task { await runSaveData() }
                 } label: {
-                    labelRow(authVM.githubConnected ? "⬡ SAVE DATA" : "⬡ SAVE DATA (CONNECT GITHUB)")
+                    labelRow(saveBusy
+                             ? "⬡ SAVING…"
+                             : (authVM.githubConnected ? "⬡ SAVE DATA" : "⬡ SAVE DATA (CONNECT GITHUB)"))
                 }
+                .disabled(saveBusy)
+                .opacity(saveBusy ? 0.55 : 1)
+
+                if let banner = saveBanner {
+                    Text(banner.text)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundColor(banner.ok ? Color(hex: "#00ff88") : Color(hex: "#ff6688"))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background((banner.ok ? Color.green : Color.red).opacity(0.12))
+                        .accessibilityLabel(banner.ok ? "Save success" : "Save error")
+                }
+
                 Button { appNav.showFeedback = true; appNav.showProfile = false } label: {
                     labelRow("◇ SUBMIT FEEDBACK")
                 }
@@ -158,6 +175,24 @@ public struct ProfileSheet: View {
         .onChange(of: authVM.githubAvatarURL) { u in tint.sample(url: u) }
     }
 
+    private func runSaveData() async {
+        guard !saveBusy else { return }
+        saveBusy = true
+        saveBanner = SaveBanner(text: "Saving… vault + Autumn backup + optimize", ok: true)
+        let result = await AutumnMemorySync.saveAllNow(
+            username: authVM.githubUsername,
+            sessionUID: authVM.sessionUID,
+            messages: chatVM.messages
+        )
+        switch result {
+        case .success(let msg):
+            saveBanner = SaveBanner(text: msg, ok: true)
+        case .failure(let err):
+            saveBanner = SaveBanner(text: err.localizedDescription, ok: false)
+        }
+        saveBusy = false
+    }
+
     private func row(_ k: String, _ v: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
@@ -211,4 +246,3 @@ struct GitHubAvatarView: View {
             .foregroundColor(accent)
     }
 }
-
