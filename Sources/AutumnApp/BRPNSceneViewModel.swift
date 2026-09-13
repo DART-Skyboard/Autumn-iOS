@@ -47,6 +47,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     private var coreNode: SCNNode!
     private var mazeOrbGroup: SCNNode!
     private var particleNodes: [SCNNode] = []
+    /// Remote buoyancy orbs keyed by session id (sid) — web `_sessionGroups`.
     private var sessionGroupNodes: [String: SCNNode] = [:]
     private var splineGroup: SCNNode?
     private var splineSamples: [[SCNVector3]] = []
@@ -385,7 +386,7 @@ public final class BRPNSceneViewModel: ObservableObject {
 
     public func applyNodeCap() {
         while sessionGroupNodes.count > max(1, mantisNodeMax) {
-            if let k = sessionOrder.first { removeRemoteNode(uid: k) } else { break }
+            if let k = sessionOrder.first { removeRemoteNode(sid: k) } else { break }
         }
         applyLiveFeedVisibility()
     }
@@ -401,10 +402,12 @@ public final class BRPNSceneViewModel: ObservableObject {
         }
     }
 
-    public func addRemoteNode(uid: String, emotion: String = "neutral") {
-        if uid == localUid || uid == localSid { return }
-        if sessionGroupNodes[uid] != nil { return }
-        // Node-cap HUD: drop oldest live orbs so weaker devices stay fluid.
+    /// Web `_makeSessionGroup` — keyed by session id (sid), never by account uid alone.
+    /// `uid` is optional label/metadata (color hash); skip only this device's localSid.
+    public func addRemoteNode(sid: String, uid: String = "", emotion: String = "neutral") {
+        if sid.isEmpty || sid == localSid { return }
+        if sessionGroupNodes[sid] != nil { return }
+        // Node-cap HUD: drop oldest live orbs so weaker devices stay fluid (per session node).
         while sessionGroupNodes.count >= max(1, mantisNodeMax) {
             let k = sessionOrder.first ?? sessionGroupNodes.keys.first
             if let k {
@@ -414,9 +417,10 @@ public final class BRPNSceneViewModel: ObservableObject {
                 activeNodes = max(1, activeNodes - 1)
             } else { break }
         }
-        let pos = nodeBasePosition(uid: uid)
-        let group = SCNNode(); group.name = "session_\(uid)"
-        let colors = uidShellColors(uid: uid)
+        let pos = nodeBasePosition(uid: sid)
+        let group = SCNNode(); group.name = "session_\(sid)"
+        let colorKey = uid.isEmpty ? sid : uid
+        let colors = uidShellColors(uid: colorKey)
         let miniR: [Float] = [1.9 * 0.28, 1.4 * 0.28, 0.9 * 0.28]
         for (i, r) in miniR.enumerated() {
             let geo = ThreeJSGeometry.icosahedron(radius: r, detail: 1)
@@ -429,15 +433,20 @@ public final class BRPNSceneViewModel: ObservableObject {
         group.position = SCNVector3(pos.x, pos.y, pos.z)
         group.isHidden = !liveFeedEnabled
         scene.rootNode.addChildNode(group)
-        sessionGroupNodes[uid] = group
-        sessionOrder.append(uid)
+        sessionGroupNodes[sid] = group
+        sessionOrder.append(sid)
         if liveFeedEnabled { activeNodes += 1 }
     }
 
-    private func removeRemoteNode(uid: String) {
-        sessionGroupNodes[uid]?.removeFromParentNode()
-        sessionGroupNodes.removeValue(forKey: uid)
-        sessionOrder.removeAll { $0 == uid }
+    /// Compatibility: GameKit callers historically passed session id as `uid`.
+    public func addRemoteNode(uid: String, emotion: String = "neutral") {
+        addRemoteNode(sid: uid, uid: "", emotion: emotion)
+    }
+
+    private func removeRemoteNode(sid: String) {
+        sessionGroupNodes[sid]?.removeFromParentNode()
+        sessionGroupNodes.removeValue(forKey: sid)
+        sessionOrder.removeAll { $0 == sid }
         activeNodes = max(1, liveFeedEnabled ? 1 + sessionGroupNodes.count : 1)
     }
 
@@ -631,21 +640,22 @@ public final class BRPNSceneViewModel: ObservableObject {
         MISTModule.shared.bindIdentity(uid: localUid, sid: localSid)
         await MISTModule.shared.refresh()
         let signals = MISTModule.shared.activeSignals
-        let live = Set(signals.map(\.uid).filter { $0 != localUid && $0 != localSid })
-        for uid in Array(sessionOrder) where !live.contains(uid) {
-            removeRemoteNode(uid: uid)
+        // Signal.id is session sid (web node key). Keep other sessions sharing localUid.
+        let live = Set(signals.map(\.id).filter { $0 != localSid })
+        for sid in Array(sessionOrder) where !live.contains(sid) {
+            removeRemoteNode(sid: sid)
         }
         if liveFeedEnabled {
             for sig in signals {
-                if sig.uid == localUid || sig.uid == localSid { continue }
-                if sessionGroupNodes[sig.uid] == nil {
-                    addRemoteNode(uid: sig.uid, emotion: sig.isAsh ? "inspiring" : "neutral")
+                if sig.id == localSid { continue }
+                if sessionGroupNodes[sig.id] == nil {
+                    addRemoteNode(sid: sig.id, uid: sig.uid, emotion: sig.isAsh ? "inspiring" : "neutral")
                 } else {
-                    sessionGroupNodes[sig.uid]?.isHidden = false
+                    sessionGroupNodes[sig.id]?.isHidden = false
                 }
             }
             while sessionGroupNodes.count > max(1, mantisNodeMax) {
-                if let k = sessionOrder.first { removeRemoteNode(uid: k) } else { break }
+                if let k = sessionOrder.first { removeRemoteNode(sid: k) } else { break }
             }
         } else {
             for n in sessionGroupNodes.values { n.isHidden = true }

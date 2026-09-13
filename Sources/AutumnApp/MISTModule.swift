@@ -20,7 +20,9 @@ public final class MISTModule: ObservableObject {
     private var timer: Timer?
 
     public struct MISTSignal: Identifiable {
+        /// Session node id (sid preferred) — matches web `_sessionGroups` key.
         public let id: String
+        /// Device / account uid (GitHub username etc.) — label/color metadata, not the node key.
         public var uid: String
         public var position: SIMD3<Float>
         public var intensity: Float
@@ -79,19 +81,18 @@ public final class MISTModule: ObservableObject {
         let now = Date().timeIntervalSince1970 * 1000
         let sessionStale: Double = 6 * 60 * 1000 // web STALE_MS
         let fresh = collected.filter { now - ($0.timestamp.timeIntervalSince1970 * 1000) < sessionStale }
+        // Web: one buoyancy node per session (sid). Never collapse by uid —
+        // same GitHub user on Chrome + Firefox + iOS must each appear.
+        // Skip only this device session (localSid), not every session sharing localUid.
         var seen: [String: MISTSignal] = [:]
         for s in fresh {
-            if isLocal(s.uid) { continue }
-            seen[s.uid] = s
+            if s.id == localSid { continue }
+            seen[s.id] = s
         }
         activeSignals = Array(seen.values)
     }
 
-    private func isLocal(_ id: String) -> Bool {
-        id == localUid || id == localSid
-    }
-
-    /// Web session row: `{ sid, uid, ts }` — skip rows with no identity (do not mint UUIDs).
+    /// Web session row: `{ sid, uid, ts }` — node id is sid (session), uid kept as label/metadata.
     private func parseSessionRows(_ rows: [[String: Any]]) -> [MISTSignal] {
         let now = Date()
         return rows.compactMap { node in
@@ -107,10 +108,11 @@ public final class MISTModule: ObservableObject {
             else if let t = node["ts"] as? String, let d = ISO8601DateFormatter().date(from: t) {
                 tsMs = d.timeIntervalSince1970 * 1000
             }
-            let isAsh = nodeId.lowercased() == "autumn" || uid.lowercased() == "autumn" || (node["type"] as? String) == "ash"
+            let deviceUid = uid.isEmpty ? nodeId : uid
+            let isAsh = nodeId.lowercased() == "autumn" || deviceUid.lowercased() == "autumn" || (node["type"] as? String) == "ash"
             return MISTSignal(
                 id: nodeId,
-                uid: nodeId,
+                uid: deviceUid,
                 position: SIMD3<Float>(0, 0, 0),
                 intensity: 1,
                 timestamp: Date(timeIntervalSince1970: tsMs / 1000),
