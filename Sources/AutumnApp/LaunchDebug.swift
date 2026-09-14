@@ -29,12 +29,19 @@ enum LaunchDebug {
             d.set(previous, forKey: lastKey)
         }
         d.set([String](), forKey: liveKey)
-        d.synchronize()
     }
 
-    /// Append a checkpoint. Safe to call from a View's `body` — it only touches
-    /// UserDefaults, never anything `@Published`/`@State`, so it cannot itself feed
-    /// back into SwiftUI's dependency graph or mask/cause a re-render loop.
+    /// Append a checkpoint. `.set()` here is an in-memory cache update — UserDefaults
+    /// batches the actual disk/XPC write-back on its own schedule, which is virtually
+    /// instant. `.synchronize()` (removed here — TF99) is what made this NOT safe to
+    /// call from a View's `body`: it forces a synchronous wait for a reply from another
+    /// process (cfprefsd) on every call. That's exactly what the build 98 crash log
+    /// showed — `NSUserDefaults setObject:forKey:` blocked on
+    /// `xpc_connection_send_message_with_reply_sync`, called directly from inside a
+    /// SwiftUI body evaluation. SwiftUI can invoke `body` many times during normal
+    /// layout settling; each call paying a blocking IPC round-trip is more than enough
+    /// on its own to trip the 10-20s scene-create watchdog. This diagnostic tool was
+    /// masking (or possibly *was*) the very hang it was added to find.
     static func mark(_ label: String) {
         let d = UserDefaults.standard
         var trace = (d.array(forKey: liveKey) as? [String]) ?? []
@@ -47,7 +54,6 @@ enum LaunchDebug {
             trace.removeFirst(trace.count - maxEntries)
         }
         d.set(trace, forKey: liveKey)
-        d.synchronize()
     }
 
     /// The previous session's trace (captured by `snapshotAndReset()` at this

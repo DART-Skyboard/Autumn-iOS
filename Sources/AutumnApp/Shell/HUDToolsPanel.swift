@@ -26,7 +26,6 @@ struct HUDToolsPanel: View {
     @EnvironmentObject var authVM: AuthViewModel
 
     var body: some View {
-        LaunchDebug.mark("HUDToolsPanel.body")
         let chrome = themeVM.chrome
         return VStack(alignment: .leading, spacing: 6) {
             Text("TOOLS")

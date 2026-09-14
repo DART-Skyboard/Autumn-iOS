@@ -2,9 +2,37 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 98 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 99 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 99 — the diagnostic tool was the bug
+
+Build 98's crash log (fully clean rebuild off TF89, `AskAutumnComposer` entirely
+removed) hit the identical `0x8BADF00D scene-create watchdog` — and this time, with
+thermal state "nominal" (best possible) and no composer subsystem left to blame, the
+backtrace was completely unambiguous: `-[NSUserDefaults setObject:forKey:]` blocked on
+`xpc_connection_send_message_with_reply_sync`, called *directly from inside a SwiftUI
+body evaluation*.
+
+That's `LaunchDebug.mark()` — the TF96 diagnostic tool added to find this exact class of
+hang. `mark()` called `UserDefaults.synchronize()` on every invocation, and it was
+invoked from the very top of five different views' `body` (`RootView`, `WelcomeView`,
+`AppShellView`, `BRPNSceneView`, `HUDToolsPanel`). `.synchronize()` forces a *synchronous*
+wait for a reply from another process (`cfprefsd`) — completely different from a plain
+`.set()`, which is just an in-memory cache update that iOS flushes to disk on its own
+schedule. SwiftUI can (and does, especially during initial layout settling) call `body`
+many times in quick succession; each of those calls paying a blocking cross-process IPC
+round-trip is more than sufficient, on its own, to trip a 10-20 second watchdog. The tool
+built to find the hang had itself become indistinguishable from one.
+
+Fixed: removed `.synchronize()` from `LaunchDebug` entirely, and removed the `mark()`
+calls from all five view bodies (kept only the two one-time marks in `AutumnApp.init()`,
+which run once per launch, not per render — no hazard there). This doesn't retroactively
+prove what builds 90-97's *original* crash was — that investigation (the
+`@Published`-during-render / deferred-notification fix from build 97) stands on its own
+merits from a real, independently-reasoned crash log — but it does mean build 99 is the
+first build since 91 that isn't fighting its own instrumentation.
 
 ## Build 98 — clean rebuild off TF89, minus the AskAutumnComposer subsystem
 
