@@ -14,7 +14,6 @@ public struct WelcomeView: View {
     @State private var revealControls = false
 
     public var body: some View {
-        LaunchDebug.mark("WelcomeView.body")
         return ZStack {
             LinearGradient(
                 colors: [

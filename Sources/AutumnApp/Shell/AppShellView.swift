@@ -20,7 +20,6 @@ public struct AppShellView: View {
     @State private var keyboardHeight: CGFloat = 0
 
     public var body: some View {
-        LaunchDebug.mark("AppShellView.body")
         return GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
             ZStack {

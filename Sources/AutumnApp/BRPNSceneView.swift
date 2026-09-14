@@ -16,7 +16,6 @@ public struct BRPNSceneView: View {
     ]
 
     public var body: some View {
-        LaunchDebug.mark("BRPNSceneView.body")
         return ZStack {
             // JS: renderer.setClearColor(0x000000, 0) — scene is transparent
             BRPNSceneKitView(vm: sceneVM)
