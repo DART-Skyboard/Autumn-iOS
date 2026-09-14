@@ -10,6 +10,14 @@ public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @Namespace private var bottomID
+    /// Set by AppShellView's landscape pane, which is narrower than the portrait chat
+    /// column — the input bar buttons need to tighten up there to leave the composer
+    /// enough width to actually see what you're typing. Same buttons, same shapes,
+    /// just closer together and left-grouped; reverts automatically in portrait since
+    /// this is passed in fresh from AppShellView's own landscape/portrait branch.
+    public var compact: Bool = false
+
+    public init(compact: Bool = false) { self.compact = compact }
 
     public var body: some View {
         ZStack {
@@ -32,14 +40,21 @@ public struct ChatView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                     }
-                    .scrollDismissesKeyboard(.interactively)
+                    // TF94: .interactively drags the keyboard with the finger via a live
+                    // UIScrollView interaction; combined with AskAutumnComposer's custom
+                    // UIKit first-responder, that interaction could end mid-drag and leave
+                    // the keyboard's tracking state stuck, blocking the next tap from
+                    // reopening it in portrait until the view was torn down by rotating.
+                    // .immediately dismisses on scroll start instead — no live tracking to
+                    // get stuck — and still gives the same "scroll to dismiss" UX.
+                    .scrollDismissesKeyboard(.immediately)
                     .onChange(of: chatVM.messages.count) { newValue in
                         withAnimation { proxy.scrollTo(bottomID) }
                     }
                 }
 
                 // MARK: — Input bar
-                InputBar()
+                InputBar(compact: compact)
             }
         }
     }
@@ -188,6 +203,7 @@ struct ThinkingIndicator: View {
 
 // MARK: — Input Bar
 struct InputBar: View {
+    var compact: Bool = false
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
@@ -203,27 +219,36 @@ struct InputBar: View {
     }
 
     var body: some View {
+        // TF94: in landscape the chat pane is narrower than portrait's full-width bar, so
+        // the same 4 buttons + 8pt spacing ate proportionally more of the row, leaving the
+        // composer cramped. `compact` tightens spacing and shrinks the 3 leading buttons
+        // (same icons/shapes, smaller) so they sit as a tight left-hand group, giving the
+        // composer the reclaimed width; send stays pinned right. This is keyed off the
+        // `compact` flag AppShellView passes for its landscape pane only, so portrait's
+        // layout (and rotating back to it) is untouched — nothing here is a fixed override.
+        let btn: CGFloat = compact ? 30 : 36
+        let leadingSpacing: CGFloat = compact ? 4 : 8
         VStack(spacing: 0) {
         PendingAttachmentStrip()
         // Keyboard collapse lives ONLY on ToolbarItemGroup(placement: .keyboard) —
         // do not float a chevron chip above Ask Autumn when focused without a real keyboard (TF81).
-        HStack(spacing: 8) {
+        HStack(spacing: leadingSpacing) {
             Button {
                 chatVM.toggleListening()
             } label: {
                 Image(systemName: chatVM.isListening ? "mic.fill" : "mic")
                     .foregroundColor(chatVM.isListening ? .red : themeVM.current.accent)
-                    .frame(width: 36, height: 36)
+                    .frame(width: btn, height: btn)
                     .background(themeVM.current.surface)
-                    .cornerRadius(18)
+                    .cornerRadius(btn / 2)
             }
 
             Button { showAttachMenu = true } label: {
                 Image(systemName: "paperclip")
                     .foregroundColor(themeVM.current.accent)
-                    .frame(width: 36, height: 36)
+                    .frame(width: btn, height: btn)
                     .background(themeVM.current.surface)
-                    .cornerRadius(18)
+                    .cornerRadius(btn / 2)
             }
             .accessibilityLabel("Attach")
 
@@ -231,9 +256,9 @@ struct InputBar: View {
                 Text("fx")
                     .font(.system(size: 13, weight: .bold, design: .serif)).italic()
                     .foregroundColor(themeVM.current.accent)
-                    .frame(width: 36, height: 36)
+                    .frame(width: btn, height: btn)
                     .background(themeVM.current.surface)
-                    .cornerRadius(18)
+                    .cornerRadius(btn / 2)
             }
             .accessibilityLabel("Math Solver")
 
@@ -251,6 +276,7 @@ struct InputBar: View {
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
             )
+            .layoutPriority(1)
 
             Button {
                 Task { await chatVM.send() }
@@ -260,6 +286,7 @@ struct InputBar: View {
                     .foregroundColor(canSend ? themeVM.current.accent : themeVM.current.textSecondary)
             }
             .disabled(!canSend || chatVM.isThinking)
+            .padding(.leading, compact ? 4 : 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

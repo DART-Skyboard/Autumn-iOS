@@ -2,10 +2,48 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 59 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 94 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
 
+## Build 94
+
+TF89 was the last build Justin tested as stable; TF90 added the iOS admin console +
+UIKit `AskAutumnComposer` keyboard rework, TF91/92 chased a black-screen + keyboard bug
+introduced by that rework. This build finishes that fix (root cause found, not just
+patched around) and does the four follow-on items from testing TF89/91/92 on-device.
+
+1. **Keyboard (root cause, not just TF92's symptom patch):** `AskAutumnTextView` had a
+   `touchesBegan` override manually calling `becomeFirstResponder()`. That raced UITextView's
+   own internal tap-to-edit gesture recognizer — the first tap after mount won the race, but
+   any resign after that (send, the accessory hide button, or an interactive scroll dismiss)
+   left the manual call silently losing the race on the next tap, reproducing exactly as
+   reported: works once, then dead until the view is torn down and rebuilt by rotating.
+   Removed the override — UITextView already becomes first responder on tap natively.
+   Also switched `ChatView`'s `.scrollDismissesKeyboard` from `.interactively` to
+   `.immediately`; the interactive drag-to-dismiss can leave its own tracking state stuck
+   for the same class of reason. TF92's zero-keyboard-frame and composer-recursion fixes
+   are kept — they were correct fixes for real bugs, just not the one causing this symptom.
+2. **LaTeX Canvas dynamic resize:** was a fixed `.frame(maxWidth: 620)` card with no
+   orientation awareness, unlike the other studios. Alongside Math Solver in landscape it
+   squeezed the "LATEX CANVAS" title into a column too narrow to lay out, wrapping it
+   letter-by-letter. Now sized off `GeometryReader` (matches the `StudioHostView` pattern)
+   with a squeeze-resistant title.
+3. **Landscape prompt bar:** `InputBar` takes a `compact` flag (set by `AppShellView` for
+   its landscape pane only). Mic/attach/fx shrink slightly and sit tighter together on the
+   left, composer gets the reclaimed width, send stays pinned right. Same icons, same
+   shapes — just tighter. Portrait is untouched and unaffected by rotation back.
+4. **ARIEL theme HUD Tools submenu legibility:** submenu row labels used the raw theme
+   accent (`#c4a36a`, sand) which nearly matches the ARIEL desert video behind the frosted
+   panel. Added `AutumnTheme.overlayLabelAccent` — lightened for ARIEL only (`#e9dcc6`),
+   identical to `.accent` for every other theme — and pointed `HUDToolsPanel` row labels at
+   it. The HUD Tools tab button itself (cyan) was already fine and is untouched.
+5. **Admin console:** already substantially built in TF90 (DATA/ASH/MESSAGES tabs, roles,
+   mailbox, ASH grammar training) and already gated purely off iOS GitHub sign-in identity
+   (`dartsolarpunk`) with no web-circuit dependency — reviewed for stubs, found none.
+6. **TTS voice quality:** TF91's `Self.qualityRank` static-call fix confirmed correct and
+   unchanged — `bestVoice()` prefers premium/enhanced neural voices (Zoe → Nicky → Samantha
+   → Allison) and falls back gracefully.
 
 ## Build 59
 

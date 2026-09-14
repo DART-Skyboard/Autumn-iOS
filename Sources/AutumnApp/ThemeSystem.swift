@@ -92,6 +92,23 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
     public var text: Color { .white }
     public var textSecondary: Color { Color.white.opacity(0.6) }
 
+    /// Label color for small text sitting on a frosted/blurred overlay (e.g. HUD Tools
+    /// submenu rows). Most themes' accent already pops against a dark surface, but ARIEL's
+    /// accent (#c4a36a, sand) is close in hue+value to the ARIEL desert video behind the
+    /// frosted panel, so plain `.accent` reads as illegible. Lighten toward white for ARIEL
+    /// only — same hue, much higher value — so it pops on the frosted background like every
+    /// other theme's labels already do. Leave every other theme's accent untouched.
+    /// Hardcoded hex (not computed from `accent` at runtime) because the blend-toward-white
+    /// math needs a color's RGB components, and `UIColor(Color)` needs iOS 17+ — this app's
+    /// deploymentTarget is 16.0, so pull the value from `accent`'s own hex is done ahead of
+    /// time instead: #c4a36a blended 62% toward white ≈ #e9dcc6.
+    public var overlayLabelAccent: Color {
+        switch resolved {
+        case .ariel: return Color(hex: "#e9dcc6")
+        default: return accent
+        }
+    }
+
     public var gradient: LinearGradient {
         LinearGradient(colors: [base, surface], startPoint: .topLeading, endPoint: .bottomTrailing)
     }

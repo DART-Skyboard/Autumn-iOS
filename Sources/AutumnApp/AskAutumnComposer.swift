@@ -156,12 +156,16 @@ final class AskAutumnTextView: UITextView {
         )
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if !isFirstResponder {
-            _ = becomeFirstResponder()
-        }
-        super.touchesBegan(touches, with: event)
-    }
+    // NOTE (TF94): do NOT override touchesBegan to force becomeFirstResponder here.
+    // UITextView already becomes first responder on tap via its own internal gesture
+    // recognizers (isEditable/isSelectable/isUserInteractionEnabled are all true below).
+    // The manual override was racing that internal UITextInteraction gesture: the first
+    // tap after mount worked (nothing else had touched the responder chain yet), but any
+    // resign — send, the accessory "hide keyboard" button, or an interactive scroll
+    // dismiss — left this override's manual call silently losing the race on the next
+    // tap. Only a full teardown/rebuild of the view (rotating away and back, which remounts
+    // AskAutumnComposer via SwiftUI) reset it. Removing the override lets UIKit's native
+    // tap-to-edit handling own first-responder requests, which does not have this race.
 
     func setPlaceholderVisible(_ visible: Bool) {
         placeholderLabel.isHidden = !visible
