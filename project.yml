@@ -50,6 +50,7 @@ targets:
           - "Resources/**"
           - "PrivacyInfo.xcprivacy"
           - "Assets.xcassets"
+          - "**/*.entitlements"
       - path: Sources/AutumnApp/PrivacyInfo.xcprivacy
         type: file
       - Sources/AutumnApp/Assets.xcassets
@@ -115,6 +116,12 @@ targets:
               NSExceptionRequiresForwardSecrecy: true
     entitlements:
       path: Sources/AutumnApp/AutumnApp.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
+        com.apple.security.network.client: true
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.dartmeadow.autumn
     dependencies:
       - target: LEATRCore
       - target: AutumnServices
@@ -141,9 +148,11 @@ targets:
       configs:
         Debug:
           SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
           DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
+          CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
 schemes:
   AutumnApp:
     build:

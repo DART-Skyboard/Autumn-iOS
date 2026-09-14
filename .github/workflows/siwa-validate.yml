@@ -113,6 +113,26 @@ jobs:
           xcodegen generate --spec project.yml
           xcodebuild -project Autumn.xcodeproj -list
 
+      - name: Prove CODE_SIGN_ENTITLEMENTS (Release)
+        run: |
+          set -euo pipefail
+          echo "=== pbxproj CODE_SIGN_ENTITLEMENTS lines ==="
+          rg -n "CODE_SIGN_ENTITLEMENTS" Autumn.xcodeproj/project.pbxproj || true
+          echo "=== showBuildSettings Release ==="
+          SETTINGS=$(xcodebuild -project Autumn.xcodeproj -scheme AutumnApp -configuration Release -showBuildSettings)
+          echo "$SETTINGS" | rg "CODE_SIGN_ENTITLEMENTS|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE|CODE_SIGN_STYLE|DEVELOPMENT_TEAM" || true
+          ENT=$(echo "$SETTINGS" | awk -F' = ' '/CODE_SIGN_ENTITLEMENTS/ {print $2; exit}')
+          echo "Resolved CODE_SIGN_ENTITLEMENTS=[$ENT]"
+          test -n "$ENT"
+          test "$ENT" != ""
+          case "$ENT" in
+            *AutumnApp.entitlements*) echo "CODE_SIGN_ENTITLEMENTS OK" ;;
+            *) echo "ERROR: CODE_SIGN_ENTITLEMENTS does not point at AutumnApp.entitlements: $ENT"; exit 1 ;;
+          esac
+          test -f "$ENT" || test -f "Sources/AutumnApp/AutumnApp.entitlements"
+          echo "=== entitlements file on disk ==="
+          cat Sources/AutumnApp/AutumnApp.entitlements
+
       - name: Resolve Swift packages
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -139,7 +159,18 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
+            CODE_SIGN_ENTITLEMENTS=Sources/AutumnApp/AutumnApp.entitlements \
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
+
+          echo "=== Intermediate .xcent (ProcessProductPackaging output) ==="
+          XCENT=$(find ~/Library/Developer/Xcode/DerivedData -name 'Autumn.app.xcent' 2>/dev/null | head -1 || true)
+          if [ -n "$XCENT" ]; then
+            echo "XCENT=$XCENT"
+            plutil -p "$XCENT" || cat "$XCENT"
+            cp "$XCENT" "$RUNNER_TEMP/siwa-ents-xcent-pre.xml" 2>/dev/null || true
+          else
+            echo "WARN: Autumn.app.xcent not found in DerivedData"
+          fi
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
       - name: Package IPA (no upload)
