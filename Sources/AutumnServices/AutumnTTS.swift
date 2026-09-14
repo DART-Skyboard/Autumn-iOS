@@ -48,6 +48,49 @@ public struct NateVoiceParams: Codable, Sendable, Equatable {
     }
 }
 
+/// User-adjustable Autumn voice — persisted like theme (`_aut_theme`) into the vault.
+public struct AutumnTTSPrefs: Codable, Equatable, Sendable {
+    public var voiceIdentifier: String
+    public var rate: Float
+    public var pitch: Float
+
+    public static let `default` = AutumnTTSPrefs(voiceIdentifier: "", rate: 0.47, pitch: 1.0)
+
+    public init(voiceIdentifier: String, rate: Float, pitch: Float) {
+        self.voiceIdentifier = voiceIdentifier
+        self.rate = rate
+        self.pitch = pitch
+    }
+
+    public static func load() -> AutumnTTSPrefs {
+        var p = AutumnTTSPrefs.default
+        if let id = UserDefaults.standard.string(forKey: AutumnSettingsSync.ttsVoiceKey) {
+            p.voiceIdentifier = id
+        }
+        if UserDefaults.standard.object(forKey: AutumnSettingsSync.ttsRateKey) != nil {
+            p.rate = UserDefaults.standard.float(forKey: AutumnSettingsSync.ttsRateKey)
+        }
+        if UserDefaults.standard.object(forKey: AutumnSettingsSync.ttsPitchKey) != nil {
+            p.pitch = UserDefaults.standard.float(forKey: AutumnSettingsSync.ttsPitchKey)
+        }
+        return p
+    }
+
+    public func save() {
+        UserDefaults.standard.set(voiceIdentifier, forKey: AutumnSettingsSync.ttsVoiceKey)
+        UserDefaults.standard.set(rate, forKey: AutumnSettingsSync.ttsRateKey)
+        UserDefaults.standard.set(pitch, forKey: AutumnSettingsSync.ttsPitchKey)
+        Task { @MainActor in AutumnSettingsSync.noteLocalChange() }
+    }
+}
+
+public struct AutumnTTSVoiceOption: Identifiable, Hashable, Sendable {
+    public var id: String { identifier }
+    public let identifier: String
+    public let name: String
+    public let quality: String
+}
+
 public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
     public static let shared = AutumnTTS()
     private let synthesizer  = AVSpeechSynthesizer()
@@ -73,15 +116,17 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
         guard !text.isEmpty else { return }
         synthesizer.stopSpeaking(at: .immediate)
         let utterance        = AVSpeechUtterance(string: text)
-        utterance.voice      = bestVoice(for: emotion)
+        let prefs            = AutumnTTSPrefs.load()
+        utterance.voice      = bestVoice(identifier: prefs.voiceIdentifier)
         let nate = NateVoiceParams.load()
+        let baseRate = prefs.rate > 0 ? prefs.rate : rateFor(emotion: emotion)
+        let basePitch = prefs.pitch > 0 ? prefs.pitch : pitchFor(emotion: emotion)
         if nate.applied {
-            let baseRate = rateFor(emotion: emotion)
             utterance.rate = Float(min(0.6, max(0.3, Double(baseRate) * nate.speed)))
-            utterance.pitchMultiplier = Float(min(2.0, max(0.5, Double(pitchFor(emotion: emotion)) * nate.pitch * (0.85 + 0.15 * nate.formant))))
+            utterance.pitchMultiplier = Float(min(2.0, max(0.5, Double(basePitch) * nate.pitch * (0.85 + 0.15 * nate.formant))))
         } else {
-            utterance.rate       = rateFor(emotion: emotion)
-            utterance.pitchMultiplier = pitchFor(emotion: emotion)
+            utterance.rate = min(0.58, max(0.32, baseRate))
+            utterance.pitchMultiplier = min(2.0, max(0.5, basePitch))
         }
         utterance.volume     = 1.0
         utterance.postUtteranceDelay = 0.1
@@ -93,14 +138,18 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
     }
 
     // MARK: - Voice Selection
-    /// Selects the best available neural voice for the given emotion
-    private func bestVoice(for emotion: EmotionType) -> AVSpeechSynthesisVoice? {
-        // Preferred neural voices — Autumn uses Allison/Samantha style
+    /// Premium/enhanced neural English voices first (Zoe → Nicky → Samantha). User pick wins.
+    public func bestVoice(identifier: String = "") -> AVSpeechSynthesisVoice? {
+        if !identifier.isEmpty, let v = AVSpeechSynthesisVoice(identifier: identifier) {
+            return v
+        }
         let preferredIDs = [
-            "com.apple.voice.premium.en-US.Zoe",      // iOS 17+ premium
-            "com.apple.voice.enhanced.en-US.Zoe",     // iOS 16 enhanced
+            "com.apple.voice.premium.en-US.Zoe",
+            "com.apple.voice.enhanced.en-US.Zoe",
+            "com.apple.ttsbundle.siri_female_en-US_compact",
             "com.apple.voice.premium.en-US.Nicky",
             "com.apple.voice.enhanced.en-US.Nicky",
+            "com.apple.voice.premium.en-US.Samantha",
             "com.apple.voice.enhanced.en-US.Samantha",
             "com.apple.voice.enhanced.en-US.Allison",
         ]
@@ -109,22 +158,44 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
                 return voice
             }
         }
-        // Fallback to any enhanced English voice
-        if #available(iOS 17.0, *) {
-            let voices = AVSpeechSynthesisVoice.speechVoices()
-                .filter { $0.language.hasPrefix("en") }
-            let premium = voices.first { voice in
-                let traits = voice.voiceTraits
-                return traits.contains(.isPersonalVoice)
-            }
-            if let premium { return premium }
-            let enhanced = voices.first { voice in
-                let traits = voice.voiceTraits
-                return !traits.contains(.isNoveltyVoice)
-            }
-            if let enhanced { return enhanced }
+        let ranked = Self.englishVoices().sorted { a, b in
+            qualityRank(a.quality) > qualityRank(b.quality)
+        }
+        if let id = ranked.first?.identifier, let v = AVSpeechSynthesisVoice(identifier: id) {
+            return v
         }
         return AVSpeechSynthesisVoice(language: "en-US")
+    }
+
+    public static func englishVoices() -> [AutumnTTSVoiceOption] {
+        AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.lowercased().hasPrefix("en") }
+            .map { AutumnTTSVoiceOption(identifier: $0.identifier, name: $0.name, quality: qualityLabel($0)) }
+            .sorted { lhs, rhs in
+                if lhs.quality != rhs.quality {
+                    return qualityRank(lhs.quality) > qualityRank(rhs.quality)
+                }
+                return lhs.name < rhs.name
+            }
+    }
+
+    private static func qualityLabel(_ v: AVSpeechSynthesisVoice) -> String {
+        if #available(iOS 17.0, *) {
+            switch v.quality {
+            case .premium: return "Premium"
+            case .enhanced: return "Enhanced"
+            default: return "Standard"
+            }
+        }
+        return v.quality == .enhanced ? "Enhanced" : "Standard"
+    }
+
+    private static func qualityRank(_ label: String) -> Int {
+        switch label {
+        case "Premium": return 3
+        case "Enhanced": return 2
+        default: return 1
+        }
     }
 
     private func rateFor(emotion: EmotionType) -> Float {

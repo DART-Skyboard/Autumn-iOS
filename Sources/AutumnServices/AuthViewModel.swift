@@ -45,7 +45,19 @@ public final class AuthViewModel: NSObject, ObservableObject {
     }
 
     public var adminAllowed: Bool {
-        githubConnected && githubUsername.lowercased() == AutumnConfig.adminUsername
+        AdminCircuitGate.isAdminIdentity(
+            githubUsername: githubUsername,
+            displayName: username,
+            appleUserId: appleUserId,
+            isGuest: isGuest
+        )
+    }
+
+    /// UID for admin GAS writes — GitHub login, else dartsolarpunk when this device is linked.
+    public var adminUID: String {
+        if !githubUsername.isEmpty { return githubUsername }
+        if adminAllowed { return AutumnConfig.adminUsername }
+        return sessionUID
     }
 
     /// Bumped by cancelGitHubAuth so in-flight poll loops exit.
@@ -109,6 +121,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
                     self.username    = KeychainService.shared.load(key: self.displayNameKey) ?? self.username
                     self.isSignedIn  = true
                     self.isGuest     = false
+                    self.restoreAdminFlag()
                     Task { await UserVaultService.shared.setup(
                         githubUsername: self.githubConnected ? self.githubUsername : nil) }
                 case .revoked, .notFound:
@@ -161,6 +174,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
         KeychainService.shared.save(key: keychainKey,      value: account.id)
         KeychainService.shared.save(key: displayNameKey,   value: account.displayName)
         isSignedIn = true; isGuest = false
+        restoreAdminFlag()
         Task { await UserVaultService.shared.setup(
             githubUsername: githubConnected ? githubUsername : nil) }
     }
@@ -274,6 +288,9 @@ public final class AuthViewModel: NSObject, ObservableObject {
             KeychainService.shared.save(key: "github_avatar_url", value: avatar.absoluteString)
         }
         saveGitHubAccount(id: ghUser, displayName: ghUser, avatarURL: profile.avatarURL?.absoluteString)
+        if ghUser.lowercased() == AutumnConfig.adminUsername, !appleUserId.isEmpty {
+            AdminCircuitGate.linkAppleIdentity(appleUserId)
+        }
         restoreAdminFlag()
     }
 
@@ -326,10 +343,18 @@ public final class AuthViewModel: NSObject, ObservableObject {
         KeychainService.shared.delete(key: displayNameKey)
     }
 
-    // MARK: — Admin flag (dartsolarpunk only)
+    // MARK: — Admin flag (dartsolarpunk iOS sign-in — default ON, no web circuit)
     public func restoreAdminFlag() {
         guard adminAllowed else { adminEnabled = false; return }
-        adminEnabled = UserDefaults.standard.string(forKey: AutumnSettingsSync.adminKey) == "1"
+        let raw = UserDefaults.standard.string(forKey: AutumnSettingsSync.adminKey)
+        if raw == "0" {
+            adminEnabled = false
+        } else {
+            adminEnabled = true
+            if raw != "1" {
+                UserDefaults.standard.set("1", forKey: AutumnSettingsSync.adminKey)
+            }
+        }
     }
 
     public func setAdminEnabled(_ on: Bool) {
@@ -419,6 +444,10 @@ extension AuthViewModel:
             }
             appleUserId = uid; username = display
             isSignedIn = true; isGuest = false; error = nil
+            if githubConnected, githubUsername.lowercased() == AutumnConfig.adminUsername {
+                AdminCircuitGate.linkAppleIdentity(uid)
+            }
+            restoreAdminFlag()
             let vaultUser = githubConnected ? githubUsername : nil
             Task {
                 await UserVaultService.shared.setup(githubUsername: vaultUser)

@@ -28,6 +28,7 @@ struct ThemeVideoBackground: UIViewRepresentable {
     final class PlayerView: UIView {
         override class var layerClass: AnyClass { AVPlayerLayer.self }
         var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+        override var canBecomeFirstResponder: Bool { false }
 
         private var looper: AVPlayerLooper?
         private var queue: AVQueuePlayer?

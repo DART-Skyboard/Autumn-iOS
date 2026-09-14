@@ -176,7 +176,7 @@ public enum FeedbackError: LocalizedError {
         case .submitFailed: return "Submission failed — please try again"
         case .refusedEmpty: return "Refusing to PUT [] over a folder"
         case .trashLast: return "Permanent delete only from trash"
-        case .circuitOpen: return "Admin circuit open — web must be live"
+        case .circuitOpen: return "Not signed in as admin"
         }
     }
 }
