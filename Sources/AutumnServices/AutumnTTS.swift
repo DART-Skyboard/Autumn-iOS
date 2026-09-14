@@ -101,19 +101,21 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
     public override init() {
         super.init()
         synthesizer.delegate = self
-        setupAudioSession()
+        // Do NOT activate AVAudioSession here — TF91 ducked other apps on launch
+        // when AutumnTTS.shared was first touched at boot.
     }
 
-    // MARK: - Audio Session
-    private func setupAudioSession() {
-        try? AVAudioSession.sharedInstance().setCategory(
-            .playback, mode: .spokenAudio, options: .duckOthers)
-        try? AVAudioSession.sharedInstance().setActive(true)
+    // MARK: - Audio Session (speak-time only)
+    private func activateSpeechSession() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
+        try? session.setActive(true, options: [])
     }
 
     // MARK: - Speak
     public func speak(_ text: String, emotion: EmotionType) {
         guard !text.isEmpty else { return }
+        activateSpeechSession()
         synthesizer.stopSpeaking(at: .immediate)
         let utterance        = AVSpeechUtterance(string: text)
         let prefs            = AutumnTTSPrefs.load()

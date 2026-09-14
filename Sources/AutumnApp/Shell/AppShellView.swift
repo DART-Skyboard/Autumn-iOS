@@ -62,9 +62,21 @@ public struct AppShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
             let screenH = UIScreen.main.bounds.height
             let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? .zero
+            // Ignore zero/off-screen frames (launch can post CGRect.zero → overlap≈screenH → black shell).
+            guard frame.height > 1, frame.width > 1 else {
+                keyboardUp = false
+                keyboardHeight = 0
+                return
+            }
             let overlap = max(0, screenH - frame.origin.y)
-            keyboardUp = overlap > 40
-            keyboardHeight = overlap
+            let safe = min(overlap, screenH * 0.7)
+            if safe > 40 {
+                keyboardUp = true
+                keyboardHeight = safe
+            } else {
+                keyboardUp = false
+                keyboardHeight = 0
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardUp = false

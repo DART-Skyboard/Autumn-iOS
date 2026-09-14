@@ -138,10 +138,11 @@ final class AskAutumnTextView: UITextView {
 
     override var canBecomeFirstResponder: Bool { true }
 
+    // Do NOT call sizeThatFits from intrinsicContentSize — that recurses into layout
+    // and can stack-overflow / black-screen crash on first ChatView mount (TF91).
+    // Height is owned by SwiftUI (.frame(minHeight:maxHeight:)).
     override var intrinsicContentSize: CGSize {
-        let w = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width - 120
-        let fitting = sizeThatFits(CGSize(width: w, height: CGFloat.greatestFiniteMagnitude))
-        return CGSize(width: UIView.noIntrinsicMetric, height: min(90, max(36, fitting.height)))
+        CGSize(width: UIView.noIntrinsicMetric, height: 40)
     }
 
     override func layoutSubviews() {
