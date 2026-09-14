@@ -117,6 +117,24 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== pbxproj CODE_SIGN_ENTITLEMENTS lines ==="
+          grep -n "CODE_SIGN_ENTITLEMENTS" Autumn.xcodeproj/project.pbxproj || true
+          echo "=== showBuildSettings Release ==="
+          SETTINGS=$(xcodebuild -project Autumn.xcodeproj -scheme AutumnApp -configuration Release -destination 'generic/platform=iOS' -showBuildSettings 2>/dev/null || true)
+          echo "$SETTINGS" | grep -E "CODE_SIGN_ENTITLEMENTS|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE|CODE_SIGN_STYLE|DEVELOPMENT_TEAM" || true
+          ENT=$(echo "$SETTINGS" | awk -F' = ' '/CODE_SIGN_ENTITLEMENTS/ {print $2; exit}')
+          echo "Resolved CODE_SIGN_ENTITLEMENTS=[$ENT]"
+          if [ -z "$ENT" ]; then
+            echo "ERROR: CODE_SIGN_ENTITLEMENTS empty in showBuildSettings"
+            exit 1
+          fi
+          case "$ENT" in
+            *AutumnApp.entitlements*) echo "CODE_SIGN_ENTITLEMENTS OK" ;;
+            *) echo "ERROR: unexpected CODE_SIGN_ENTITLEMENTS: $ENT"; exit 1 ;;
+          esac
+          echo "=== entitlements file on disk ==="
+          cat Sources/AutumnApp/AutumnApp.entitlements
+          set -euo pipefail
+          echo "=== pbxproj CODE_SIGN_ENTITLEMENTS lines ==="
           rg -n "CODE_SIGN_ENTITLEMENTS" Autumn.xcodeproj/project.pbxproj || true
           echo "=== showBuildSettings Release ==="
           SETTINGS=$(xcodebuild -project Autumn.xcodeproj -scheme AutumnApp -configuration Release -showBuildSettings)
@@ -184,6 +202,26 @@ jobs:
           cd "$RUNNER_TEMP"
           zip -qr "Autumn.ipa" Payload/
           ls -la "$RUNNER_TEMP/Autumn.ipa"
+
+      - name: Ensure signed binary keeps applesignin
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KP="${KEYCHAIN_PASSWORD:-keychainpass}"
+          security unlock-keychain -p "$KP" "$RUNNER_TEMP/signing.keychain-db"
+          APP="${APP_PATH:-}"
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            APP=$(find "$RUNNER_TEMP/Autumn.xcarchive/Products/Applications" -name "*.app" | head -1)
+          fi
+          chmod +x scripts/ensure_siwa_entitlements.sh
+          scripts/ensure_siwa_entitlements.sh "$APP" "$RUNNER_TEMP/siwa-ents" "$RUNNER_TEMP/signing.keychain-db"
+          rm -rf "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && rm -f Autumn.ipa && zip -qr Autumn.ipa Payload/)
+          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+          echo "IPA_PATH=$RUNNER_TEMP/Autumn.ipa" >> "$GITHUB_ENV"
 
       - name: Dump + gate SIWA entitlements
         run: |

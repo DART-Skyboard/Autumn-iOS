@@ -117,9 +117,13 @@ targets:
     entitlements:
       path: Sources/AutumnApp/AutumnApp.entitlements
       properties:
+        application-identifier: $(AppIdentifierPrefix)com.dartmeadow.autumn
+        beta-reports-active: true
         com.apple.developer.applesignin:
           - Default
+        com.apple.developer.team-identifier: L7AHWS9Q6V
         com.apple.security.network.client: true
+        get-task-allow: false
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.dartmeadow.autumn
     dependencies:
