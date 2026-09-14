@@ -159,7 +159,7 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
             }
         }
         let ranked = Self.englishVoices().sorted { a, b in
-            qualityRank(a.quality) > qualityRank(b.quality)
+            Self.qualityRank(a.quality) > Self.qualityRank(b.quality)
         }
         if let id = ranked.first?.identifier, let v = AVSpeechSynthesisVoice(identifier: id) {
             return v
