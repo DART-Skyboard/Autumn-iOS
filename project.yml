@@ -50,6 +50,7 @@ targets:
           - "Resources/**"
           - "PrivacyInfo.xcprivacy"
           - "Assets.xcassets"
+          - "**/*.entitlements"
       - path: Sources/AutumnApp/PrivacyInfo.xcprivacy
         type: file
       - Sources/AutumnApp/Assets.xcassets
@@ -115,6 +116,16 @@ targets:
               NSExceptionRequiresForwardSecrecy: true
     entitlements:
       path: Sources/AutumnApp/AutumnApp.entitlements
+      properties:
+        application-identifier: $(AppIdentifierPrefix)com.dartmeadow.autumn
+        beta-reports-active: true
+        com.apple.developer.applesignin:
+          - Default
+        com.apple.developer.team-identifier: L7AHWS9Q6V
+        com.apple.security.network.client: true
+        get-task-allow: false
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.dartmeadow.autumn
     dependencies:
       - target: LEATRCore
       - target: AutumnServices
@@ -136,14 +147,16 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-        CURRENT_PROJECT_VERSION: "88"
+        CURRENT_PROJECT_VERSION: "89"
         MARKETING_VERSION: "1.0.2"
       configs:
         Debug:
           SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
           DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
+          CODE_SIGN_ENTITLEMENTS: Sources/AutumnApp/AutumnApp.entitlements
 schemes:
   AutumnApp:
     build:

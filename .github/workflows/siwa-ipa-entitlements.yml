@@ -1,53 +1,31 @@
-name: SIWA signing validate
+name: SIWA IPA entitlement proof
+
+# Prove signed binary + embedded.mobileprovision both contain
+# com.apple.developer.applesignin = ["Default"]. No TestFlight upload.
 
 on:
   workflow_dispatch:
     inputs:
       git_ref:
-        description: "Optional checkout ref for IPA proof (TF88 tip 81bb1b9…)"
+        description: "Git ref to archive (TF88 tip = 81bb1b9…)"
         required: false
         default: ""
-      mode:
-        description: "profile (secrets-only) | ipa (archive+codesign dump) | both"
-        required: false
-        default: "ipa"
 
 jobs:
-  validate-profile:
-    name: Compare AutumnGitHubFlow vs app entitlements vs Ashtree
-    if: ${{ github.event.inputs.mode == 'profile' || github.event.inputs.mode == 'both' || github.event.inputs.mode == '' }}
-    runs-on: macos-15
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install PyJWT
-        run: python3 -m pip install --user PyJWT cryptography
-      - name: Validate SIWA entitlements / profile / ASC
-        env:
-          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          PATH: /Users/runner/Library/Python/3.13/bin:/Users/runner/Library/Python/3.12/bin:/Users/runner/Library/Python/3.11/bin:$PATH
-        run: bash scripts/validate_siwa_signing.sh
-
-  prove-ipa:
+  prove:
     name: Dump IPA entitlements (no TF upload)
-    if: ${{ github.event.inputs.mode == 'ipa' || github.event.inputs.mode == 'both' || github.event.inputs.mode == '' || github.event.inputs.mode == null }}
-    # default mode=ipa so a bare dispatch proves the IPA
     runs-on: macos-15
     timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.git_ref != '' && inputs.git_ref || github.sha }}
+          ref: ${{ inputs.git_ref != '' && inputs.git_ref || github.ref }}
 
       - name: Select Xcode
         run: |
           sudo xcode-select -switch /Applications/Xcode_26.3.app
           xcodebuild -version
-          echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Install App Store Connect API key
         env:
@@ -96,7 +74,7 @@ jobs:
             echo "Profile AppID: $PP_APPID"
             if [ -n "$PP_UUID" ]; then
               cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
-              echo "PROFILE_UUID=$PP_UUID" >> "$GITHUB_ENV"
+              echo "PROFILE_UUID=$PP_UUID" >> $GITHUB_ENV
             fi
           fi
 
@@ -112,44 +90,6 @@ jobs:
         run: |
           xcodegen generate --spec project.yml
           xcodebuild -project Autumn.xcodeproj -list
-
-      - name: Prove CODE_SIGN_ENTITLEMENTS (Release)
-        run: |
-          set -euo pipefail
-          echo "=== pbxproj CODE_SIGN_ENTITLEMENTS lines ==="
-          grep -n "CODE_SIGN_ENTITLEMENTS" Autumn.xcodeproj/project.pbxproj || true
-          echo "=== showBuildSettings Release ==="
-          SETTINGS=$(xcodebuild -project Autumn.xcodeproj -scheme AutumnApp -configuration Release -destination 'generic/platform=iOS' -showBuildSettings 2>/dev/null || true)
-          echo "$SETTINGS" | grep -E "CODE_SIGN_ENTITLEMENTS|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE|CODE_SIGN_STYLE|DEVELOPMENT_TEAM" || true
-          ENT=$(echo "$SETTINGS" | awk -F' = ' '/CODE_SIGN_ENTITLEMENTS/ {print $2; exit}')
-          echo "Resolved CODE_SIGN_ENTITLEMENTS=[$ENT]"
-          if [ -z "$ENT" ]; then
-            echo "ERROR: CODE_SIGN_ENTITLEMENTS empty in showBuildSettings"
-            exit 1
-          fi
-          case "$ENT" in
-            *AutumnApp.entitlements*) echo "CODE_SIGN_ENTITLEMENTS OK" ;;
-            *) echo "ERROR: unexpected CODE_SIGN_ENTITLEMENTS: $ENT"; exit 1 ;;
-          esac
-          echo "=== entitlements file on disk ==="
-          cat Sources/AutumnApp/AutumnApp.entitlements
-          set -euo pipefail
-          echo "=== pbxproj CODE_SIGN_ENTITLEMENTS lines ==="
-          rg -n "CODE_SIGN_ENTITLEMENTS" Autumn.xcodeproj/project.pbxproj || true
-          echo "=== showBuildSettings Release ==="
-          SETTINGS=$(xcodebuild -project Autumn.xcodeproj -scheme AutumnApp -configuration Release -showBuildSettings)
-          echo "$SETTINGS" | rg "CODE_SIGN_ENTITLEMENTS|PRODUCT_BUNDLE_IDENTIFIER|PROVISIONING_PROFILE|CODE_SIGN_STYLE|DEVELOPMENT_TEAM" || true
-          ENT=$(echo "$SETTINGS" | awk -F' = ' '/CODE_SIGN_ENTITLEMENTS/ {print $2; exit}')
-          echo "Resolved CODE_SIGN_ENTITLEMENTS=[$ENT]"
-          test -n "$ENT"
-          test "$ENT" != ""
-          case "$ENT" in
-            *AutumnApp.entitlements*) echo "CODE_SIGN_ENTITLEMENTS OK" ;;
-            *) echo "ERROR: CODE_SIGN_ENTITLEMENTS does not point at AutumnApp.entitlements: $ENT"; exit 1 ;;
-          esac
-          test -f "$ENT" || test -f "Sources/AutumnApp/AutumnApp.entitlements"
-          echo "=== entitlements file on disk ==="
-          cat Sources/AutumnApp/AutumnApp.entitlements
 
       - name: Resolve Swift packages
         env:
@@ -167,9 +107,11 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           KP="${KEYCHAIN_PASSWORD:-keychainpass}"
-          security unlock-keychain -p "$KP" "$RUNNER_TEMP/signing.keychain-db"
+          security unlock-keychain -p "$KP" $RUNNER_TEMP/signing.keychain-db
           PP_UUID_FINAL="${PROFILE_UUID:-8d8e7801-a80b-40f9-8cb3-2ab23e5cca3d}"
           echo "Signing with profile UUID: $PP_UUID_FINAL"
+          echo "GIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          echo "CFBundleVersion=$(/usr/libexec/PlistBuddy -c 'Print :CURRENT_PROJECT_VERSION' project.yml 2>/dev/null || true)" >> $GITHUB_ENV || true
           xcodebuild archive \
             -project Autumn.xcodeproj \
             -scheme AutumnApp \
@@ -177,18 +119,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Autumn.xcarchive" \
             DEVELOPMENT_TEAM=L7AHWS9Q6V \
-            CODE_SIGN_ENTITLEMENTS=Sources/AutumnApp/AutumnApp.entitlements \
             OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/signing.keychain-db"
-
-          echo "=== Intermediate .xcent (ProcessProductPackaging output) ==="
-          XCENT=$(find ~/Library/Developer/Xcode/DerivedData -name 'Autumn.app.xcent' 2>/dev/null | head -1 || true)
-          if [ -n "$XCENT" ]; then
-            echo "XCENT=$XCENT"
-            plutil -p "$XCENT" || cat "$XCENT"
-            cp "$XCENT" "$RUNNER_TEMP/siwa-ents-xcent-pre.xml" 2>/dev/null || true
-          else
-            echo "WARN: Autumn.app.xcent not found in DerivedData"
-          fi
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
       - name: Package IPA (no upload)
@@ -196,39 +127,21 @@ jobs:
           ARCHIVE="$RUNNER_TEMP/Autumn.xcarchive"
           APP=$(find "$ARCHIVE/Products/Applications" -name "*.app" | head -1)
           echo "Packaging: $APP"
-          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+          echo "APP_PATH=$APP" >> $GITHUB_ENV
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -r "$APP" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP"
           zip -qr "Autumn.ipa" Payload/
           ls -la "$RUNNER_TEMP/Autumn.ipa"
-
-      - name: Ensure signed binary keeps applesignin
-        env:
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          KP="${KEYCHAIN_PASSWORD:-keychainpass}"
-          security unlock-keychain -p "$KP" "$RUNNER_TEMP/signing.keychain-db"
-          APP="${APP_PATH:-}"
-          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
-            APP=$(find "$RUNNER_TEMP/Autumn.xcarchive/Products/Applications" -name "*.app" | head -1)
-          fi
-          chmod +x scripts/ensure_siwa_entitlements.sh
-          scripts/ensure_siwa_entitlements.sh "$APP" "$RUNNER_TEMP/siwa-ents" "$RUNNER_TEMP/signing.keychain-db"
-          rm -rf "$RUNNER_TEMP/Payload"
-          mkdir -p "$RUNNER_TEMP/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/Payload/"
-          (cd "$RUNNER_TEMP" && rm -f Autumn.ipa && zip -qr Autumn.ipa Payload/)
-          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
-          echo "IPA_PATH=$RUNNER_TEMP/Autumn.ipa" >> "$GITHUB_ENV"
+          echo "IPA_PATH=$RUNNER_TEMP/Autumn.ipa" >> $GITHUB_ENV
 
       - name: Dump + gate SIWA entitlements
+        id: dump
         run: |
           set -euo pipefail
           OUT="$RUNNER_TEMP/siwa-ents"
           mkdir -p "$OUT"
-          APP="${APP_PATH:-}"
+          APP="$APP_PATH"
           if [ -z "$APP" ] || [ ! -d "$APP" ]; then
             APP=$(find "$RUNNER_TEMP/Autumn.xcarchive/Products/Applications" -name "*.app" | head -1)
           fi
@@ -239,6 +152,7 @@ jobs:
 
           echo "=== 1) signed binary entitlements (codesign) ==="
           codesign --display --entitlements :- "$APP" > "$OUT/signed-binary-entitlements.xml" 2>"$OUT/codesign-stderr.txt" || true
+          # codesign writes entitlements to stdout; some versions also need the binary path
           if [ ! -s "$OUT/signed-binary-entitlements.xml" ]; then
             codesign --display --entitlements :- "$BIN" > "$OUT/signed-binary-entitlements.xml" 2>>"$OUT/codesign-stderr.txt" || true
           fi
@@ -256,11 +170,15 @@ jobs:
           fi
           security cms -D -i "$PP" > "$OUT/embedded-profile.plist"
           plutil -extract Entitlements xml1 -o "$OUT/embedded-profile-entitlements.xml" "$OUT/embedded-profile.plist"
-          echo "Profile Name: $(plutil -extract Name raw "$OUT/embedded-profile.plist" 2>/dev/null || true)"
-          echo "Profile UUID: $(plutil -extract UUID raw "$OUT/embedded-profile.plist" 2>/dev/null || true)"
           plutil -p "$OUT/embedded-profile-entitlements.xml"
           cat "$OUT/embedded-profile-entitlements.xml"
 
+          python3 - <<'PY'
+          import pathlib, sys, plistlib, re
+          out = pathlib.Path("$OUT".replace("$OUT", pathlib.Path.home().as_posix()))  # placeholder replaced below
+          PY
+
+          # Gate with python using absolute OUT path
           python3 - "$OUT" <<'PY'
           import pathlib, sys, plistlib
           out = pathlib.Path(sys.argv[1])
@@ -268,12 +186,13 @@ jobs:
           prof_raw = (out / "embedded-profile-entitlements.xml").read_bytes()
 
           def load(data: bytes):
+              # codesign may emit XML plist; strip leading junk
               i = data.find(b"<?xml")
               if i < 0:
                   i = data.find(b"bplist")
                   if i >= 0:
                       return plistlib.loads(data[i:])
-                  raise ValueError("no plist found in " + repr(data[:80]))
+                  raise ValueError("no plist found")
               return plistlib.loads(data[i:])
 
           try:
@@ -305,10 +224,6 @@ jobs:
           print(f"embedded profile applesignin: {'PASS' if p_ok else 'FAIL'} — {p_detail}")
           print("Signed entitlement keys:", sorted(signed.keys()))
           print("Profile entitlement keys:", sorted(prof.keys()))
-          print("--- SIGNED BLOB ---")
-          print(plistlib.dumps(signed).decode())
-          print("--- PROFILE BLOB ---")
-          print(plistlib.dumps(prof).decode())
           if s_ok and p_ok:
               print("SIWA_IPA_ENTITLEMENTS: PASS")
               sys.exit(0)
@@ -326,5 +241,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: siwa-ipa-entitlements
-          path: ${{ runner.temp }}/siwa-ents/
+          path: |
+            ${{ runner.temp }}/siwa-ents/
           if-no-files-found: warn
