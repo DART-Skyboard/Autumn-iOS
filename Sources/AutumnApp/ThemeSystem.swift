@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AutumnServices
 
 /// Theme engine matching web THEMES in index.html:
 /// VOID DAY NIGHT STEALTH DEPARTURE ASH TREE ARIEL AUTO
@@ -200,17 +201,32 @@ public enum AutumnScrim: String, CaseIterable, Identifiable {
 
 @MainActor
 public final class ThemeViewModel: ObservableObject {
-    @Published public var current: AutumnTheme
-    @Published public var scrim: AutumnScrim
+    private var suppressVaultNote = false
+
+    @Published public var current: AutumnTheme {
+        didSet {
+            guard oldValue != current else { return }
+            UserDefaults.standard.set(current.key, forKey: AutumnSettingsSync.themeKey)
+            if !suppressVaultNote { AutumnSettingsSync.noteLocalChange() }
+        }
+    }
+    @Published public var scrim: AutumnScrim {
+        didSet {
+            guard oldValue != scrim else { return }
+            let all = AutumnScrim.allCases
+            UserDefaults.standard.set(all.firstIndex(of: scrim) ?? 0, forKey: AutumnSettingsSync.scrimKey)
+            if !suppressVaultNote { AutumnSettingsSync.noteLocalChange() }
+        }
+    }
 
     public init() {
-        if let k = UserDefaults.standard.string(forKey: "_aut_theme"),
+        if let k = UserDefaults.standard.string(forKey: AutumnSettingsSync.themeKey),
            let t = AutumnTheme.allCases.first(where: { $0.key == k }) {
             current = t
         } else {
             current = .void
         }
-        let n = UserDefaults.standard.integer(forKey: "_aut_scrim")
+        let n = UserDefaults.standard.integer(forKey: AutumnSettingsSync.scrimKey)
         let all = AutumnScrim.allCases
         scrim = (n >= 0 && n < all.count) ? all[n] : .frost
     }
@@ -218,16 +234,26 @@ public final class ThemeViewModel: ObservableObject {
     public func cycleTheme() {
         let all = AutumnTheme.allCases
         let i = all.firstIndex(of: current) ?? 0
-        let next = all[(i + 1) % all.count]
-        current = next
-        UserDefaults.standard.set(next.key, forKey: "_aut_theme")
+        current = all[(i + 1) % all.count]
     }
 
     public func cycleScrim() {
         let all = AutumnScrim.allCases
-        let i = (all.firstIndex(of: scrim) ?? 0)
+        let i = all.firstIndex(of: scrim) ?? 0
         scrim = all[(i + 1) % all.count]
-        UserDefaults.standard.set(all.firstIndex(of: scrim) ?? 0, forKey: "_aut_scrim")
+    }
+
+    /// Apply theme/scrim from UserDefaults after vault restore (last saved wins).
+    public func reloadFromDefaults() {
+        let themeKey = UserDefaults.standard.string(forKey: AutumnSettingsSync.themeKey)
+        let nextTheme = themeKey.flatMap { k in AutumnTheme.allCases.first(where: { $0.key == k }) } ?? current
+        let n = UserDefaults.standard.integer(forKey: AutumnSettingsSync.scrimKey)
+        let all = AutumnScrim.allCases
+        let nextScrim = (n >= 0 && n < all.count) ? all[n] : scrim
+        suppressVaultNote = true
+        defer { suppressVaultNote = false }
+        if nextTheme != current { current = nextTheme }
+        if nextScrim != scrim { scrim = nextScrim }
     }
 
     public var chrome: AutumnTheme { current.resolved }

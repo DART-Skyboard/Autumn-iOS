@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import AuthenticationServices
 import CryptoKit
 import Security
@@ -22,6 +23,8 @@ public final class AuthViewModel: NSObject, ObservableObject {
     @Published public var githubAvatarURL: URL? = nil
     @Published public var isAuthenticating = false
     @Published public var adminEnabled = false
+    /// When true, Welcome / SIWA cover can show an Open Settings deep-link (1000/1001).
+    @Published public var appleErrorOffersSettings = false
 
     public var sessionUID: String {
         if githubConnected && !githubUsername.isEmpty { return githubUsername }
@@ -59,7 +62,8 @@ public final class AuthViewModel: NSObject, ObservableObject {
 
     public func restoreSession() {
         loadSavedAccounts()
-        adminEnabled = UserDefaults.standard.bool(forKey: "_aut_admin_enabled") && adminAllowed
+        adminEnabled = (UserDefaults.standard.string(forKey: AutumnSettingsSync.adminKey) == "1"
+            || UserDefaults.standard.bool(forKey: AutumnSettingsSync.adminKey)) && adminAllowed
         if let urlStr = KeychainService.shared.load(key: "github_avatar_url"),
            let url = URL(string: urlStr) {
             githubAvatarURL = GitHubClient.sizedAvatarURL(from: url.absoluteString) ?? url
@@ -83,9 +87,13 @@ public final class AuthViewModel: NSObject, ObservableObject {
                 restoreAdminFlag()
             }
             // Always refresh login + avatar from GET /user when a token is present.
+            let restoreUser = ghUser
             Task {
                 await GitHubClient.shared.setToken(token)
                 await applyGitHubProfile()
+                if !restoreUser.isEmpty {
+                    await AutumnSettingsSync.restoreFromVaultThenPush(username: restoreUser)
+                }
             }
         }
 
@@ -117,6 +125,8 @@ public final class AuthViewModel: NSObject, ObservableObject {
 
     /// Called from AppleSignInButton.onRequest — sets nonce BEFORE performRequests.
     public func prepareAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        error = nil
+        appleErrorOffersSettings = false
         let rawNonce = generateNonce()
         _currentNonce = rawNonce
         request.requestedScopes = [.fullName, .email]
@@ -244,7 +254,11 @@ public final class AuthViewModel: NSObject, ObservableObject {
         isSignedIn = true
         isGuest = false
         GitHubOAuth.shared.cancel()
-        Task { await UserVaultService.shared.setup(githubUsername: githubUsername) }
+        let user = githubUsername
+        Task {
+            await UserVaultService.shared.setup(githubUsername: user)
+            await AutumnSettingsSync.restoreFromVaultThenPush(username: user)
+        }
     }
 
     /// One GET /user. Persists login + avatar URL. Letter fallback only if this fails.
@@ -279,6 +293,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
             await GitHubClient.shared.setToken(token)
             await applyGitHubProfile()
             await UserVaultService.shared.setup(githubUsername: account.displayName)
+            await AutumnSettingsSync.restoreFromVaultThenPush(username: account.displayName)
         }
     }
 
@@ -314,13 +329,14 @@ public final class AuthViewModel: NSObject, ObservableObject {
     // MARK: — Admin flag (dartsolarpunk only)
     public func restoreAdminFlag() {
         guard adminAllowed else { adminEnabled = false; return }
-        adminEnabled = UserDefaults.standard.string(forKey: "_aut_admin_enabled") == "1"
+        adminEnabled = UserDefaults.standard.string(forKey: AutumnSettingsSync.adminKey) == "1"
     }
 
     public func setAdminEnabled(_ on: Bool) {
         guard adminAllowed else { adminEnabled = false; return }
         adminEnabled = on
-        UserDefaults.standard.set(on ? "1" : "0", forKey: "_aut_admin_enabled")
+        UserDefaults.standard.set(on ? "1" : "0", forKey: AutumnSettingsSync.adminKey)
+        AutumnSettingsSync.noteLocalChange()
     }
 
     public func toggleAdminFlag() {
@@ -403,8 +419,13 @@ extension AuthViewModel:
             }
             appleUserId = uid; username = display
             isSignedIn = true; isGuest = false; error = nil
-            Task { await UserVaultService.shared.setup(
-                githubUsername: githubConnected ? githubUsername : nil) }
+            let vaultUser = githubConnected ? githubUsername : nil
+            Task {
+                await UserVaultService.shared.setup(githubUsername: vaultUser)
+                if let vaultUser, !vaultUser.isEmpty {
+                    await AutumnSettingsSync.restoreFromVaultThenPush(username: vaultUser)
+                }
+            }
         case let password as ASPasswordCredential:
             username   = password.user
             isSignedIn = true; isGuest = false; error = nil
@@ -415,30 +436,61 @@ extension AuthViewModel:
 
     fileprivate func applyAppleError(_ error: Error) {
         let asErr = error as? ASAuthorizationError
-        // Temporary: include ASAuthorizationError rawValue so device reports aren't ambiguous.
+        // Always keep raw [ASAuthorizationError N] for device reports.
+        let code = asErr?.code.rawValue
         let codeTag: String = {
-            if let c = asErr?.code.rawValue { return " [ASAuthorizationError \(c)]" }
+            if let c = code { return " [ASAuthorizationError \(c)]" }
             return " [non-ASAuthorizationError]"
         }()
+        let desc = error.localizedDescription
+        let signUpNotCompleted = desc.localizedCaseInsensitiveContains("Sign Up Not Completed")
+            || desc.localizedCaseInsensitiveContains("signup not completed")
+
         switch asErr?.code {
         case .canceled:
-            // User dismissed the sheet — stay silent.
+            // User dismissed the sheet — stay silent (raw 1001 is .canceled).
+            // Still map Apple's "Sign Up Not Completed" sheet copy if it arrives as canceled-ish.
+            if signUpNotCompleted {
+                self.error = "Sign in with Apple is temporarily unavailable. Please try GitHub or Settings → Apple ID, then try again." + codeTag
+                self.appleErrorOffersSettings = true
+            }
             return
-        case .unknown:
-            // Presentation/hierarchy failures often surface as .unknown; do not always blame iCloud.
-            self.error = "Sign in failed — try again from Welcome, or check Settings → Apple ID / iCloud" + codeTag
+        default:
+            break
+        }
+
+        // Ashtree-style: 1001 / "Sign Up Not Completed" → temporarily unavailable.
+        // 1000 (.unknown) often means entitlement/presentation poison or Apple ID hiccup.
+        if code == 1001 || code == 1000 || signUpNotCompleted || asErr?.code == .unknown {
+            self.error = "Sign in with Apple is temporarily unavailable. Please try GitHub or Settings → Apple ID, then try again." + codeTag
+            self.appleErrorOffersSettings = true
+            return
+        }
+
+        switch asErr?.code {
         case .invalidResponse, .notHandled, .failed:
-            self.error = "Sign in failed: \(error.localizedDescription)" + codeTag
+            self.error = "Sign in failed: \(desc)" + codeTag
+            self.appleErrorOffersSettings = (code == 1000 || code == 1001)
         case .notInteractive:
             self.error = "Sign in failed — Apple Sign In is not available in this context. Try again from Welcome." + codeTag
+            self.appleErrorOffersSettings = false
         case nil:
-            self.error = error.localizedDescription + codeTag
+            self.error = desc + codeTag
+            self.appleErrorOffersSettings = signUpNotCompleted
         default:
             if let asErr {
-                self.error = "Sign in failed (\(asErr.code.rawValue)): \(error.localizedDescription)" + codeTag
+                self.error = "Sign in failed (\(asErr.code.rawValue)): \(desc)" + codeTag
             } else {
-                self.error = error.localizedDescription + codeTag
+                self.error = desc + codeTag
             }
+            self.appleErrorOffersSettings = false
+        }
+    }
+
+    public func openAppleIDSettings() {
+        // App Settings (reliable). Undocumented App-prefs:APPLE_ID URLs are unreliable on modern iOS.
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
     }
 

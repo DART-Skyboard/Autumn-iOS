@@ -478,6 +478,14 @@ struct RootAppleSignInCover: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 8)
                         .accessibilityLabel("Sign in error")
+                    if authVM.appleErrorOffersSettings {
+                        Button("Open Settings → Apple ID") {
+                            authVM.openAppleIDSettings()
+                        }
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color(hex: "#7ecfff"))
+                        .padding(.top, 4)
+                    }
                 }
 
                 Spacer()

@@ -99,6 +99,34 @@ public actor UserVaultService {
         await write(folder: .memory, filename: "chunk_001.json", content: json, githubUsername: username)
     }
 
+    /// Load memory/chunk_001.json from Autumn-Ash-{username} as a JSON object.
+    public func loadMemorySnapshot(username: String) async -> [String: Any]? {
+        guard let json = await readRemote(folder: .memory, filename: "chunk_001.json", githubUsername: username),
+              let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return obj
+    }
+
+    /// Merge `settings` into the existing memory snapshot (create minimal stub if missing).
+    @discardableResult
+    public func mergeSettingsIntoSnapshot(username: String, settings: [String: Any]) async -> Bool {
+        var payload = await loadMemorySnapshot(username: username) ?? [
+            "version": "2.2",
+            "username": username,
+            "platform": "ios",
+            "sessions": [] as [[String: Any]]
+        ]
+        payload["settings"] = settings
+        payload["saved"] = ISO8601DateFormatter().string(from: Date())
+        payload["platform"] = payload["platform"] ?? "ios"
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8)
+        else { return false }
+        return await saveMemorySnapshot(username: username, json: json)
+    }
+
     public func saveMathSnapshot(username: String, json: String) async {
         await write(folder: .math, filename: "session.json", content: json, githubUsername: username)
         let note = """
@@ -320,7 +348,8 @@ public enum AutumnMemorySync {
             "sessions": [[
                 "id": sessionUID,
                 "messages": publicMsgs.map { ["role": $0.role.rawValue, "content": $0.content] as [String: String] }
-            ]]
+            ]],
+            "settings": AutumnSettingsSync.captureCurrent()
         ]
         if let mathPayload, let mathData = mathPayload.data(using: .utf8),
            let mathObj = try? JSONSerialization.jsonObject(with: mathData) {
@@ -431,5 +460,111 @@ public enum AutumnMemorySync {
             parts.append("Autumn backup in vault")
         }
         return .success(parts.joined(separator: " · "))
+    }
+}
+
+// MARK: — Theme / Profile settings ↔ private Autumn-Ash vault
+/// Mirrors web localStorage theme/scrim into memory snapshot `settings` and restores on sign-in.
+public enum AutumnSettingsSync {
+    public static let themeKey = "_aut_theme"
+    public static let scrimKey = "_aut_scrim"
+    public static let adminKey = "_aut_admin_enabled"
+    public static let liveFeedKey = "autumn_live_feed"
+
+    public static let didRestoreNotification = Notification.Name("AutumnSettingsDidRestore")
+    public static let localChangeNotification = Notification.Name("AutumnSettingsLocalChange")
+
+    private static var dirty = false
+    private static var debounceTask: Task<Void, Never>?
+
+    /// Snapshot of Profile/Settings prefs for vault JSON under `settings`.
+    @MainActor
+    public static func captureCurrent() -> [String: Any] {
+        var s: [String: Any] = [:]
+        if let t = UserDefaults.standard.string(forKey: themeKey) {
+            s["theme"] = t
+        }
+        s["scrim"] = UserDefaults.standard.integer(forKey: scrimKey)
+        if let admin = UserDefaults.standard.string(forKey: adminKey) {
+            s["adminEnabled"] = admin
+        } else if UserDefaults.standard.object(forKey: adminKey) != nil {
+            s["adminEnabled"] = UserDefaults.standard.bool(forKey: adminKey) ? "1" : "0"
+        }
+        if UserDefaults.standard.object(forKey: liveFeedKey) != nil {
+            s["liveFeed"] = UserDefaults.standard.bool(forKey: liveFeedKey)
+        }
+        return s
+    }
+
+    /// Last-saved vault settings win on load — write into UserDefaults then notify UI.
+    @MainActor
+    public static func applyFromVault(_ settings: [String: Any]) {
+        if let theme = settings["theme"] as? String, !theme.isEmpty {
+            UserDefaults.standard.set(theme, forKey: themeKey)
+        }
+        if let scrim = settings["scrim"] as? Int {
+            UserDefaults.standard.set(scrim, forKey: scrimKey)
+        } else if let scrim = settings["scrim"] as? NSNumber {
+            UserDefaults.standard.set(scrim.intValue, forKey: scrimKey)
+        }
+        if let admin = settings["adminEnabled"] as? String {
+            UserDefaults.standard.set(admin, forKey: adminKey)
+        } else if let admin = settings["adminEnabled"] as? Bool {
+            UserDefaults.standard.set(admin ? "1" : "0", forKey: adminKey)
+        }
+        if let live = settings["liveFeed"] as? Bool {
+            UserDefaults.standard.set(live, forKey: liveFeedKey)
+        }
+        NotificationCenter.default.post(name: didRestoreNotification, object: nil)
+    }
+
+    /// Mark local prefs dirty and notify listeners (AutumnApp schedules vault write).
+    @MainActor
+    public static func noteLocalChange() {
+        dirty = true
+        NotificationCenter.default.post(name: localChangeNotification, object: nil)
+    }
+
+    /// Debounced write of current settings into Autumn-Ash-{username} memory snapshot.
+    @MainActor
+    public static func scheduleDebouncedVaultWrite(username: String?) {
+        let user = (username ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty else {
+            dirty = true
+            return
+        }
+        dirty = true
+        debounceTask?.cancel()
+        debounceTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            await flushToVault(username: user)
+        }
+    }
+
+    @MainActor
+    public static func flushToVault(username: String) async {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty else { return }
+        let settings = captureCurrent()
+        let ok = await UserVaultService.shared.mergeSettingsIntoSnapshot(username: user, settings: settings)
+        if ok { dirty = false }
+    }
+
+    /// On GitHub connect / vault load: restore settings from snapshot if present, else keep UserDefaults;
+    /// then push current (possibly restored) settings back so the vault stays warm.
+    @MainActor
+    public static func restoreFromVaultThenPush(username: String) async {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty,
+              user.lowercased() != "guest",
+              !user.hasPrefix("ios-"),
+              !user.hasPrefix("apple-") else { return }
+        await UserVaultService.shared.setup(githubUsername: user)
+        if let snap = await UserVaultService.shared.loadMemorySnapshot(username: user),
+           let settings = snap["settings"] as? [String: Any], !settings.isEmpty {
+            applyFromVault(settings)
+        }
+        await flushToVault(username: user)
     }
 }

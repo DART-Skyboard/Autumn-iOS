@@ -22,11 +22,12 @@ public final class BRPNSceneViewModel: ObservableObject {
     /// Web `_mantisNodeMax` JS default is 100 (radar contacts); user orbs use this cap.
     @Published public var mantisNodeMax: Int = 300
     /// LIVE FEED — hide/show remote live-user buoyancy orbs. Persist (web has no toggle).
-    @Published public var liveFeedEnabled: Bool = UserDefaults.standard.object(forKey: "autumn_live_feed") as? Bool ?? true {
+    @Published public var liveFeedEnabled: Bool = UserDefaults.standard.object(forKey: AutumnSettingsSync.liveFeedKey) as? Bool ?? true {
         didSet {
-            UserDefaults.standard.set(liveFeedEnabled, forKey: "autumn_live_feed")
+            UserDefaults.standard.set(liveFeedEnabled, forKey: AutumnSettingsSync.liveFeedKey)
             applyLiveFeedVisibility()
             if liveFeedEnabled { Task { await pollPresence() } }
+            AutumnSettingsSync.noteLocalChange()
         }
     }
     public var localUid: String = "ios-guest"

@@ -59,6 +59,18 @@ struct AutumnApp: App {
                     chatVM.sessionSID = authVM.sessionSID
                     sceneVM.bindIdentity(uid: authVM.sessionUID, sid: authVM.sessionSID)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: AutumnSettingsSync.localChangeNotification)) { _ in
+                    AutumnSettingsSync.scheduleDebouncedVaultWrite(
+                        username: authVM.githubConnected ? authVM.githubUsername : nil
+                    )
+                }
+                .onReceive(NotificationCenter.default.publisher(for: AutumnSettingsSync.didRestoreNotification)) { _ in
+                    themeVM.reloadFromDefaults()
+                    authVM.restoreAdminFlag()
+                    if UserDefaults.standard.object(forKey: AutumnSettingsSync.liveFeedKey) != nil {
+                        sceneVM.liveFeedEnabled = UserDefaults.standard.bool(forKey: AutumnSettingsSync.liveFeedKey)
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .autumnAshStar)) { _ in
                     _ = sceneVM.fireAshStar(thought: "", force: true)
                     MISTModule.shared.emitAshStarPacket(thought: "", toUids: sceneVM.connectedUids, uid: "autumn")
