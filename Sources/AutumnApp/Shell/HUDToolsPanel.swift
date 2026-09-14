@@ -23,6 +23,7 @@ struct HUDToolsPanel: View {
     var compact: Bool = false
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
+    @EnvironmentObject var authVM: AuthViewModel
 
     var body: some View {
         let chrome = themeVM.chrome
@@ -31,6 +32,17 @@ struct HUDToolsPanel: View {
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .tracking(2)
                 .foregroundColor(chrome.accent.opacity(0.45))
+            Button {
+                if authVM.adminAllowed {
+                    if !authVM.adminEnabled { authVM.setAdminEnabled(true) }
+                    appNav.showAdmin = true
+                    appNav.showHUDTools = false
+                    appNav.showProfile = false
+                } else {
+                    appNav.showProfile = true
+                    appNav.showHUDTools = false
+                }
+            } label: { row("ADMINISTRATION CONSOLE") }
             tool("CALC", key: .calc)
             Button { appNav.showMathSolver = true; appNav.showHUDTools = false } label: { row("MATH SOLVER") }
             Button { appNav.showLatexCanvas = true; appNav.showHUDTools = false } label: { row("LATEX") }

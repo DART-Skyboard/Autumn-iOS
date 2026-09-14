@@ -128,6 +128,9 @@ public struct SettingsView: View {
     @State private var showAPIKey = false
     @State private var dataConsent = true
     @State private var showGitHubSheet = false
+    @State private var ttsVoiceId = ""
+    @State private var ttsRate: Double = 0.47
+    @State private var ttsPitch: Double = 1.0
 
     public var body: some View {
         ZStack {
@@ -168,6 +171,49 @@ public struct SettingsView: View {
                     Text("APPEARANCE").settingsHeader(theme: themeVM.current)
                 }
                 .listRowBackground(themeVM.current.surface)
+
+                Section {
+                    Picker("Voice", selection: $ttsVoiceId) {
+                        Text("Auto (best neural)").tag("")
+                        ForEach(AutumnTTS.englishVoices()) { v in
+                            Text("\(v.name) · \(v.quality)").tag(v.identifier)
+                        }
+                    }
+                    .tint(themeVM.current.accent)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Rate").foregroundColor(themeVM.current.textSecondary)
+                            Spacer()
+                            Text(String(format: "%.2f", ttsRate))
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(themeVM.current.accent)
+                        }
+                        Slider(value: $ttsRate, in: 0.32...0.58)
+                            .tint(themeVM.current.accent)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Pitch").foregroundColor(themeVM.current.textSecondary)
+                            Spacer()
+                            Text(String(format: "%.2f", ttsPitch))
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(themeVM.current.accent)
+                        }
+                        Slider(value: $ttsPitch, in: 0.7...1.4)
+                            .tint(themeVM.current.accent)
+                    }
+                    Button("Preview voice") {
+                        persistTTS()
+                        AutumnTTS.shared.speak("Hello, I am Autumn.", emotion: .neutral)
+                    }
+                    .foregroundColor(themeVM.current.accent)
+                } header: {
+                    Text("AUTUMN VOICE").settingsHeader(theme: themeVM.current)
+                }
+                .listRowBackground(themeVM.current.surface)
+                .onChange(of: ttsVoiceId) { _ in persistTTS() }
+                .onChange(of: ttsRate) { _ in persistTTS() }
+                .onChange(of: ttsPitch) { _ in persistTTS() }
 
                 // Auth
                 Section {
@@ -301,6 +347,10 @@ public struct SettingsView: View {
                 apiKeyInput = saved
                 chatVM.configure(apiKey: saved)
             }
+            let prefs = AutumnTTSPrefs.load()
+            ttsVoiceId = prefs.voiceIdentifier
+            ttsRate = Double(prefs.rate)
+            ttsPitch = Double(prefs.pitch)
         }
         // Keep device-flow poll alive on swipe-dismiss; Cancel/✕ calls cancelGitHubAuth.
         .sheet(isPresented: $showGitHubSheet) {
@@ -310,6 +360,14 @@ public struct SettingsView: View {
                 .presentationDragIndicator(.visible)
                 .interactiveDismissDisabled(false)
         }
+    }
+
+    private func persistTTS() {
+        AutumnTTSPrefs(
+            voiceIdentifier: ttsVoiceId,
+            rate: Float(ttsRate),
+            pitch: Float(ttsPitch)
+        ).save()
     }
 }
 

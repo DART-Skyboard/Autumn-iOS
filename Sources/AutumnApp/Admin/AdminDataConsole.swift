@@ -28,7 +28,7 @@ struct AdminDataConsole: View {
                 }
                 Text(circuit.status)
                     .font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(circuit.allows(authVM) ? Color(hex: "#00ff88") : Color(hex: "#ffb347"))
+                    .foregroundColor(authVM.adminEnabled ? Color(hex: "#00ff88") : Color(hex: "#ffb347"))
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("ROLE GRANT / REVOKE")
@@ -111,8 +111,8 @@ struct AdminDataConsole: View {
     private func reload() async {
         guard circuit.allows(authVM) else {
             acl = []; users = []
-            aclStatus = "CIRCUIT OPEN — web admin must be live"
-            userStatus = "Admin APIs no-op until circuit closed"
+            aclStatus = "Sign in as dartsolarpunk for ACL"
+            userStatus = "Admin APIs require iOS sign-in"
             return
         }
         busy = true
@@ -126,24 +126,24 @@ struct AdminDataConsole: View {
     }
 
     private func grant() async {
-        guard circuit.allows(authVM) else { actionStatus = "CIRCUIT OPEN — write no-op"; return }
+        guard circuit.allows(authVM) else { actionStatus = "Sign in as dartsolarpunk to write"; return }
         let u = grantUser.trimmingCharacters(in: .whitespaces)
         let r = grantRole.trimmingCharacters(in: .whitespaces)
         guard !u.isEmpty, !r.isEmpty else { actionStatus = "Need username + role"; return }
         actionStatus = "Granting…"
         let exp = grantExp.trimmingCharacters(in: .whitespaces)
         actionStatus = await AdminDataService.shared.grant(
-            username: u, role: r, expires: exp.isEmpty ? nil : exp, uid: authVM.githubUsername
+            username: u, role: r, expires: exp.isEmpty ? nil : exp, uid: authVM.adminUID
         )
         await reload()
     }
 
     private func revoke() async {
-        guard circuit.allows(authVM) else { actionStatus = "CIRCUIT OPEN — write no-op"; return }
+        guard circuit.allows(authVM) else { actionStatus = "Sign in as dartsolarpunk to write"; return }
         let u = grantUser.trimmingCharacters(in: .whitespaces)
         guard !u.isEmpty else { actionStatus = "Need username"; return }
         actionStatus = "Revoking…"
-        actionStatus = await AdminDataService.shared.revoke(username: u, uid: authVM.githubUsername)
+        actionStatus = await AdminDataService.shared.revoke(username: u, uid: authVM.adminUID)
         await reload()
     }
 }
@@ -198,13 +198,13 @@ struct GrammarStudyButton: View {
                 let payload = await GrammarStudy.shared.packedPayload()
                 let ok = await AutumnGASClient.shared.ashwriteReplace(
                     path: AutumnConfig.grammarStudyPath,
-                    uid: authVM.githubUsername,
+                    uid: authVM.adminUID,
                     payload: payload,
                     message: "grammar study: train complete (ios)"
                 )
                 adminLog.append(ok ? "Wrote ashtree/grammar-study/index.json via GAS" : "Study trained locally — GAS write skipped/failed")
             } else {
-                adminLog.append("Study trained locally — circuit open, ashwrite no-op")
+                adminLog.append("Study trained locally — sign in as dartsolarpunk to ashwrite")
             }
         } catch {
             status = error.localizedDescription

@@ -33,12 +33,6 @@ public struct ChatView: View {
                         .padding(.top, 12)
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { value in
-                        if value.translation.height > 40 {
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                to: nil, from: nil, for: nil)
-                        }
-                    })
                     .onChange(of: chatVM.messages.count) { newValue in
                         withAnimation { proxy.scrollTo(bottomID) }
                     }
@@ -197,7 +191,6 @@ struct InputBar: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
-    @FocusState var inputFocused: Bool
 
     @State private var showAttachMenu = false
     @State private var showImporter = false
@@ -244,23 +237,20 @@ struct InputBar: View {
             }
             .accessibilityLabel("Math Solver")
 
-            TextField("Ask Autumn...", text: $chatVM.inputText, axis: .vertical)
-                .lineLimit(1...5)
-                .textInputAutocapitalization(.sentences)
-                .submitLabel(.send)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(themeVM.current.surface)
-                .cornerRadius(20)
-                .foregroundColor(.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
-                )
-                .focused($inputFocused)
-                .onSubmit {
-                    Task { await chatVM.send() }
-                }
+            AskAutumnComposer(
+                text: $chatVM.inputText,
+                accent: UIColor.fromSwiftUI(themeVM.current.accent),
+                onSubmit: { Task { await chatVM.send() } }
+            )
+            .frame(minHeight: 40, maxHeight: 96)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(themeVM.current.surface)
+            .cornerRadius(20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
+            )
 
             Button {
                 Task { await chatVM.send() }
@@ -304,23 +294,8 @@ struct InputBar: View {
                 chatVM.importFiles(from: urls)
             }
         }
-        // Collapse control on the keyboard accessory (DART pattern) — swipe alone is not enough on device.
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button {
-                    inputFocused = false
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil, from: nil, for: nil)
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(themeVM.current.accent)
-                }
-                .accessibilityLabel("Hide keyboard")
-            }
-        }
+        // Keyboard hide lives on UITextView.inputAccessoryView (AskAutumnComposer).
+        // SwiftUI ToolbarItemGroup(.keyboard) without NavigationStack ate first responder (TF81/82).
     }
 
     /// Copy PhotosPicker items into temp files, then reuse importFiles (pending strip + send).

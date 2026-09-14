@@ -470,6 +470,9 @@ public enum AutumnSettingsSync {
     public static let scrimKey = "_aut_scrim"
     public static let adminKey = "_aut_admin_enabled"
     public static let liveFeedKey = "autumn_live_feed"
+    public static let ttsVoiceKey = "_aut_tts_voice"
+    public static let ttsRateKey = "_aut_tts_rate"
+    public static let ttsPitchKey = "_aut_tts_pitch"
 
     public static let didRestoreNotification = Notification.Name("AutumnSettingsDidRestore")
     public static let localChangeNotification = Notification.Name("AutumnSettingsLocalChange")
@@ -493,6 +496,15 @@ public enum AutumnSettingsSync {
         if UserDefaults.standard.object(forKey: liveFeedKey) != nil {
             s["liveFeed"] = UserDefaults.standard.bool(forKey: liveFeedKey)
         }
+        if let v = UserDefaults.standard.string(forKey: ttsVoiceKey) {
+            s["ttsVoice"] = v
+        }
+        if UserDefaults.standard.object(forKey: ttsRateKey) != nil {
+            s["ttsRate"] = UserDefaults.standard.float(forKey: ttsRateKey)
+        }
+        if UserDefaults.standard.object(forKey: ttsPitchKey) != nil {
+            s["ttsPitch"] = UserDefaults.standard.float(forKey: ttsPitchKey)
+        }
         return s
     }
 
@@ -514,6 +526,23 @@ public enum AutumnSettingsSync {
         }
         if let live = settings["liveFeed"] as? Bool {
             UserDefaults.standard.set(live, forKey: liveFeedKey)
+        }
+        if let v = settings["ttsVoice"] as? String {
+            UserDefaults.standard.set(v, forKey: ttsVoiceKey)
+        }
+        if let r = settings["ttsRate"] as? Float {
+            UserDefaults.standard.set(r, forKey: ttsRateKey)
+        } else if let r = settings["ttsRate"] as? Double {
+            UserDefaults.standard.set(Float(r), forKey: ttsRateKey)
+        } else if let r = settings["ttsRate"] as? NSNumber {
+            UserDefaults.standard.set(r.floatValue, forKey: ttsRateKey)
+        }
+        if let r = settings["ttsPitch"] as? Float {
+            UserDefaults.standard.set(r, forKey: ttsPitchKey)
+        } else if let r = settings["ttsPitch"] as? Double {
+            UserDefaults.standard.set(Float(r), forKey: ttsPitchKey)
+        } else if let r = settings["ttsPitch"] as? NSNumber {
+            UserDefaults.standard.set(r.floatValue, forKey: ttsPitchKey)
         }
         NotificationCenter.default.post(name: didRestoreNotification, object: nil)
     }
