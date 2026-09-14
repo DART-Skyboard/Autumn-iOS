@@ -2,9 +2,42 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 95 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 96 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 96 — diagnostic build for the scene-create watchdog hang
+
+TF95's BGTaskScheduler fix was correct but insufficient — both TF94 and TF95 still hit
+`0x8BADF00D scene-create watchdog transgression` (Justin sent two real .ips crash logs
+confirming this, both on-device). This is NOT an exception/crash in the exception-handler
+sense — the process is alive and burning real CPU (~20 of ~20 available seconds, both
+times, on two different thermal states — fair and serious — ruling out thermal
+throttling or the screen-recording overhead as the cause) but never finishes presenting
+its first frame, so iOS kills it.
+
+The second crash log's main-thread backtrace is the key clue: mid-way through building a
+View's `body` (`DynamicBody.updateValue()` → `ViewBodyAccessor.updateBody`), our own code
+triggers a `@Published` property's `subscript.setter`, which synchronously fires
+`ObservableObjectPublisher.send()` → `AttributeInvalidatingSubscriber.invalidateAttribute()`
+— i.e. something is mutating an `@Published` property *from inside a View's body
+evaluation*, which is the classic SwiftUI/Combine self-triggering re-render loop: body
+reads the property, something in that same body call chain writes it, which invalidates
+the view again, forever (or until the 20s watchdog fires) — explaining both the huge CPU
+burn and the consistent ~20s duration (that's just when the watchdog acts, not a fixed
+workload).
+
+Without a symbolicated dSYM (no Xcode/Mac in this workflow) the exact line can't be read
+off the crash log directly — our own frames show only as raw offsets. Added
+`LaunchDebug` (see that file) instead: a UserDefaults-backed trace that marks
+`RootView.body`, `WelcomeView.body`, `AppShellView.body`, `BRPNSceneView.body`, and
+`HUDToolsPanel.body` on every call, persisted to disk immediately (survives a SIGKILL,
+unlike an in-memory log or `print()`/`os_log`, and unlike those, is readable on the next
+launch without a Mac). `AutumnApp` shows the previous session's trace as a small overlay
+at the very top of the screen on next launch — if the same label repeats dozens/hundreds
+of times, that view's body is the one looping, and that tells us exactly where to look
+next. If it only shows 2-4 marks total, the hang is somewhere this build doesn't
+instrument yet and we'll add more checkpoints.
 
 ## Build 95 — the actual black-screen crash
 
