@@ -170,7 +170,7 @@ public struct SYSOverlay: View {
     }
 
     private func post(clear: Bool = false) async {
-        guard circuit.allows(authVM) else { status = "CIRCUIT OPEN — write no-op"; return }
+        guard circuit.allows(authVM) else { status = "Sign in as dartsolarpunk to compose"; return }
         let msg = clear ? def : draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !msg.isEmpty || clear else { status = "Message cannot be empty"; return }
         status = "SAVING…"

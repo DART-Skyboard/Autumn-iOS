@@ -46,8 +46,7 @@ public struct AdminDrawerView: View {
                     switch appNav.adminTab {
                     case .data: dataTab
                     case .ash: ashTab
-                    case .feed: AdminMailboxView(inboxOnly: false)
-                    case .msg: AdminMailboxView(inboxOnly: true)
+                    case .messages: AdminMailboxView(inboxOnly: false)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -285,7 +284,7 @@ public struct AdminMailboxView: View {
         busy = false
     }
 
-    private func uid() -> String { authVM.githubUsername.isEmpty ? "admin" : authVM.githubUsername }
+    private func uid() -> String { authVM.adminUID }
 
     private func moveOne(_ e: FeedbackEntry, to dest: MailboxFolder) async {
         let remaining = entries.filter { $0.id != e.id }

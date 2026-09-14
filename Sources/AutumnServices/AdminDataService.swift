@@ -79,7 +79,7 @@ public actor AdminDataService {
 
     public func grant(username: String, role: String, expires: String?, uid: String) async -> String {
         guard await AdminCircuitStore.shared.allows(username: uid, githubConnected: true, adminEnabled: true) else {
-            return "CIRCUIT OPEN — write no-op"
+            return "Not signed in as admin — write no-op"
         }
         var (users, _) = await loadACL()
         let rec = ACLUser(
@@ -100,7 +100,7 @@ public actor AdminDataService {
 
     public func revoke(username: String, uid: String) async -> String {
         guard await AdminCircuitStore.shared.allows(username: uid, githubConnected: true, adminEnabled: true) else {
-            return "CIRCUIT OPEN — write no-op"
+            return "Not signed in as admin — write no-op"
         }
         var (users, _) = await loadACL()
         if let i = users.firstIndex(where: { $0.username.lowercased() == username.lowercased() }) {

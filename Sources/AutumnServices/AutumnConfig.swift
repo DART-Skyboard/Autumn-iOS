@@ -28,13 +28,14 @@ public enum AutumnConfig {
     public static let selfModelPath = "ashtree/sentient/selfmodel.json"
     public static let sessionsPrefix = "ashtree/sessions/"
 
-    /// Admin gate — matches web `_autAdminAllowed` (dartsolarpunk only).
+    /// Admin identity — dartsolarpunk. iOS sign-in is sufficient (no web circuit).
     public static let adminUsername = "dartsolarpunk"
 
     public static let oauthCallbackScheme = "autumn"
     public static let bundleId = "com.dartmeadow.autumn"
 
     /// Admin ACL file in leatr-ash (web `_grantRole` / `_admRenderData`).
+    /// Legacy web heartbeat path (unused on iOS — admin is sign-in gated).
     public static let circuitPath = "admin/circuit.json"
     public static let aclPath = "admin/acl.json"
     public static let usersPrefix = "ashtree/users"

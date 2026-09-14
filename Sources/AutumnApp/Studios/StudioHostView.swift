@@ -77,7 +77,8 @@ struct HelpStudioView: View {
                 help("ARCLAKE", "HUD tools. Chemistry studio first pass — not a standalone App Store app.")
                 help("MATH SOLVER", "fx on Ask Autumn, or TOOLS → MATH SOLVER. Assign special operator / physics field / math op per variable. Multi-prompt batch uses BRPN Foundation → Reflex → Performance.")
                 help("LATEX CANVAS", "Ask “show me an example of advanced LaTeX” to auto-open. Export TeX, MathML, transparent PNG, CSV, ODT.")
-                help("ADMIN", "dartsolarpunk only AND web leatr.xyz admin circuit live (admin/circuit.json within 90s). DATA / ASH / MESSAGES mailbox.")
+                help("ADMIN", "TOOLS → Administration Console. dartsolarpunk iOS sign-in (no web circuit). DATA / ASH / MESSAGES, roles, and users. Sign out clears.")
+                help("VOICE", "Settings → Autumn Voice. Premium/enhanced neural TTS with saved voice, rate, and pitch (vault + theme prefs).")
             }.padding(16)
         }
     }

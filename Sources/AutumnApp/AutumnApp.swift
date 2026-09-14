@@ -19,12 +19,30 @@ struct AutumnApp: App {
     let persistence = PersistenceController.shared
 
     init() {
+        LaunchDebug.snapshotAndReset()
+        LaunchDebug.mark("AutumnApp.init.start")
         AutumnAutonomy.shared.registerTasks()
+        LaunchDebug.mark("AutumnApp.init.end")
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                .overlay(alignment: .top) {
+                    // TF96 diagnostic only — see LaunchDebug.swift. Shows how far the
+                    // PREVIOUS launch got before the scene-create watchdog killed it.
+                    // Remove once the hang is found; harmless/no-op if nothing crashed
+                    // last time ("no previous trace" only shows on a genuinely fresh
+                    // install with no prior session to report on).
+                    Text(LaunchDebug.lastSessionSummary)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.5)
+                        .padding(4)
+                        .background(Color.black.opacity(0.7))
+                        .allowsHitTesting(false)
+                }
                 .fullScreenCover(isPresented: .init(
                     get: { !policyAccepted },
                     set: { _ in }

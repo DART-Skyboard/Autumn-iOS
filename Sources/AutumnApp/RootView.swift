@@ -11,7 +11,8 @@ public struct RootView: View {
     @AppStorage("autumn_welcome_done_v1") private var welcomeDone = false
 
     public var body: some View {
-        Group {
+        LaunchDebug.mark("RootView.body")
+        return Group {
             if appNav.showWelcome || !welcomeDone {
                 WelcomeView()
             } else {

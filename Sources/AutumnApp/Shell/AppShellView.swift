@@ -17,9 +17,11 @@ public struct AppShellView: View {
     @EnvironmentObject var circuit: AdminCircuitMonitor
     @EnvironmentObject var journalVM: JournalViewModel
     @State private var keyboardUp = false
+    @State private var keyboardHeight: CGFloat = 0
 
     public var body: some View {
-        GeometryReader { geo in
+        LaunchDebug.mark("AppShellView.body")
+        return GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
             ZStack {
                 // 1. Theme video or solid (web #backdrop-video z-index:-2)
@@ -45,7 +47,7 @@ public struct AppShellView: View {
 
                 if appNav.showProfile { ProfileSheet().transition(.move(edge: .trailing)) }
                 if appNav.showFeedback { FeedbackSheet().transition(.opacity) }
-                if appNav.showAdmin, circuit.allows(authVM) { AdminDrawerView().transition(.move(edge: .leading)) }
+                if appNav.showAdmin, authVM.adminAllowed, authVM.adminEnabled { AdminDrawerView().transition(.move(edge: .leading)) }
                 if appNav.showMantis { studioWrap { MantisNavigationView() } }
                 if appNav.showRadar { MantisRadarView() }
                 if let studio = appNav.studio { StudioHostView(kind: studio) }
@@ -54,14 +56,32 @@ public struct AppShellView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // Chat/input stack must NOT ignore the keyboard. Removing this lets the
-        // Ask Autumn bar rest directly above the system keyboard.
+        // GeometryReader must ignore the keyboard so its size (and ChatView identity)
+        // stay stable while Ask Autumn becomes first responder. Pad chat by keyboardHeight.
+        .ignoresSafeArea(.keyboard)
         .preferredColorScheme(themeVM.current == .day ? .light : .dark)
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            keyboardUp = true
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            let screenH = UIScreen.main.bounds.height
+            let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? .zero
+            // Ignore zero/off-screen frames (launch can post CGRect.zero → overlap≈screenH → black shell).
+            guard frame.height > 1, frame.width > 1 else {
+                keyboardUp = false
+                keyboardHeight = 0
+                return
+            }
+            let overlap = max(0, screenH - frame.origin.y)
+            let safe = min(overlap, screenH * 0.7)
+            if safe > 40 {
+                keyboardUp = true
+                keyboardHeight = safe
+            } else {
+                keyboardUp = false
+                keyboardHeight = 0
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardUp = false
+            keyboardHeight = 0
         }
         .animation(.easeInOut(duration: 0.25), value: appNav.showProfile)
         .animation(.easeInOut(duration: 0.25), value: appNav.showAdmin)
@@ -76,12 +96,16 @@ public struct AppShellView: View {
             if let seed = note.object as? String { appNav.mathSeed = seed }
             appNav.showMathSolver = true
         }
-        .onAppear { circuit.start() }
-        .onChange(of: circuit.live) { _ in
-            if !circuit.allows(authVM) { appNav.showAdmin = false }
+        .onChange(of: authVM.isGuest) { _ in
+            if authVM.isGuest || !authVM.adminAllowed || !authVM.adminEnabled {
+                appNav.showAdmin = false
+            }
+        }
+        .onChange(of: authVM.githubUsername) { _ in
+            if !authVM.adminAllowed || !authVM.adminEnabled { appNav.showAdmin = false }
         }
         .onChange(of: authVM.adminEnabled) { _ in
-            if !circuit.allows(authVM) { appNav.showAdmin = false }
+            if !authVM.adminEnabled { appNav.showAdmin = false }
         }
         // SIWA at root window (Ashtree/Welcome pattern) — not nested under Profile overlay.
         .fullScreenCover(isPresented: $appNav.showAppleSignIn) {
@@ -99,6 +123,7 @@ public struct AppShellView: View {
             sceneStage
             belowSceneStack(chatMax: min(320, max(220, size.height * 0.34)))
         }
+        .padding(.bottom, keyboardUp ? keyboardHeight : 0)
     }
 
     // MARK: — Landscape: header left, scene+canvas middle, full chat right.
@@ -125,7 +150,7 @@ public struct AppShellView: View {
             // Right: entire pane is chat (messages + paperclip/send).
             VStack(spacing: 0) {
                 EmoHUD()
-                ChatView()
+                ChatView(compact: true)
                     .frame(maxHeight: .infinity)
                     .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
                 if !keyboardUp {
@@ -133,6 +158,7 @@ public struct AppShellView: View {
                 }
             }
             .frame(width: min(400, max(280, size.width * 0.36)))
+            .padding(.bottom, keyboardUp ? keyboardHeight : 0)
         }
     }
 
@@ -521,8 +547,8 @@ public final class AppNavigation: ObservableObject {
 
     public enum LeftTab { case none, geo, mar, aero }
     public enum RightTab { case none, mist, star, shard, sys }
-    /// Match web admin chrome: DATA / ASH / FEED / MSG.
-    public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", feed = "FEED", msg = "MSG" }
+    /// Web-parity admin chrome: DATA / ASH / MESSAGES (roles + users live on DATA).
+    public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", messages = "MESSAGES" }
     public enum StudioKind: String, Identifiable {
         case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc, mathSolver, latexCanvas
         public var id: String { rawValue }

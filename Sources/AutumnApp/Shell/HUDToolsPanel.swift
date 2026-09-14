@@ -23,14 +23,27 @@ struct HUDToolsPanel: View {
     var compact: Bool = false
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
+    @EnvironmentObject var authVM: AuthViewModel
 
     var body: some View {
+        LaunchDebug.mark("HUDToolsPanel.body")
         let chrome = themeVM.chrome
-        VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 6) {
             Text("TOOLS")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .tracking(2)
                 .foregroundColor(chrome.accent.opacity(0.45))
+            Button {
+                if authVM.adminAllowed {
+                    if !authVM.adminEnabled { authVM.setAdminEnabled(true) }
+                    appNav.showAdmin = true
+                    appNav.showHUDTools = false
+                    appNav.showProfile = false
+                } else {
+                    appNav.showProfile = true
+                    appNav.showHUDTools = false
+                }
+            } label: { row("ADMINISTRATION CONSOLE") }
             tool("CALC", key: .calc)
             Button { appNav.showMathSolver = true; appNav.showHUDTools = false } label: { row("MATH SOLVER") }
             Button { appNav.showLatexCanvas = true; appNav.showHUDTools = false } label: { row("LATEX") }
@@ -64,12 +77,15 @@ struct HUDToolsPanel: View {
     }
 
     private func row(_ title: String) -> some View {
+        // Submenu label uses overlayLabelAccent, not raw accent — on ARIEL the two differ
+        // (lightened so it reads against the frosted sand-toned background); every other
+        // theme's overlayLabelAccent is identical to accent, so this is a no-op for them.
         Text(title)
             .font(.system(size: 10, weight: .semibold, design: .monospaced))
             .tracking(0.4)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
-            .foregroundColor(themeVM.chrome.accent.opacity(0.85))
+            .foregroundColor(themeVM.chrome.overlayLabelAccent.opacity(0.95))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10).padding(.vertical, 7)
             .background(themeVM.chrome.accent.opacity(0.06))

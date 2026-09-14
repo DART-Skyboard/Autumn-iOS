@@ -470,6 +470,9 @@ public enum AutumnSettingsSync {
     public static let scrimKey = "_aut_scrim"
     public static let adminKey = "_aut_admin_enabled"
     public static let liveFeedKey = "autumn_live_feed"
+    public static let ttsVoiceKey = "_aut_tts_voice"
+    public static let ttsRateKey = "_aut_tts_rate"
+    public static let ttsPitchKey = "_aut_tts_pitch"
 
     public static let didRestoreNotification = Notification.Name("AutumnSettingsDidRestore")
     public static let localChangeNotification = Notification.Name("AutumnSettingsLocalChange")
@@ -493,6 +496,15 @@ public enum AutumnSettingsSync {
         if UserDefaults.standard.object(forKey: liveFeedKey) != nil {
             s["liveFeed"] = UserDefaults.standard.bool(forKey: liveFeedKey)
         }
+        if let v = UserDefaults.standard.string(forKey: ttsVoiceKey) {
+            s["ttsVoice"] = v
+        }
+        if UserDefaults.standard.object(forKey: ttsRateKey) != nil {
+            s["ttsRate"] = UserDefaults.standard.float(forKey: ttsRateKey)
+        }
+        if UserDefaults.standard.object(forKey: ttsPitchKey) != nil {
+            s["ttsPitch"] = UserDefaults.standard.float(forKey: ttsPitchKey)
+        }
         return s
     }
 
@@ -515,14 +527,50 @@ public enum AutumnSettingsSync {
         if let live = settings["liveFeed"] as? Bool {
             UserDefaults.standard.set(live, forKey: liveFeedKey)
         }
-        NotificationCenter.default.post(name: didRestoreNotification, object: nil)
+        if let v = settings["ttsVoice"] as? String {
+            UserDefaults.standard.set(v, forKey: ttsVoiceKey)
+        }
+        if let r = settings["ttsRate"] as? Float {
+            UserDefaults.standard.set(r, forKey: ttsRateKey)
+        } else if let r = settings["ttsRate"] as? Double {
+            UserDefaults.standard.set(Float(r), forKey: ttsRateKey)
+        } else if let r = settings["ttsRate"] as? NSNumber {
+            UserDefaults.standard.set(r.floatValue, forKey: ttsRateKey)
+        }
+        if let r = settings["ttsPitch"] as? Float {
+            UserDefaults.standard.set(r, forKey: ttsPitchKey)
+        } else if let r = settings["ttsPitch"] as? Double {
+            UserDefaults.standard.set(Float(r), forKey: ttsPitchKey)
+        } else if let r = settings["ttsPitch"] as? NSNumber {
+            UserDefaults.standard.set(r.floatValue, forKey: ttsPitchKey)
+        }
+        // TF97: deferred for the same reason as noteLocalChange() above — its
+        // .onReceive handler in AutumnApp mutates several @Published properties
+        // (themeVM, authVM, sceneVM), so a synchronous post here risks the same
+        // publish-during-view-update cascade if this is ever reached mid-render.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: didRestoreNotification, object: nil)
+        }
     }
 
     /// Mark local prefs dirty and notify listeners (AutumnApp schedules vault write).
+    /// TF97: the NotificationCenter post is deferred a runloop tick. `noteLocalChange()`
+    /// is called from `ThemeViewModel.current`/`scrim`'s `didSet` — if that fires while
+    /// SwiftUI is already mid-render (a `@Published` write reached from inside a View's
+    /// body/AttributeGraph update, which is exactly the signature in the build 95/96
+    /// crash logs: `Published.subscript.setter` -> `AttributeInvalidatingSubscriber`
+    /// nested directly under `DynamicBody.updateValue()`), a *synchronous*
+    /// NotificationCenter post here would immediately re-enter `AutumnApp`'s
+    /// `.onReceive` handler on the same call stack, which is the standard recipe for
+    /// SwiftUI's "Publishing changes from within view updates is not allowed" runaway
+    /// re-render loop. Dispatching to the next main-thread runloop turn breaks that
+    /// synchronous nesting without changing behavior otherwise.
     @MainActor
     public static func noteLocalChange() {
         dirty = true
-        NotificationCenter.default.post(name: localChangeNotification, object: nil)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: localChangeNotification, object: nil)
+        }
     }
 
     /// Debounced write of current settings into Autumn-Ash-{username} memory snapshot.

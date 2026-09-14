@@ -2,10 +2,60 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 59 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 98 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
 
+## Build 98 — clean rebuild off TF89, minus the AskAutumnComposer subsystem
+
+TF90 through TF97 all built forward from TF89 in sequence, and TF90's new UIKit
+`AskAutumnComposer` (a custom `UITextView` wrapper written to work around a SwiftUI
+keyboard-focus bug) turned into a recurring source of exactly the bugs it was meant to
+avoid — a `touchesBegan` override that raced UITextView's own focus handling, an
+`intrinsicContentSize` recursion, and it sat directly inside the always-rendered input
+bar, which is the same view tree implicated in the `0x8BADF00D` scene-create watchdog
+crash that persisted from TF91 through TF97 despite several targeted fixes (BGTaskScheduler
+identifier mismatch, deferred NotificationCenter posts, and others — see git history on
+`main` for that full investigation, kept there rather than replayed here).
+
+Rather than carrying that subsystem forward again, this build starts fresh from TF89
+(confirmed stable, Sign in with Apple included) and re-adds only what TF90+ was actually
+for, built directly on TF89's original `TextField` + `@FocusState` input bar instead:
+
+- **Administration Console** — DATA/ASH/MESSAGES tabs, roles, mailbox, ASH grammar
+  training; gated purely on iOS GitHub sign-in identity (`dartsolarpunk`), no web-circuit
+  dependency. (`Admin/`, `AdminCircuit.swift`, `AdminDataService.swift`)
+- **TTS voice quality** — premium/enhanced neural voice preference (Zoe → Nicky →
+  Samantha → Allison) with saved rate/pitch.
+- **LaTeX Canvas** — dynamic resize between portrait/landscape (`GeometryReader`-driven,
+  matches the other studios).
+- **ARIEL theme legibility** — HUD Tools submenu labels lightened for ARIEL only so they
+  read against the frosted desert-video background.
+- **Landscape input bar** — `compact` mode tightens/left-groups the leading buttons so
+  the text field gets the reclaimed width; portrait unaffected.
+- **BGTaskScheduler identifiers** — matched to `Info.plist`'s
+  `BGTaskSchedulerPermittedIdentifiers` (a real, independently-confirmed mismatch bug,
+  unrelated to whichever exact cause turns out to be behind the watchdog crash).
+- **Deferred NotificationCenter posts** for the two spots that could otherwise cascade a
+  `@Published` mutation into a still-in-progress SwiftUI render pass — the strongest
+  concrete lead from two real device crash logs, kept here as cheap insurance regardless
+  of whether the composer removal alone resolves it.
+- **`.scrollDismissesKeyboard(.immediately)`** instead of `.interactively`, applied to
+  TF89's original TextField-based chat scroll view — `.interactively` is a known source of
+  "keyboard won't reopen" stuck states independent of which text-input implementation
+  sits underneath it.
+- **`LaunchDebug`** — the persistent, UserDefaults-backed launch tracer added in TF96,
+  still here as a safety net. Shows the previous session's trace as a small overlay at
+  the top of the screen on next launch; harmless if nothing crashed.
+- **dSYM upload** in the TestFlight workflow (CI-only) — so if anything still crashes,
+  the next report can finally be symbolicated to an exact line.
+
+Everything from TF90's `AskAutumnComposer` era — the custom UIKit composer, its keyboard
+accessory bar — is gone. TF89's original TextField + `.toolbar(.keyboard)` hide-keyboard
+button is what ships instead; it's the version that was actually confirmed stable, if not
+perfect (see `LaunchDebug`/README history on `main` for the flakiness that motivated the
+composer rewrite in the first place — trading a known, non-fatal quirk for eliminating a
+whole crash-adjacent subsystem is the point of this rebuild).
 
 ## Build 59
 

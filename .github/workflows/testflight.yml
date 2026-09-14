@@ -128,6 +128,18 @@ jobs:
           ls -la "$RUNNER_TEMP/Autumn.xcarchive" || (echo "Archive missing!" && exit 1)
           ls -la "$RUNNER_TEMP/Autumn.xcarchive"
 
+      - name: Upload dSYMs
+        # Needed to symbolicate .ips crash reports pulled from a device — this workflow
+        # previously discarded the xcarchive (and its dSYMs) once the job finished, so
+        # every crash report came back with only raw offsets for our own code. No effect
+        # on the shipped app; CI-only.
+        uses: actions/upload-artifact@v4
+        with:
+          name: dSYMs-${{ github.sha }}
+          path: ${{ runner.temp }}/Autumn.xcarchive/dSYMs
+          retention-days: 60
+          if-no-files-found: warn
+
       - name: Export IPA
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
