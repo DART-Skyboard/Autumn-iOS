@@ -168,10 +168,16 @@ public enum MISTEventType: String, Codable, Sendable {
 public final class AutumnAutonomy {
     public static let shared = AutumnAutonomy()
 
-    // Task identifiers — must match Info.plist BGTaskSchedulerPermittedIdentifiers
-    private let reflexTaskID  = "DART-Meadow-LLC.Autumn.reflex"
-    private let journalTaskID = "DART-Meadow-LLC.Autumn.journal"
-    private let memoryTaskID  = "DART-Meadow-LLC.Autumn.memory"
+    // Task identifiers — MUST match Info.plist/project.yml BGTaskSchedulerPermittedIdentifiers
+    // exactly. Registering an identifier that isn't in that plist array is a hard
+    // precondition failure on iOS — BGTaskScheduler.register() crashes immediately,
+    // every launch, before any UI renders. That's the actual root cause of the
+    // black-screen/instant-crash reports on TF91/92/94: these three strings were
+    // "DART-Meadow-LLC.Autumn.*" while Info.plist/project.yml declare
+    // "com.dartmeadow.autumn.*" — a guaranteed mismatch, not an intermittent one.
+    private let reflexTaskID  = "com.dartmeadow.autumn.reflex"
+    private let journalTaskID = "com.dartmeadow.autumn.journal"
+    private let memoryTaskID  = "com.dartmeadow.autumn.memory"
 
     public func registerTasks() {
         // Reflex task — autonomous LEATR processing every 15 min

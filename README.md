@@ -2,9 +2,27 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 94 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 95 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 95 — the actual black-screen crash
+
+TF94 still black-screen-crashed on launch per Justin's on-device test (screenshots +
+iOS crash dialog, every launch). Root cause: `AutumnAutonomy.registerTasks()` (called
+from `AutumnApp.init()`, before any UI renders) registered BGTaskScheduler identifiers
+`DART-Meadow-LLC.Autumn.{reflex,journal,memory}` — but `Info.plist` /
+`project.yml`'s `BGTaskSchedulerPermittedIdentifiers` declare
+`com.dartmeadow.autumn.{reflex,journal,memory}`. Registering a `BGTaskScheduler`
+identifier that isn't in that plist array is a **hard precondition failure on iOS** —
+it crashes immediately, unconditionally, every single launch, before any view ever
+renders. That matches the reported symptom exactly (instant black screen, native
+"App Crashed" dialog) and explains why it survived TF91/92/94: those all touched the
+keyboard/composer/scroll subsystem, which is unrelated — this crash fires before the
+chat UI (or anything else) ever gets a chance to run.
+
+Fixed by matching the three Swift-side identifiers to the plist. No other files
+reference the old identifier string.
 
 ## Build 94
 
