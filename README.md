@@ -2,9 +2,39 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 104 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 105 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 105 — custom username system + Apple ID email fallback
+
+**Apple ID showing "User":** `applyAppleAuthorization` only ever captured
+`fullName`, and Apple only sends that (and `email`) on the account's *very first*
+authorization with this app — every subsequent sign-in legitimately returns nil for
+both, which isn't a bug on its own, but the fallback chain only ever led to a
+hardcoded `"User"`. Now also captures and persists `email` on that first
+authorization, and falls back through: this sign-in's name → previously saved name
+→ this/previously saved email → `"User"` as the true last resort.
+
+**Custom profile username.** GitHub already gives every connected user a globally
+unique handle; Apple-only sign-in doesn't have an equivalent, hence "User" showing
+identically for everyone. Added a username system:
+- New "USERNAME" section in Profile — set, change, or turn off a custom handle
+  (3-20 chars, letters/numbers/underscore).
+- Uniqueness enforced against `ashtree/users/<name>/profile.json` in the `leatr-ash`
+  repo via the existing no-token `ashread`/`ashwrite` GAS proxy — **this is the same
+  directory `AdminDataService.loadUsers()` already reads as the Admin Console's user
+  roster**, not a new registry. Claiming a name here is what populates it, so
+  registered usernames now show up in Admin Console data automatically.
+- Once claimed, the name is what displays for the Apple ID row, the GitHub row, and
+  the main profile header — a pure display-layer override; the real
+  `githubUsername`/`appleUserId` used for auth and backend calls are untouched.
+  Persisted locally (Keychain), so it's restored exactly as left on next launch.
+
+Not done in this build: `AdminUserRow`/Admin Console's user list still shows just
+the directory name, not the richer profile.json fields (claimed date, linked GitHub/
+email) written alongside it — parsing those into the admin UI is a reasonable
+follow-up, not required for the registry/uniqueness/display behavior itself to work.
 
 ## Build 104 — input bar height fix + SKYBOARD theme
 

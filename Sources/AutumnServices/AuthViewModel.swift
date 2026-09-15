@@ -16,6 +16,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
     @Published public var username        = "Guest"
     @Published public var githubUsername  = ""
     @Published public var appleUserId     = ""
+    @Published public var appleEmail      = ""
     @Published public var error: String?  = nil
     @Published public var deviceFlowCode: DeviceFlowDisplay? = nil
     @Published public var savedAppleAccounts:  [SavedAccount] = []
@@ -25,6 +26,36 @@ public final class AuthViewModel: NSObject, ObservableObject {
     @Published public var adminEnabled = false
     /// When true, Welcome / SIWA cover can show an Open Settings deep-link (1000/1001).
     @Published public var appleErrorOffersSettings = false
+
+    /// TF105: custom profile username, independent of GitHub/Apple identity —
+    /// what makes this necessary is Apple-only sign-in has no inherently unique
+    /// handle the way a GitHub username already is. Uniqueness is enforced
+    /// against ashtree/users/<name>/ in leatr-ash (the same directory
+    /// AdminDataService.loadUsers() already lists as the admin console's user
+    /// roster — claiming a name here is what populates it, not a separate
+    /// registry). Persisted locally so it's restored exactly as left on next
+    /// launch; also written to leatr-ash so it renders in Admin Console data.
+    @Published public var customUsername: String = ""
+    @Published public var usernameClaimState: UsernameClaimState = .idle
+
+    public enum UsernameClaimState: Equatable {
+        case idle
+        case checking
+        case available
+        case taken
+        case claimed
+        case invalid(String)
+        case error(String)
+    }
+
+    /// What every profile-facing display (Apple ID row, GitHub row, header)
+    /// should show once a custom username is set — falls back to whatever
+    /// identity is already active otherwise. This is purely a *display* layer;
+    /// the real githubUsername/appleUserId used for auth/backend calls never
+    /// changes.
+    public var effectiveDisplayName: String {
+        customUsername.isEmpty ? username : customUsername
+    }
 
     public var sessionUID: String {
         if githubConnected && !githubUsername.isEmpty { return githubUsername }
@@ -53,8 +84,10 @@ public final class AuthViewModel: NSObject, ObservableObject {
 
     private let keychainKey    = "autumn_apple_user_id"
     private let displayNameKey = "autumn_apple_display_name"
+    private let appleEmailKey  = "autumn_apple_email"
     private let oauthTokenKey  = "github_oauth_token"
     private let oauthUserKey   = "github_username"
+    private let customUsernameKey = "autumn_custom_username"
 
     private var _currentNonce = ""
     /// Strongly retain the ProfileSheet-driven ASAuthorizationController.
@@ -62,6 +95,8 @@ public final class AuthViewModel: NSObject, ObservableObject {
 
     public func restoreSession() {
         loadSavedAccounts()
+        customUsername = KeychainService.shared.load(key: customUsernameKey) ?? ""
+        appleEmail = KeychainService.shared.load(key: appleEmailKey) ?? ""
         adminEnabled = (UserDefaults.standard.string(forKey: AutumnSettingsSync.adminKey) == "1"
             || UserDefaults.standard.bool(forKey: AutumnSettingsSync.adminKey)) && adminAllowed
         if let urlStr = KeychainService.shared.load(key: "github_avatar_url"),
@@ -343,6 +378,82 @@ public final class AuthViewModel: NSObject, ObservableObject {
         setAdminEnabled(!adminEnabled)
     }
 
+    // MARK: — Custom profile username (TF105)
+    // Uniqueness is enforced against ashtree/users/<name>/profile.json in leatr-ash
+    // via the same no-token-needed GAS proxy (ashread/ashwrite) every other Ash
+    // write already uses — not a new registry, the one AdminDataService.loadUsers()
+    // already reads as the admin console's user roster. Claiming a name here is
+    // literally what populates that directory.
+    private static let usernamePattern = try! NSRegularExpression(pattern: "^[a-zA-Z0-9_]{3,20}$")
+
+    public func validateUsernameFormat(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        guard Self.usernamePattern.firstMatch(in: trimmed, range: range) != nil else {
+            return "3-20 characters: letters, numbers, underscore only"
+        }
+        return nil
+    }
+
+    /// Checks availability, then claims the name if free. Updates
+    /// `usernameClaimState` throughout so the UI can reflect checking/
+    /// available/taken/claimed/error without a separate polling loop.
+    public func claimUsername(_ raw: String) async {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let problem = validateUsernameFormat(name) {
+            usernameClaimState = .invalid(problem)
+            return
+        }
+        let lower = name.lowercased()
+        if lower == customUsername.lowercased() {
+            usernameClaimState = .claimed
+            return
+        }
+        usernameClaimState = .checking
+        let path = "\(AutumnConfig.usersPrefix)/\(lower)/profile.json"
+        let existing = await AutumnGASClient.shared.ashread(path: path)
+        // A non-nil, non-empty result means someone already claimed this name.
+        // Treat any ambiguous/empty response as "free" rather than blocking a
+        // legitimate claim on a network hiccup — the write below is itself
+        // effectively the tiebreaker of record (last write wins is an accepted
+        // tradeoff here given how infrequently two people claim the same name
+        // in the same instant).
+        let taken: Bool
+        if let dict = existing as? [String: Any], !dict.isEmpty {
+            taken = true
+        } else if let str = existing as? String, !str.isEmpty {
+            taken = true
+        } else {
+            taken = false
+        }
+        if taken {
+            usernameClaimState = .taken
+            return
+        }
+        usernameClaimState = .available
+        let payload: [String: Any] = [
+            "username": name,
+            "claimedAt": ISO8601DateFormatter().string(from: Date()),
+            "uid": sessionUID,
+            "githubUsername": githubConnected ? githubUsername : "",
+            "appleEmail": appleEmail
+        ]
+        let ok = await AutumnGASClient.shared.ashwrite(path: path, uid: sessionUID, append: false, payload: payload)
+        if ok {
+            customUsername = name
+            KeychainService.shared.save(key: customUsernameKey, value: name)
+            usernameClaimState = .claimed
+        } else {
+            usernameClaimState = .error("Couldn't save — try again")
+        }
+    }
+
+    public func clearCustomUsername() {
+        customUsername = ""
+        KeychainService.shared.delete(key: customUsernameKey)
+        usernameClaimState = .idle
+    }
+
     @AppStorage("policy_accepted_v1") public var hasAcceptedPolicy = false
     public func acceptPolicy() { hasAcceptedPolicy = true }
 
@@ -406,9 +517,21 @@ extension AuthViewModel:
             let first   = appleID.fullName?.givenName ?? ""
             let last    = appleID.fullName?.familyName ?? ""
             let newName = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
-            let display = newName.isEmpty
-                ? (KeychainService.shared.load(key: displayNameKey) ?? "User")
-                : newName
+            // TF105: Apple only sends fullName/email on the VERY FIRST authorization
+            // for a given app; every subsequent sign-in returns nil for both, which
+            // is expected, not a bug. Persist whichever we get the first time we see
+            // it, and prefer, in order: this authorization's name -> previously
+            // saved display name -> this authorization's email -> previously saved
+            // email -> "User" as the last resort (was always falling straight to
+            // "User" before because only fullName was ever captured/fallen back to).
+            if let email = appleID.email, !email.isEmpty {
+                appleEmail = email
+                KeychainService.shared.save(key: appleEmailKey, value: email)
+            }
+            let savedName  = KeychainService.shared.load(key: displayNameKey)
+            let savedEmail = appleEmail.isEmpty ? KeychainService.shared.load(key: appleEmailKey) : appleEmail
+            let display = !newName.isEmpty ? newName
+                : (savedName ?? (savedEmail ?? "User"))
             KeychainService.shared.save(key: keychainKey,    value: uid)
             KeychainService.shared.save(key: displayNameKey, value: display)
             if !savedAppleAccounts.contains(where: { $0.id == uid }) {

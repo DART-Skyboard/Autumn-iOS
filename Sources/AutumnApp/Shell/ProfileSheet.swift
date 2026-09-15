@@ -46,12 +46,18 @@ public struct ProfileSheet: View {
                         accent: chrome.accent
                     )
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(authVM.username).font(.system(size: 15, weight: .bold)).foregroundColor(.white)
+                        Text(authVM.effectiveDisplayName).font(.system(size: 15, weight: .bold)).foregroundColor(.white)
                         Text(authVM.githubConnected ? "GitHub Connected" : (authVM.isGuest ? "Guest" : "Signed in"))
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(authVM.githubConnected ? .green : chrome.textSecondary)
                     }
                 }.padding(.horizontal, 14).padding(.bottom, 12)
+
+                // TF105: custom profile username — independent of GitHub/Apple, the
+                // one identity slot that's actually unique for Apple-only users.
+                // Claiming here is what shows up for Apple ID/GitHub rows below and
+                // in Admin Console's user list (ashtree/users/<name>/).
+                usernameSection(chrome: chrome)
 
                 if !authVM.savedGitHubAccounts.isEmpty {
                     Text("ACCOUNTS")
@@ -89,7 +95,7 @@ public struct ProfileSheet: View {
                     HStack {
                         Text("Apple ID").font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.45))
                         Spacer()
-                        Text(authVM.appleUserId.isEmpty ? "Not signed in" : authVM.username)
+                        Text(authVM.appleUserId.isEmpty ? "Not signed in" : authVM.effectiveDisplayName)
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(.white.opacity(0.85))
                     }
@@ -118,7 +124,7 @@ public struct ProfileSheet: View {
                     }
                 }
 
-                row("GitHub", authVM.githubConnected ? authVM.githubUsername : "Tap to connect") {
+                row("GitHub", authVM.githubConnected ? authVM.effectiveDisplayName : "Tap to connect") {
                     showGitHubSheet = true
                 }
                 if let err = authVM.error {
@@ -270,6 +276,103 @@ public struct ProfileSheet: View {
                 Spacer()
                 Text(v).font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.85))
             }.padding(.horizontal, 14).padding(.vertical, 10)
+        }
+    }
+
+    @State private var usernameDraft: String = ""
+    @State private var showUsernameEditor: Bool = false
+
+    private func usernameSection(chrome: AutumnTheme) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("USERNAME").font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5)
+                    .foregroundColor(chrome.accent.opacity(0.55))
+                Spacer()
+                if !authVM.customUsername.isEmpty && !showUsernameEditor {
+                    Button("Change") { usernameDraft = authVM.customUsername; showUsernameEditor = true }
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(chrome.accent)
+                }
+            }
+            .padding(.horizontal, 14)
+
+            if authVM.customUsername.isEmpty && !showUsernameEditor {
+                Button {
+                    usernameDraft = ""
+                    showUsernameEditor = true
+                    authVM.usernameClaimState = .idle
+                } label: {
+                    HStack {
+                        Text("◇ Set a username").font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        Spacer()
+                    }
+                    .foregroundColor(chrome.accent)
+                }
+                .padding(.horizontal, 14).padding(.bottom, 8)
+            } else if !showUsernameEditor {
+                HStack {
+                    Text(authVM.customUsername)
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button("Turn off") { authVM.clearCustomUsername() }
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .padding(.horizontal, 14).padding(.bottom, 8)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        TextField("letters, numbers, _", text: $usernameDraft)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundColor(.white)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .padding(8)
+                            .background(Color.black.opacity(0.3))
+                            .cornerRadius(6)
+                            .onChange(of: usernameDraft) { _ in authVM.usernameClaimState = .idle }
+                        Button {
+                            Task { await authVM.claimUsername(usernameDraft) }
+                        } label: {
+                            if authVM.usernameClaimState == .checking {
+                                ProgressView().tint(chrome.accent)
+                            } else {
+                                Text("Save")
+                            }
+                        }
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(chrome.accent)
+                        .disabled(usernameDraft.trimmingCharacters(in: .whitespaces).isEmpty || authVM.usernameClaimState == .checking)
+                        Button("Cancel") { showUsernameEditor = false }
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    usernameStatusText(chrome: chrome)
+                }
+                .padding(.horizontal, 14).padding(.bottom, 8)
+            }
+        }
+        .onChange(of: authVM.usernameClaimState) { state in
+            if state == .claimed { showUsernameEditor = false }
+        }
+    }
+
+    @ViewBuilder
+    private func usernameStatusText(chrome: AutumnTheme) -> some View {
+        switch authVM.usernameClaimState {
+        case .idle, .checking:
+            EmptyView()
+        case .available:
+            Text("Available").font(.system(size: 10, design: .monospaced)).foregroundColor(.green)
+        case .taken:
+            Text("Already taken — try another").font(.system(size: 10, design: .monospaced)).foregroundColor(.orange)
+        case .claimed:
+            Text("Saved").font(.system(size: 10, design: .monospaced)).foregroundColor(.green)
+        case .invalid(let msg):
+            Text(msg).font(.system(size: 10, design: .monospaced)).foregroundColor(.orange)
+        case .error(let msg):
+            Text(msg).font(.system(size: 10, design: .monospaced)).foregroundColor(.red)
         }
     }
 
