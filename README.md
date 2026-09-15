@@ -2,9 +2,33 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 109 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 110 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 110 — MusicKit: play Apple Music inside Autumn
+
+**Checked App Store Connect first, as asked.** The entitlement was NOT actually set
+up — confirmed directly via the API (`GET /bundleIds/{id}/bundleIdCapabilities`)
+that only `IN_APP_PURCHASE`, `PUSH_NOTIFICATIONS`, `APPLE_ID_AUTH`, and `ICLOUD` were
+enabled; no music-related capability. Turns out that's fine, though: native MusicKit
+(`import MusicKit`, iOS 15+ — what `AutumnMusic.swift` already used) doesn't need an
+App ID capability at all — that requirement only applies to *MusicKit JS* tokens for
+web, a completely different feature. All native MusicKit actually needs is the
+`NSAppleMusicUsageDescription` Info.plist key, which actually was missing (added to
+both `Info.plist` and `project.yml`'s inline properties, which build the actual
+generated plist). No ASC-side capability change was needed after all.
+
+**New MUSIC HUD tool**, alongside CALC/ARC EDGE/etc. in the Tools panel — built on
+top of the `AutumnMusic` actor that was already there but completely unwired (no
+view referenced it anywhere): auth request flow (with a clear denied-state fallback
+to Settings), search across songs/albums/artists, tap a song to play, a now-playing
+bar with pause/resume. Albums/artists are browse-only for now — playing a full
+album needs queueing its track list, which is a reasonable next step, not required
+for a first working version.
+
+Not done: background audio (needs `UIBackgroundModes: audio`, so playback would stop
+when the app backgrounds) — a deliberate scope cut for a first pass, not an oversight.
 
 ## Build 109 — Admin fully independent of the web app (by request, not a bug fix)
 
