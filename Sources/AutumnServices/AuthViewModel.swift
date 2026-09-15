@@ -141,7 +141,13 @@ public final class AuthViewModel: NSObject, ObservableObject {
                 switch state {
                 case .authorized, .transferred:
                     self.appleUserId = savedUID
-                    self.username    = KeychainService.shared.load(key: self.displayNameKey) ?? self.username
+                    // TF107: same GitHub-takes-priority fix as applyAppleAuthorization —
+                    // this ran AFTER GitHub restoration above already set the correct
+                    // username, then stomped it with the saved (possibly "User")
+                    // Apple display name regardless.
+                    if !(self.githubConnected && !self.githubUsername.isEmpty) {
+                        self.username = KeychainService.shared.load(key: self.displayNameKey) ?? self.username
+                    }
                     self.isSignedIn  = true
                     self.isGuest     = false
                     Task { await UserVaultService.shared.setup(
@@ -412,17 +418,20 @@ public final class AuthViewModel: NSObject, ObservableObject {
         usernameClaimState = .checking
         let path = "\(AutumnConfig.usersPrefix)/\(lower)/profile.json"
         let existing = await AutumnGASClient.shared.ashread(path: path)
-        // A non-nil, non-empty result means someone already claimed this name.
-        // Treat any ambiguous/empty response as "free" rather than blocking a
-        // legitimate claim on a network hiccup — the write below is itself
-        // effectively the tiebreaker of record (last write wins is an accepted
-        // tradeoff here given how infrequently two people claim the same name
-        // in the same instant).
+        // TF107: was treating ANY non-empty dict response as "taken", including
+        // a missing-file response — which GAS returns as a non-empty dict with
+        // an `error` key (e.g. {"error":"not found"}), never as nil. That made
+        // every single name look taken, no matter what was tried. Matched to
+        // the same contract the web app's own _admUsable/_admIsNotFound use:
+        // only a real `payload` or non-empty `content` means something's
+        // actually there; an `error`-only response (or nil) means available.
         let taken: Bool
-        if let dict = existing as? [String: Any], !dict.isEmpty {
-            taken = true
-        } else if let str = existing as? String, !str.isEmpty {
-            taken = true
+        if let dict = existing as? [String: Any] {
+            let hasPayload = dict["payload"] != nil && !(dict["payload"] is NSNull)
+            let hasContent = (dict["content"] as? String)?.isEmpty == false
+            taken = hasPayload || hasContent
+        } else if let str = existing as? String {
+            taken = !str.isEmpty
         } else {
             taken = false
         }
@@ -540,7 +549,19 @@ extension AuthViewModel:
                     UserDefaults.standard.set(d, forKey: "saved_apple_accounts")
                 }
             }
-            appleUserId = uid; username = display
+            appleUserId = uid
+            // TF107: don't let Apple's display name stomp an already-connected
+            // GitHub account's username. Previously unconditional — if Apple
+            // Sign In ran (or re-ran, e.g. during restoreSession) while GitHub
+            // was already connected and active, and this authorization had no
+            // fullName/email to derive a real name from, `username` got reset
+            // to the bare "User" fallback, overwriting the correct GitHub
+            // handle everywhere it's displayed (Profile header, Apple ID row,
+            // GitHub row all read the same `username`). GitHub, once
+            // connected, is the authoritative display identity.
+            if !(githubConnected && !githubUsername.isEmpty) {
+                username = display
+            }
             isSignedIn = true; isGuest = false; error = nil
             let vaultUser = githubConnected ? githubUsername : nil
             Task {

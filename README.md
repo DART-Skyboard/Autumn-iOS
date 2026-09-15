@@ -2,9 +2,39 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 106 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 107 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 107 — username claim was always "taken", Profile scroll, GitHub/Apple identity priority
+
+**Username claim always failing:** confirmed by reading the web app's own `ashread`
+response contract (`_admUsable`/`_admIsNotFound`) — a *missing* file comes back from
+GAS as a **non-empty dict with an `error` key**, never as `nil`. My check treated any
+non-empty dict as "taken," so literally every name — including ones nobody could have
+possibly claimed — read as unavailable. Fixed to match the real contract: only a
+present `payload` or non-empty `content` means something's actually there; an
+`error`-only response (or `nil`) means available.
+
+**Profile unreachable below a certain point:** the card had no scroll and no height
+cap — once the USERNAME section was added, total content height exceeded the screen
+with nothing to reach it (Admin toggle included). Everything below the header now
+scrolls, capped to a sane fraction of screen height.
+
+**"User" showing despite an active GitHub account:** found two spots — Apple Sign In's
+completion handler, and `restoreSession()`'s Apple credential-state check — that
+unconditionally overwrote `username` with the saved Apple display name (which can
+legitimately be the bare "User" fallback) regardless of whether GitHub was already
+connected and active. Since Profile's header, Apple ID row, and GitHub row all read
+the same `username`, this made every one of them show "User" once Apple's restore
+logic ran after GitHub's. GitHub, once connected, now takes priority for display.
+
+**Admin tab not visible:** working as designed, not a bug — Admin access is gated to
+one specific GitHub username (matches web), and the account that was actively
+signed-in (`radicaldeepscale`) isn't it. Switching the active account back to the
+authorized one in Profile → ACCOUNTS restores it; the fix above should also make it
+clearer which account is actually active, since the display name will stop reading
+"User" for both identity rows.
 
 ## Build 106 — Ash Shard: searchable contacts + scroll-to-bottom fix
 
