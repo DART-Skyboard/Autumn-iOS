@@ -11,12 +11,24 @@ public struct RootView: View {
     @AppStorage("autumn_welcome_done_v1") private var welcomeDone = false
 
     public var body: some View {
-        Group {
-            if appNav.showWelcome || !welcomeDone {
-                WelcomeView()
-            } else {
-                AppShellView()
+        // TF102: wrapped in NavigationStack. TextField + @FocusState +
+        // ToolbarItemGroup(placement: .keyboard) WITHOUT a NavigationStack in the
+        // view hierarchy is a documented SwiftUI reliability issue — the keyboard
+        // toolbar/focus state can silently stop calling becomeFirstResponder after
+        // the first dismiss, which matches exactly what's been reported: the field
+        // focuses and shows the keyboard once, then stops responding until the
+        // view is torn down and rebuilt (e.g. by rotating). NavigationStack gives
+        // SwiftUI's focus/toolbar machinery the context it expects; the nav bar
+        // itself is hidden so nothing changes visually.
+        NavigationStack {
+            Group {
+                if appNav.showWelcome || !welcomeDone {
+                    WelcomeView()
+                } else {
+                    AppShellView()
+                }
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
         .onAppear { authVM.restoreSession() }
         .onOpenURL { url in

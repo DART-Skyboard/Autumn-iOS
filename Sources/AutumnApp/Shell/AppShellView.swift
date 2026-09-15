@@ -106,20 +106,29 @@ public struct AppShellView: View {
     private func landscapeChrome(size: CGSize) -> some View {
         HStack(spacing: 0) {
             leftDrawer
-                .frame(width: min(176, max(132, size.width * 0.18)))
+                .frame(width: min(176, max(132, size.width * 0.18)), height: size.height)
 
             // Middle: HUD on the 3D scene (top); Ash Canvas (bottom) when open. Both stay in view.
+            // TF102: previously both sceneStage and AshCanvasView asked for
+            // maxHeight: .infinity in the same VStack with nothing capping either —
+            // when Ash Canvas opened it overflowed past the bottom of the screen,
+            // and since nothing clipped the column, the whole HStack row grew taller
+            // than the actual geometry too, which is what was pushing the right
+            // pane's chat input/footer off-screen as well. Now Ash Canvas gets an
+            // explicit bounded height (matching portrait's belowSceneStack pattern)
+            // and the scene shrinks to share the remaining space instead of both
+            // competing for the same infinite height.
             VStack(spacing: 0) {
                 landscapeTopHUD
                 sceneStage(includeSideHUD: false)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: appNav.showAshCanvas ? max(80, size.height * 0.32) : .infinity)
                 AshCanvasTrigger()
                 if appNav.showAshCanvas {
                     AshCanvasView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .frame(maxWidth: .infinity, maxHeight: min(420, size.height * 0.6), alignment: .top)
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: size.height)
             .background(themeVM.chrome.surface.opacity(0.35))
 
             // Right: entire pane is chat (messages + paperclip/send).
@@ -132,8 +141,9 @@ public struct AppShellView: View {
                     footerBar
                 }
             }
-            .frame(width: min(400, max(280, size.width * 0.36)))
+            .frame(width: min(400, max(280, size.width * 0.36)), height: size.height)
         }
+        .frame(height: size.height)
     }
 
     /// HUD tabs sit on TOP of the chat/scene strip in landscape so they don't clip off the edge.

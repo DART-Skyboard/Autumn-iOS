@@ -15,22 +15,26 @@ struct LatexCanvasOverlay: View {
     @State private var shareItems: [Any] = []
 
     var body: some View {
-        // TF101: was a fixed `.frame(maxWidth: 620)` card with no orientation
-        // awareness. In landscape (especially alongside Math Solver taking the other
-        // half of the screen) the fixed-width header HStack squeezed "LATEX CANVAS"
-        // into a column too narrow to lay out normally, wrapping it letter-by-letter
-        // down the edge instead of resizing like the other HUD studios do.
-        // GeometryReader-driven width plus a squeeze-resistant title fixes both.
+        // TF102: the width fix (TF101) didn't address height — in landscape the
+        // card's natural content height (title field + glyph canvas + source
+        // editor + buttons, each with fixed minHeights) easily exceeds the
+        // available landscape height, so the bottom of the card rendered off
+        // the edge of the screen with no way to reach it. Now sizes height off
+        // GeometryReader too, and the body below the header scrolls internally
+        // when it doesn't fit — the whole overlay and everything in it stays
+        // reachable in either orientation instead of just resizing the frame
+        // around content that still overflows it.
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
             let cardWidth = landscape
                 ? min(620, max(320, geo.size.width * 0.46))
                 : min(620, geo.size.width * 0.94)
-            latexCard(width: cardWidth)
+            let cardHeight = min(640, geo.size.height * (landscape ? 0.92 : 0.86))
+            latexCard(width: cardWidth, height: cardHeight)
         }
     }
 
-    private func latexCard(width: CGFloat) -> some View {
+    private func latexCard(width: CGFloat, height: CGFloat) -> some View {
         let chrome = themeVM.chrome
         return ZStack {
             Color.black.opacity(0.4).ignoresSafeArea().onTapGesture { appNav.showLatexCanvas = false }
@@ -60,58 +64,62 @@ struct LatexCanvasOverlay: View {
                 }
                 .padding(14)
 
-                TextField("Title", text: $title)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 14)
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        TextField("Title", text: $title)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
 
-                LatexGlyphCanvas(source: source)
-                    .frame(maxWidth: .infinity, minHeight: 160)
-                    .padding(12)
-                    .background(Color.clear)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.25), lineWidth: 1))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                        LatexGlyphCanvas(source: source)
+                            .frame(maxWidth: .infinity, minHeight: 160)
+                            .padding(12)
+                            .background(Color.clear)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(chrome.accent.opacity(0.25), lineWidth: 1))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
 
-                Text("LaTeX source")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.45))
-                    .padding(.horizontal, 14)
-                TextEditor(text: $source)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(.white)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 70)
-                    .padding(8)
-                    .background(Color.black.opacity(0.3))
-                    .cornerRadius(8)
-                    .padding(.horizontal, 14)
+                        Text("LaTeX source")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.45))
+                            .padding(.horizontal, 14)
+                        TextEditor(text: $source)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundColor(.white)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 70)
+                            .padding(8)
+                            .background(Color.black.opacity(0.3))
+                            .cornerRadius(8)
+                            .padding(.horizontal, 14)
 
-                if !note.isEmpty {
-                    Text(note)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.7))
-                        .padding(.horizontal, 14)
-                        .padding(.top, 6)
-                }
-                if !exportMessage.isEmpty {
-                    Text(exportMessage)
-                        .font(.system(size: 10, design: .monospaced))
+                        if !note.isEmpty {
+                            Text(note)
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.7))
+                                .padding(.horizontal, 14)
+                                .padding(.top, 6)
+                        }
+                        if !exportMessage.isEmpty {
+                            Text(exportMessage)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(chrome.accent)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 4)
+                        }
+
+                        HStack {
+                            Button("Example (a+b)²") { loadIdentity(AlgebraIdentities.example(for: "square")) }
+                            Button("F = ma") { loadIdentity(AlgebraIdentities.example(for: "force")) }
+                            Button("Advanced") { loadAdvanced() }
+                        }
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(chrome.accent)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 4)
+                        .padding(14)
+                    }
                 }
-
-                HStack {
-                    Button("Example (a+b)²") { loadIdentity(AlgebraIdentities.example(for: "square")) }
-                    Button("F = ma") { loadIdentity(AlgebraIdentities.example(for: "force")) }
-                    Button("Advanced") { loadAdvanced() }
-                }
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(chrome.accent)
-                .padding(14)
             }
-            .frame(maxWidth: width)
+            .frame(maxWidth: width, maxHeight: height)
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)

@@ -2,9 +2,41 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 101 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 102 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 102 — real keyboard fix + landscape overflow fixes
+
+Build 101's `.scrollDismissesKeyboard(.immediately)` change didn't fix the keyboard —
+confirmed still reproducing on pure TF89 source (no `AskAutumnComposer` involved at all),
+so the cause was never that composer's `touchesBegan` override; it's more fundamental.
+
+**Root cause found:** `TextField` + `@FocusState` + `ToolbarItemGroup(placement:
+.keyboard)` **without a `NavigationStack`** anywhere in the view hierarchy is a
+documented SwiftUI reliability issue — the keyboard toolbar/focus machinery can
+silently stop calling `becomeFirstResponder` after the first dismiss. That's exactly
+the reported symptom: focuses and shows the keyboard once, then stops responding until
+the view is torn down and rebuilt (e.g. by rotating, which swaps `portraitChrome` /
+`landscapeChrome` and forces a fresh `InputBar`). `RootView` never had a
+`NavigationStack` anywhere. Wrapped it in one (nav bar hidden, no visual change) —
+this gives SwiftUI's focus/toolbar code the context it expects.
+
+**LaTeX Canvas landscape overflow:** build 101's width fix didn't address height — the
+card's content (title field + glyph canvas + source editor + buttons, each with fixed
+minimum heights) could still exceed the available landscape height, running the bottom
+of the card off-screen with no way to reach it. Now sizes height off `GeometryReader`
+too, and the body below the header scrolls internally when it doesn't fit.
+
+**Ash Canvas landscape overflow:** in `landscapeChrome`'s middle column, both the 3D
+scene and `AshCanvasView` asked for `maxHeight: .infinity` in the same `VStack` with
+nothing capping either — when Ash Canvas opened it overflowed past the bottom of the
+screen, and since nothing bounded the column's actual height, the whole `HStack` row
+grew taller than the real geometry too, which is what was also pushing the right
+pane's chat input/footer off-screen. Ash Canvas now gets an explicit bounded height
+(matching portrait's already-correct `belowSceneStack` pattern) and the scene shrinks
+to share the remaining space instead of both competing for the same infinite height;
+added explicit height clamps on the row and both columns as a backstop.
 
 ## Build 101 — minimal reset: pure TF89 + only the keyboard and LaTeX fixes
 
