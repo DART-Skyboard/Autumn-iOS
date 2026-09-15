@@ -216,6 +216,7 @@ struct InputBar: View {
     @State private var showImporter = false
     @State private var showPhotosPicker = false
     @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var composerHeight: CGFloat = 40
 
     private var canSend: Bool {
         !chatVM.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -268,9 +269,10 @@ struct InputBar: View {
             AskAutumnComposer(
                 text: $chatVM.inputText,
                 accent: UIColor.fromSwiftUI(themeVM.current.accent),
-                onSubmit: { Task { await chatVM.send() } }
+                onSubmit: { Task { await chatVM.send() } },
+                measuredHeight: $composerHeight
             )
-            .frame(minHeight: 40, maxHeight: 96)
+            .frame(height: composerHeight)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(themeVM.current.surface)
@@ -292,7 +294,7 @@ struct InputBar: View {
             .padding(.leading, compact ? 4 : 0)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         }
         .background(.ultraThinMaterial)
         .overlay(

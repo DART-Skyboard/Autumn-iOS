@@ -12,6 +12,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
     case departure = "DEPARTURE"
     case ashTree = "ASH TREE"
     case ariel = "ARIEL"
+    case skyboard = "SKYBOARD"
     case auto = "AUTO"
 
     public var id: String { rawValue }
@@ -25,6 +26,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .departure: return "departure"
         case .ashTree: return "ashtree"
         case .ariel: return "ariel"
+        case .skyboard: return "skyboard"
         case .auto: return "system"
         }
     }
@@ -38,6 +40,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .departure: return "🌅"
         case .ashTree: return "🌿"
         case .ariel: return "◇"
+        case .skyboard: return "🛹"
         case .auto: return "◈"
         }
     }
@@ -51,6 +54,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .departure: return Color(hex: "#ff9d4a")
         case .ashTree: return Color(hex: "#7ddc8e")
         case .ariel: return Color(hex: "#c4a36a")
+        case .skyboard: return Color(hex: "#5fd4ff")
         case .auto: return Color(hex: "#ffb347")
         }
     }
@@ -71,6 +75,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .departure: return Color(hex: "#080400")
         case .ashTree: return Color(hex: "#010604")
         case .ariel: return Color(hex: "#050c14")
+        case .skyboard: return Color(hex: "#040c16")
         case .auto: return Color(hex: "#020814")
         }
     }
@@ -84,6 +89,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .departure: return Color(hex: "#120800").opacity(0.88)
         case .ashTree: return Color(hex: "#041208").opacity(0.88)
         case .ariel: return Color(hex: "#0a1624").opacity(0.88)
+        case .skyboard: return Color(hex: "#0a1a2c").opacity(0.88)
         case .auto: return Color(hex: "#0d1f3c").opacity(0.85)
         }
     }
@@ -106,6 +112,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .departure: return "autumndeparture"
         case .ashTree: return "ashtree"
         case .ariel: return "ariel"
+        case .skyboard: return "skyboard"
         case .auto: return "autumnanimation"
         }
     }
@@ -120,6 +127,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .departure: return (12/255.0, 5/255.0, 0)
         case .ashTree: return (1/255.0, 10/255.0, 4/255.0)
         case .ariel: return (8/255.0, 20/255.0, 36/255.0)
+        case .skyboard: return (4/255.0, 12/255.0, 22/255.0)
         }
     }
 
@@ -133,6 +141,8 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         switch resolved {
         case .ariel:
             return LinearGradient(colors: [Color(hex: "#050c14"), Color(hex: "#0a1624"), Color(hex: "#0c1210")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .skyboard:
+            return LinearGradient(colors: [Color(hex: "#040c16"), Color(hex: "#0a1a2c"), Color(hex: "#081422")], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .night:
             return LinearGradient(colors: [Color(hex: "#05030c"), Color(hex: "#0a0618")], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .stealth:

@@ -2,9 +2,28 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 103 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 104 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 104 — input bar height fix + SKYBOARD theme
+
+**Input bar too tall:** after bringing the UIKit composer back in build 103, its
+height was left to whatever SwiftUI's generic `UIViewRepresentable` sizing guessed
+within the `.frame(minHeight: 40, maxHeight: 96)` range — in practice it settled much
+closer to the 96pt max than the ~40pt a single line actually needs, making the whole
+bar visibly bloated (confirmed in a screenshot — lots of empty space above/below the
+buttons). Fixed properly: the composer now measures its own real content height via
+`sizeThatFits` and reports it back through a binding, so `InputBar` applies an exact
+`.frame(height:)` instead of a guessed range — short by default, grows only when text
+actually wraps to more lines. Also trimmed the bar's outer vertical padding slightly.
+
+**New theme: SKYBOARD.** Added from a supplied video (a figure on a hoverboard amid
+holographic HUD panels in the desert — matches the DART-Skyboard branding well).
+Re-encoded to H.264 (4.9MB, in line with the other theme videos) and added as a full
+`AutumnTheme` case: accent color, base/surface, wash tint, and void-gradient fallback,
+using an icy HUD-cyan (`#5fd4ff`) to distinguish it from ARIEL's desert-gold. Same
+video and theme also added to the web app (`leatr.xyz`) in the same session.
 
 ## Build 103 — UIKit composer back (fixed from the start), Math Solver resize
 
