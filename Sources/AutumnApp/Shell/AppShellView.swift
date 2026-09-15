@@ -534,7 +534,7 @@ public final class AppNavigation: ObservableObject {
     /// Match web admin chrome: DATA / ASH / FEED / MSG.
     public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", feed = "FEED", msg = "MSG" }
     public enum StudioKind: String, Identifiable {
-        case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc, mathSolver, latexCanvas
+        case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc, mathSolver, latexCanvas, music
         public var id: String { rawValue }
         public var title: String {
             switch self {
@@ -551,6 +551,7 @@ public final class AppNavigation: ObservableObject {
             case .alc: return "ALC · AFTERLIFE CROSSING"
             case .mathSolver: return "MATH SOLVER"
             case .latexCanvas: return "LATEX CANVAS"
+            case .music: return "MUSIC"
             }
         }
     }

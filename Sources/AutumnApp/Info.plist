@@ -54,6 +54,8 @@
     <string>Attach photos and videos from your library to chat with Autumn</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Voice input for AI conversation with Autumn</string>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>Play music from your Apple Music library and catalog while you work with Autumn</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Transcribe voice messages for the LEATR pipeline</string>
     <key>NSLocationWhenInUseUsageDescription</key>

@@ -53,6 +53,7 @@ struct StudioHostView: View {
                     case .alc: ALCStudioView()
                     case .mathSolver: MathSolverOverlay()
                     case .latexCanvas: LatexCanvasOverlay()
+                    case .music: MusicPanel()
                     }
                 }
             }
@@ -78,6 +79,7 @@ struct HelpStudioView: View {
                 help("MATH SOLVER", "fx on Ask Autumn, or TOOLS → MATH SOLVER. Assign special operator / physics field / math op per variable. Multi-prompt batch uses BRPN Foundation → Reflex → Performance.")
                 help("LATEX CANVAS", "Ask “show me an example of advanced LaTeX” to auto-open. Export TeX, MathML, transparent PNG, CSV, ODT.")
                 help("ADMIN", "dartsolarpunk only. Independent of the web app — no browser session required. DATA / ASH / MESSAGES mailbox.")
+                help("MUSIC", "HUD tools. Search and play Apple Music inside Autumn. Requires an Apple Music subscription for full playback.")
             }.padding(16)
         }
     }
