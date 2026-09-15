@@ -17,6 +17,13 @@ public struct ShardOverlay: View {
     @State private var status = "DESIGN A SHARD THEN SEND"
     @State private var seed: Int = 0
     @State private var generation = 0
+    @State private var contactSearch: String = ""
+
+    private var filteredContacts: [GitHubFollowUser] {
+        let q = contactSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return contacts }
+        return contacts.filter { $0.login.lowercased().contains(q) }
+    }
 
     private static let autoColors = ["#00e5ff", "#bf5fff", "#ff6b35", "#00ff88", "#ffd700", "#ff4488", "#44aaff"]
     private static let autoTools = ["rect", "tri", "pent", "slash", "cross"]
@@ -81,23 +88,68 @@ public struct ShardOverlay: View {
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(.white.opacity(0.35))
                     } else {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(contacts) { c in
-                                    Button {
-                                        if starred.contains(c.login) { starred.remove(c.login) } else { starred.insert(c.login) }
-                                        persistStarred()
-                                    } label: {
-                                        HStack {
-                                            Text(starred.contains(c.login) ? "★" : "☆").foregroundColor(Color(hex: "#ffdd00"))
-                                            Text(c.login).font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.8))
-                                            Spacer()
-                                        }
-                                    }
+                        // Searchable — matches the web app; with a large following list,
+                        // scrolling through every name to find one contact isn't
+                        // reasonable on a phone screen.
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.35))
+                            TextField("Search contacts", text: $contactSearch)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.white)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled(true)
+                            if !contactSearch.isEmpty {
+                                Button {
+                                    contactSearch = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.white.opacity(0.3))
                                 }
                             }
                         }
-                        .frame(minHeight: min(contactsFloor, leftover), maxHeight: .infinity)
+                        .padding(.horizontal, 8).padding(.vertical, 6)
+                        .background(Color.black.opacity(0.25))
+                        .cornerRadius(6)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(themeVM.chrome.accent.opacity(0.18), lineWidth: 1))
+
+                        if filteredContacts.isEmpty {
+                            Text("NO MATCHES")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.35))
+                                .padding(.top, 4)
+                        } else {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(filteredContacts) { c in
+                                        Button {
+                                            if starred.contains(c.login) { starred.remove(c.login) } else { starred.insert(c.login) }
+                                            persistStarred()
+                                        } label: {
+                                            HStack {
+                                                Text(starred.contains(c.login) ? "★" : "☆").foregroundColor(Color(hex: "#ffdd00"))
+                                                Text(c.login).font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.8))
+                                                Spacer()
+                                            }
+                                        }
+                                    }
+                                }
+                                // TF106: without trailing space inside the scroll content, the
+                                // last row sat flush against the ScrollView's own bottom edge
+                                // and read as unreachable/cut off — the list technically
+                                // scrolled, it just never gave the last item room to clear the
+                                // edge. This is content padding, not a frame change, so it
+                                // doesn't affect the list's overall height budget.
+                                .padding(.bottom, 10)
+                            }
+                            .frame(minHeight: min(contactsFloor, leftover), maxHeight: .infinity)
+                            // Explicit clip + scroll-indicator flash so the scrollable area's
+                            // true bounds are visually obvious — the "can't tell if there's
+                            // more below" complaint pairs with the not-quite-reaching-bottom one.
+                            .clipped()
+                        }
                     }
                     Text(status).font(.system(size: 9, design: .monospaced)).foregroundColor(themeVM.chrome.accent.opacity(0.5))
                 }
