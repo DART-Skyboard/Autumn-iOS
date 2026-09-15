@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 99 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 100 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 100 — DIAGNOSTIC: BRPN 3D scene disabled (bisection, not a fix)
+
+Build 99 (LaunchDebug's `.synchronize()` removed) still hit the same
+`0x8BADF00D scene-create watchdog` — but this crash log's signature was new and, so far,
+the least specific: every single frame is inside SwiftUI/AttributeGraph internals
+(`AG::LayoutDescriptor::Compare`, `compare_heap_objects`, recursing four levels deep) —
+**zero application-code frames**. That means something is repeatedly asking SwiftUI to
+deep-compare a large or structurally complex value, but the crash log has no way to say
+which one — that needs a live profiler (Instruments' Time Profiler/SwiftUI template),
+which isn't available without a Mac in this workflow.
+
+Rather than guess a fourth time, this build bisects: `BRPNSceneView.body` is replaced
+with a static placeholder and `sceneVM.setupScene()` is never called, disabling the
+entire BRPN 3D scene — continuous 60fps SceneKit rendering, the 7x7x7 maze-orb state,
+icosahedron shell geometry, orbital particles, tool-shape swarm. Everything else (chat,
+HUD tools, admin console, theme system) is untouched. The original implementation is
+still in the file as `disabledOriginalBody`, unused but intact, so reverting this is a
+one-line change once we have an answer.
+
+**This is not a fix.** If build 100 launches clean, we've isolated the hang to the BRPN
+scene subsystem and can dig into exactly what there is expensive to diff. If it still
+hangs, the cause is elsewhere and this rules out a large, plausible suspect.
 
 ## Build 99 — the diagnostic tool was the bug
 

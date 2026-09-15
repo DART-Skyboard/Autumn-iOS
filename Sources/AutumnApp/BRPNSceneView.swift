@@ -16,6 +16,28 @@ public struct BRPNSceneView: View {
     ]
 
     public var body: some View {
+        // TF100 DIAGNOSTIC ONLY — bisecting the 0x8BADF00D scene-create watchdog crash.
+        // Build 99's crash log showed ONLY AttributeGraph/SwiftUI-internal frames
+        // (AG::LayoutDescriptor::Compare / compare_heap_objects, no application code at
+        // all), meaning something is repeatedly asking SwiftUI to deep-compare a large
+        // or complex value — but the log can't say which, and there's no Mac/Instruments
+        // available in this workflow to profile it live. This build replaces the whole
+        // BRPN 3D scene (the heaviest, most novel piece — continuous 60fps SceneKit
+        // rendering, a 7x7x7 maze-orb state, icosahedron geometry) with a static
+        // placeholder and skips sceneVM.setupScene() entirely, to test in isolation
+        // whether that subsystem is the source. Everything else (chat, HUD, admin,
+        // theme) is untouched. If this build launches clean, we've found it; if it still
+        // hangs, we know to look elsewhere. Revert this stub once we have an answer —
+        // it is NOT a real fix, the scene is fully disabled.
+        return ZStack {
+            Color.clear
+            Text("BRPN scene disabled — TF100 diagnostic build")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(.white.opacity(0.4))
+        }
+    }
+
+    private var disabledOriginalBody: some View {
         return ZStack {
             // JS: renderer.setClearColor(0x000000, 0) — scene is transparent
             BRPNSceneKitView(vm: sceneVM)
