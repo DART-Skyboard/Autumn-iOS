@@ -38,6 +38,14 @@ public struct ProfileSheet: View {
                     Button("✕") { appNav.showProfile = false }.foregroundColor(.white.opacity(0.5))
                 }.padding(14)
 
+                // TF107: the username section (and everything else) added since
+                // this was written pushed total content height well past the
+                // screen, with no scroll anywhere — Admin toggle and everything
+                // below it was simply unreachable. Everything below the header
+                // now scrolls, capped to a sane fraction of screen height so the
+                // card never tries to exceed the actual display.
+                ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 12) {
                     GitHubAvatarView(
                         url: authVM.githubAvatarURL,
@@ -201,6 +209,9 @@ public struct ProfileSheet: View {
                     Text("Sign Out").font(.system(size: 13)).foregroundColor(.red)
                         .frame(maxWidth: .infinity).padding(14)
                 }
+                } // end inner VStack
+                }
+                .frame(maxHeight: min(560, UIScreen.main.bounds.height * 0.68))
             }
             .frame(width: min(320, UIScreen.main.bounds.width - 32))
             .background {
