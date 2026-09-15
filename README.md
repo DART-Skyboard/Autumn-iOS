@@ -2,10 +2,40 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 59 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 101 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
 
+## Build 101 — minimal reset: pure TF89 + only the keyboard and LaTeX fixes
+
+Builds 90 through 100 chased a `0x8BADF00D scene-create watchdog` crash through several
+real, confirmed bugs (an `AskAutumnComposer` keyboard race, a `LaunchDebug.synchronize()`
+hang, a `@Published`-during-render notification cascade) without ever reaching a clean
+launch — each fix was individually justified by real crash-log evidence, but something
+kept surviving all of them, and the last crash log (build 99) showed a signature with no
+application-code frames at all, past the point where crash logs alone can localize it
+without a live profiler.
+
+Rather than keep layering fixes on an increasingly hard-to-verify base, this build goes
+back to **exactly TF89's source** — the last version Justin confirmed stable end-to-end,
+including Sign in with Apple — and changes only two things, both isolated, low-risk, and
+requested directly:
+
+1. **Keyboard:** `ChatView`'s `.scrollDismissesKeyboard` changed from `.interactively` to
+   `.immediately`. `.interactively` is a known source of the keyboard getting stuck and
+   refusing to reopen until the view is torn down and rebuilt (e.g. by rotating) —
+   matches the original reported symptom on this exact TextField/`.focused()` setup.
+   Nothing else about the input bar changed.
+2. **LaTeX Canvas resize:** `LatexCanvasOverlay` was a fixed `.frame(maxWidth: 620)` card
+   with no orientation awareness, so in landscape the header squeezed "LATEX CANVAS" into
+   a column too narrow to lay out normally. Now sized off `GeometryReader` (matching how
+   the other HUD studios size themselves) with a squeeze-resistant title.
+
+Everything else — admin console independence, TTS voice quality, the BGTaskScheduler
+identifier fix, the notification-defer fix, `LaunchDebug`, dSYM capture, the Ariel theme
+fix, landscape input-bar layout — is deliberately **not** in this build. Once this is
+confirmed stable on-device, those go back in one at a time so any regression is
+immediately attributable instead of stacking blind again.
 
 ## Build 59
 

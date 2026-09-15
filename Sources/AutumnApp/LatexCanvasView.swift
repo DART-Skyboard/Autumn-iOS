@@ -15,8 +15,24 @@ struct LatexCanvasOverlay: View {
     @State private var shareItems: [Any] = []
 
     var body: some View {
+        // TF101: was a fixed `.frame(maxWidth: 620)` card with no orientation
+        // awareness. In landscape (especially alongside Math Solver taking the other
+        // half of the screen) the fixed-width header HStack squeezed "LATEX CANVAS"
+        // into a column too narrow to lay out normally, wrapping it letter-by-letter
+        // down the edge instead of resizing like the other HUD studios do.
+        // GeometryReader-driven width plus a squeeze-resistant title fixes both.
+        GeometryReader { geo in
+            let landscape = geo.size.width > geo.size.height
+            let cardWidth = landscape
+                ? min(620, max(320, geo.size.width * 0.46))
+                : min(620, geo.size.width * 0.94)
+            latexCard(width: cardWidth)
+        }
+    }
+
+    private func latexCard(width: CGFloat) -> some View {
         let chrome = themeVM.chrome
-        ZStack {
+        return ZStack {
             Color.black.opacity(0.4).ignoresSafeArea().onTapGesture { appNav.showLatexCanvas = false }
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
@@ -24,7 +40,11 @@ struct LatexCanvasOverlay: View {
                         .font(.system(size: 12, weight: .bold, design: .monospaced))
                         .tracking(1.4)
                         .foregroundColor(chrome.accent)
-                    Spacer()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .layoutPriority(1)
+                    Spacer(minLength: 6)
                     Menu("EXPORT") {
                         Button("LaTeX (.tex)") { exportTeX() }
                         Button("MathML (.mml)") { exportMathML() }
@@ -91,7 +111,7 @@ struct LatexCanvasOverlay: View {
                 .foregroundColor(chrome.accent)
                 .padding(14)
             }
-            .frame(maxWidth: 620)
+            .frame(maxWidth: width)
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)

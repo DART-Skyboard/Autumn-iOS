@@ -32,7 +32,15 @@ public struct ChatView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                     }
-                    .scrollDismissesKeyboard(.interactively)
+                    // TF101: .interactively drags the keyboard with the finger via a
+                    // live UIScrollView interaction, which is a known source of the
+                    // keyboard getting stuck and refusing to reopen on the next tap
+                    // until something tears the view down and rebuilds it (matches the
+                    // "works once, dead until I rotate" bug reported on this exact
+                    // TextField/.focused() setup). .immediately dismisses on scroll
+                    // start instead — no live tracking state to get stuck — same
+                    // "scroll to dismiss" UX otherwise.
+                    .scrollDismissesKeyboard(.immediately)
                     .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { value in
                         if value.translation.height > 40 {
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
