@@ -3,8 +3,11 @@ import AutumnServices
 import LEATRCore
 
 /// Admin drawer — public-app left ADMIN tab.
-/// Tabs match web: DATA / ASH / FEED / MSG.
-/// FEED = full mailbox (inbox/analysis/read/trash). MSG = inbox-only overlay parity.
+/// Tabs: DATA / ASH / MESSAGES (TF111 — dropped the redundant inbox-only MSG tab,
+/// MESSAGES is the full mailbox with folders/select/move/delete).
+/// TF111: floating + translucent + draggable, matching the other HUD overlay panels
+/// (Mist/Shard/etc.) instead of a fixed slide-in-from-edge drawer — opened from the
+/// same small "⚙ ADMIN" tab on the left HUD either way.
 public struct AdminDrawerView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var authVM: AuthViewModel
@@ -14,20 +17,41 @@ public struct AdminDrawerView: View {
         "═══ AUTUMN ADMIN — PUBLIC-APP DRAWER ═══",
         "You are operating in the admin drawer. The admin is Justin (dartsolarpunk)."
     ]
+    @State private var dragOffset: CGSize = .zero
+    @GestureState private var liveDrag: CGSize = .zero
 
     public var body: some View {
         let chrome = themeVM.chrome
-        ZStack(alignment: .leading) {
-            Color.black.opacity(0.45).ignoresSafeArea().onTapGesture { appNav.showAdmin = false }
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .onTapGesture { appNav.showAdmin = false }
+
             VStack(spacing: 0) {
                 HStack {
                     Text("⚙ ADMIN").font(.system(size: 13, weight: .bold, design: .monospaced)).tracking(2).foregroundColor(Color(hex: "#ffb347"))
                     Spacer()
+                    Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.25))
                     Button("✕") { appNav.showAdmin = false }
                         .font(.system(size: 14, design: .monospaced))
                         .foregroundColor(Color(hex: "#ff4466"))
                 }
                 .padding(12)
+                .background(chrome.accent.opacity(0.06))
+                .contentShape(Rectangle())
+                // Drag by the title bar only — avoids fighting the mailbox List's
+                // own scroll gesture below it.
+                .gesture(
+                    DragGesture()
+                        .updating($liveDrag) { value, state, _ in state = value.translation }
+                        .onEnded { value in
+                            dragOffset.width += value.translation.width
+                            dragOffset.height += value.translation.height
+                        }
+                )
                 HStack(spacing: 0) {
                     ForEach(AppNavigation.AdminTab.allCases, id: \.rawValue) { tab in
                         Button { appNav.adminTab = tab } label: {
@@ -46,15 +70,19 @@ public struct AdminDrawerView: View {
                     switch appNav.adminTab {
                     case .data: dataTab
                     case .ash: ashTab
-                    case .feed: AdminMailboxView(inboxOnly: false)
-                    case .msg: AdminMailboxView(inboxOnly: true)
+                    case .messages: AdminMailboxView(inboxOnly: false)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: 380)
-            .background(chrome.base.opacity(0.97))
-            .overlay(Rectangle().frame(width: 1).foregroundColor(chrome.accent.opacity(0.25)), alignment: .trailing)
+            .frame(width: min(380, UIScreen.main.bounds.width - 24), height: min(600, UIScreen.main.bounds.height * 0.75))
+            .background(.ultraThinMaterial)
+            .background(Color.white.opacity(0.06))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(chrome.accent.opacity(0.3), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
+            .padding(.leading, 16).padding(.top, 60)
+            .offset(x: dragOffset.width + liveDrag.width, y: dragOffset.height + liveDrag.height)
         }
     }
 
@@ -172,10 +200,41 @@ public struct AdminMailboxView: View {
 
             if entries.isEmpty {
                 Spacer()
-                Text(busy ? "LOADING…" : "NO ENTRIES")
-                    .font(.system(size: 10, design: .monospaced))
-                    .tracking(2)
-                    .foregroundColor(chrome.accent.opacity(0.35))
+                if busy {
+                    Text("LOADING…")
+                        .font(.system(size: 10, design: .monospaced))
+                        .tracking(2)
+                        .foregroundColor(chrome.accent.opacity(0.35))
+                } else if status.hasPrefix("Error") {
+                    // TF111: was showing the misleading "NO ENTRIES" here even when the
+                    // load genuinely failed — the real error sat only in the small status
+                    // line at the bottom, easy to miss entirely.
+                    VStack(spacing: 6) {
+                        Text(status)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(Color(hex: "#ff7864"))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                        if status.localizedCaseInsensitiveContains("bad credentials")
+                            || status.localizedCaseInsensitiveContains("401") {
+                            Text("This account's GitHub connection has expired.")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.45))
+                            Button("↻ Reconnect GitHub") { Task { await authVM.startGitHubAuth() } }
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(chrome.accent)
+                        } else {
+                            Button("↻ Retry") { Task { await load() } }
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(chrome.accent)
+                        }
+                    }
+                } else {
+                    Text("NO ENTRIES")
+                        .font(.system(size: 10, design: .monospaced))
+                        .tracking(2)
+                        .foregroundColor(chrome.accent.opacity(0.35))
+                }
                 Spacer()
             } else {
                 List {

@@ -180,13 +180,11 @@ public struct ProfileSheet: View {
                     Button { authVM.toggleAdminFlag() } label: {
                         labelRow(authVM.adminEnabled ? "⚙ DISABLE ADMIN" : "⚙ ENABLE ADMIN")
                     }
-                    // TF109: fully independent of the web app now — no circuit/heartbeat
-                    // wait. Enable Admin is the only gate; the drawer opens immediately.
+                    // TF111: dropped the redundant "OPEN ADMIN DRAWER" button — the left
+                    // HUD ADMIN tab (visible whenever adminEnabled is true) already opens
+                    // it, and having a second entry point here just added clutter.
                     if authVM.adminEnabled {
-                        Button { appNav.showAdmin = true; appNav.showProfile = false } label: {
-                            labelRow("⚙ OPEN ADMIN DRAWER")
-                        }
-                        Text("Left HUD ADMIN also opens the drawer")
+                        Text("Left HUD ADMIN tab opens the console")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(Color(hex: "#00ff88").opacity(0.75))
                             .padding(.horizontal, 14).padding(.bottom, 6)

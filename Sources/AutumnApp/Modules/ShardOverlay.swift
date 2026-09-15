@@ -38,7 +38,12 @@ public struct ShardOverlay: View {
                 let pad: CGFloat = 12
                 let innerW = max(80, geo.size.width - pad * 2)
                 let chrome: CGFloat = 214
-                let contactsFloor: CGFloat = 260
+                // TF111: was 260 — contacts list felt short and didn't comfortably
+                // reach its own last row without extra scrolling; giving it more of
+                // the available height (the canvas shrinks to compensate, via
+                // canvasBudget below) makes more contacts visible per screen and the
+                // scrollable range less cramped.
+                let contactsFloor: CGFloat = 340
                 let canvasBudget = max(90, geo.size.height - chrome - contactsFloor)
                 let canvasW = innerW
                 let canvasH = min(canvasBudget, canvasW * 0.58)
@@ -98,9 +103,24 @@ public struct ShardOverlay: View {
                                 Text("COULDN'T LOAD: \(contactsError)")
                                     .font(.system(size: 10, design: .monospaced))
                                     .foregroundColor(Color(hex: "#ff7864"))
-                                Button("↻ Retry") { Task { await loadContacts() } }
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundColor(themeVM.chrome.accent)
+                                if contactsError.localizedCaseInsensitiveContains("bad credentials")
+                                    || contactsError.localizedCaseInsensitiveContains("401") {
+                                    // TF111: "Bad credentials" is GitHub's real 401 response —
+                                    // the stored token for this account is actually invalid/
+                                    // expired, not a timing glitch. A plain Retry would just
+                                    // fail the same way every time; reconnecting is what
+                                    // actually fixes it.
+                                    Text("This account's GitHub connection has expired.")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(.white.opacity(0.5))
+                                    Button("↻ Reconnect GitHub") { Task { await authVM.startGitHubAuth() } }
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(themeVM.chrome.accent)
+                                } else {
+                                    Button("↻ Retry") { Task { await loadContacts() } }
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(themeVM.chrome.accent)
+                                }
                             }
                         } else {
                             HStack {

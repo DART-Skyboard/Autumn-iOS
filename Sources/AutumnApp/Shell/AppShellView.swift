@@ -532,7 +532,7 @@ public final class AppNavigation: ObservableObject {
     public enum LeftTab { case none, geo, mar, aero }
     public enum RightTab { case none, mist, star, shard, sys }
     /// Match web admin chrome: DATA / ASH / FEED / MSG.
-    public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", feed = "FEED", msg = "MSG" }
+    public enum AdminTab: String, CaseIterable { case data = "DATA", ash = "ASH", messages = "MESSAGES" }
     public enum StudioKind: String, Identifiable {
         case arcForge, worldStudio, nate, movement, help, privacy, arcLake, arcEdge, calc, emoMap, alc, mathSolver, latexCanvas, music
         public var id: String { rawValue }
