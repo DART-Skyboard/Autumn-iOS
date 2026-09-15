@@ -38,16 +38,36 @@ struct MathSolverOverlay: View {
     }
 
     var body: some View {
+        // TF103: same fix as LatexCanvasOverlay — was a fixed .frame(maxWidth: 560)
+        // with no height awareness at all, so in landscape (shorter available
+        // height) the bottom of the card — including Add to Batch/Solve
+        // Batch/Send to Chat — could run off the bottom of the screen with no
+        // way to reach it. Now sized off GeometryReader on both axes; the body
+        // below the header scrolls internally when it doesn't fit.
+        GeometryReader { geo in
+            let landscape = geo.size.width > geo.size.height
+            let cardWidth = landscape
+                ? min(560, max(320, geo.size.width * 0.46))
+                : min(560, geo.size.width * 0.94)
+            let cardHeight = min(640, geo.size.height * (landscape ? 0.92 : 0.86))
+            solverCard(width: cardWidth, height: cardHeight)
+        }
+    }
+
+    private func solverCard(width: CGFloat, height: CGFloat) -> some View {
         let chrome = themeVM.chrome
-        ZStack {
+        return ZStack {
             Color.black.opacity(0.35).ignoresSafeArea().onTapGesture { appNav.showMathSolver = false }
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("MATH SOLVER & CONTEXT")
                         .font(.system(size: 12, weight: .bold, design: .monospaced))
                         .tracking(1.2)
                         .foregroundColor(chrome.accent)
-                    Spacer()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .layoutPriority(1)
+                    Spacer(minLength: 6)
                     Button("LATEX") {
                         appNav.latexSeed = equation
                         appNav.showLatexCanvas = true
@@ -57,81 +77,86 @@ struct MathSolverOverlay: View {
                     Button("✕") { appNav.showMathSolver = false }
                         .foregroundColor(.white.opacity(0.6))
                 }
-                Text("Equation / Formula")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.5))
-                TextEditor(text: $equation)
-                    .font(.system(size: 14, design: .monospaced))
-                    .foregroundColor(.white)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 56)
-                    .padding(6)
-                    .background(Color.black.opacity(0.35))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(chrome.accent.opacity(0.3), lineWidth: 1))
+                .padding(.bottom, 10)
 
-                HStack {
-                    Picker("Variable", selection: $selectedVar) {
-                        Text("-- Variable --").tag("")
-                        ForEach(variables, id: \.self) { Text($0).tag($0) }
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Equation / Formula")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.5))
+                        TextEditor(text: $equation)
+                            .font(.system(size: 14, design: .monospaced))
+                            .foregroundColor(.white)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 56)
+                            .padding(6)
+                            .background(Color.black.opacity(0.35))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(chrome.accent.opacity(0.3), lineWidth: 1))
+
+                        HStack {
+                            Picker("Variable", selection: $selectedVar) {
+                                Text("-- Variable --").tag("")
+                                ForEach(variables, id: \.self) { Text($0).tag($0) }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(chrome.accent)
+                            Button("Assign ↓") { assignContext() }
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(chrome.accent)
+                            Button("Clear") { clearSelected() }
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+
+                        HStack {
+                            Text("Value")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.5))
+                            TextField("numerical value or expression", text: $valueText)
+                                .textInputAutocapitalization(.never)
+                                .font(.system(size: 13, design: .monospaced))
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(Color.black.opacity(0.35))
+                                .cornerRadius(6)
+                            Button("Add") { addValue() }
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(chrome.accent)
+                        }
+
+                        VStack(spacing: 6) {
+                            picker("Special Operator", selection: $specialOp, items: MathGlossary.specialOperators)
+                            picker("Math Operation", selection: $mathOp, items: MathGlossary.mathOperations)
+                            picker("Physics Field", selection: $physics, items: MathGlossary.physicsFields)
+                        }
+
+                        Text(report)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        HStack {
+                            Button("Add to Batch") { addToBatch() }
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(chrome.accent)
+                            Button("Solve Batch") { solveBatch() }
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(chrome.accent.opacity(0.25))
+                                .cornerRadius(6)
+                            Spacer()
+                            Button("Send to Chat") { sendToChat() }
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(chrome.accent)
+                        }
+                        .padding(.top, 4)
+                        .padding(.bottom, 4)
                     }
-                    .pickerStyle(.menu)
-                    .tint(chrome.accent)
-                    Button("Assign ↓") { assignContext() }
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(chrome.accent)
-                    Button("Clear") { clearSelected() }
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.6))
-                }
-
-                HStack {
-                    Text("Value")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.5))
-                    TextField("numerical value or expression", text: $valueText)
-                        .textInputAutocapitalization(.never)
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(8)
-                        .background(Color.black.opacity(0.35))
-                        .cornerRadius(6)
-                    Button("Add") { addValue() }
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(chrome.accent)
-                }
-
-                VStack(spacing: 6) {
-                    picker("Special Operator", selection: $specialOp, items: MathGlossary.specialOperators)
-                    picker("Math Operation", selection: $mathOp, items: MathGlossary.mathOperations)
-                    picker("Physics Field", selection: $physics, items: MathGlossary.physicsFields)
-                }
-
-                ScrollView {
-                    Text(report)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.85))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 160)
-
-                HStack {
-                    Button("Add to Batch") { addToBatch() }
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(chrome.accent)
-                    Button("Solve Batch") { solveBatch() }
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(chrome.accent.opacity(0.25))
-                        .cornerRadius(6)
-                    Spacer()
-                    Button("Send to Chat") { sendToChat() }
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(chrome.accent)
                 }
             }
             .padding(16)
-            .frame(maxWidth: 560)
+            .frame(maxWidth: width, maxHeight: height)
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)

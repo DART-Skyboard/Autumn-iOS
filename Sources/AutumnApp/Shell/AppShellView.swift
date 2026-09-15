@@ -134,7 +134,7 @@ public struct AppShellView: View {
             // Right: entire pane is chat (messages + paperclip/send).
             VStack(spacing: 0) {
                 EmoHUD()
-                ChatView()
+                ChatView(compact: true)
                     .frame(maxHeight: .infinity)
                     .background(themeVM.scrim == .clear ? Color.black.opacity(0.18) : themeVM.chrome.surface)
                 if !keyboardUp {

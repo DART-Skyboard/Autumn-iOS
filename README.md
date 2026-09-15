@@ -2,9 +2,38 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 102 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 103 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 103 — UIKit composer back (fixed from the start), Math Solver resize
+
+**Keyboard:** confirmed on-device that build 102's `NavigationStack` wrap — the
+documented fix for `TextField` + `@FocusState` + keyboard toolbar without one —
+wasn't enough on its own, most likely because of how this app's specific iOS 27 beta
+target behaves rather than something a pure-SwiftUI workaround can route around.
+
+Reintroduced `AskAutumnComposer` (the UIKit `UITextView`-backed composer from TF90),
+which takes first-responder control directly instead of going through
+`@FocusState`/`.toolbar(.keyboard)` at all — bypassing that whole SwiftUI layer
+rather than trying to work around it again. Brought back with both of its original
+bugs fixed **from the start** this time, not re-broken and re-fixed:
+- No `touchesBegan` override (that raced UITextView's own native tap-to-edit gesture
+  recognizer — the actual cause of "works once, dead after")
+- `intrinsicContentSize` returns a fixed value instead of calling `sizeThatFits`
+  (that recursion was the TF91 black-screen bug)
+
+Separately confirmed via the build 91-99 crash-log investigation: neither of those
+bugs, nor this composer at all, had anything to do with the `0x8BADF00D` scene-create
+watchdog crash — that was `LaunchDebug`'s `UserDefaults.synchronize()` call and a
+synchronous `NotificationCenter` post, both already fixed and unrelated to this file.
+Safe to bring back on its own merits.
+
+**Math Solver overlay:** only `LatexCanvasOverlay` got the GeometryReader-based
+resize fix in build 101/102 — `MathSolverOverlay` was never touched and had the
+exact same fixed-`maxWidth`-only, no-height-awareness bug. Same fix applied: sized
+off `GeometryReader` on both axes, body scrolls internally below the header when it
+doesn't fit either orientation.
 
 ## Build 102 — real keyboard fix + landscape overflow fixes
 
