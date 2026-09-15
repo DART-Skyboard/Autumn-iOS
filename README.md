@@ -2,9 +2,38 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 110 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 111 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 111 — Admin polish + the real Ash Shard bug (invalid token, not a UI bug)
+
+**Profile:** removed the redundant "OPEN ADMIN DRAWER" button — the left HUD ADMIN tab
+already does this whenever admin is enabled, so it was just clutter.
+
+**Admin panel:** consolidated from 4 tabs to 3 (DATA / ASH / MESSAGES) — dropped the
+inbox-only MSG tab since MESSAGES (the full mailbox: folders, select-all, move,
+delete) already covers everything it did and more. Also converted the panel from a
+fixed slide-in-from-edge drawer to a floating, translucent (`.ultraThinMaterial`),
+draggable panel (drag by the title bar) — matching the other HUD overlay panels
+instead of a one-off drawer style. The mailbox's move/delete logic itself was already
+correct — moving an entry already removes it from the source folder and writes it to
+the destination — but the empty-state view was showing a misleading "NO ENTRIES" even
+when a load had genuinely failed, with the real error only visible in a small status
+line at the bottom; fixed to surface the actual error with a Retry action.
+
+**Ash Shard "COULDN'T LOAD: Bad credentials"**: this is GitHub's own literal 401
+response — confirmed by reading `GitHubClient`'s error handling, which surfaces the
+API's real `message` field verbatim. This means the stored OAuth token for whichever
+account is active has actually gone invalid (expired or been revoked on GitHub's
+side) — not a timing bug my last two builds' retry logic could ever fix, since
+retrying a genuinely bad token just fails the same way every time. Both Ash Shard and
+the Admin mailbox now detect this specific error and offer a "Reconnect GitHub"
+action instead of a Retry that was never going to succeed.
+
+**Contacts list height:** increased its share of the panel (`contactsFloor` 260→340,
+the 3D textile canvas shrinks to compensate) so more contacts are visible per screen
+and there's less scrolling needed to reach the end of the list.
 
 ## Build 110 — MusicKit: play Apple Music inside Autumn
 
