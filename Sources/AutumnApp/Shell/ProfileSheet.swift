@@ -180,25 +180,18 @@ public struct ProfileSheet: View {
                     Button { authVM.toggleAdminFlag() } label: {
                         labelRow(authVM.adminEnabled ? "⚙ DISABLE ADMIN" : "⚙ ENABLE ADMIN")
                     }
-                    if circuit.allows(authVM) {
+                    // TF109: fully independent of the web app now — no circuit/heartbeat
+                    // wait. Enable Admin is the only gate; the drawer opens immediately.
+                    if authVM.adminEnabled {
                         Button { appNav.showAdmin = true; appNav.showProfile = false } label: {
                             labelRow("⚙ OPEN ADMIN DRAWER")
                         }
-                        Text("Circuit live — left HUD ADMIN also opens the drawer")
+                        Text("Left HUD ADMIN also opens the drawer")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(Color(hex: "#00ff88").opacity(0.75))
                             .padding(.horizontal, 14).padding(.bottom, 6)
-                    } else if authVM.adminEnabled {
-                        Text("Admin waits for web circuit · \(circuit.status)")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.45))
-                            .padding(.horizontal, 14).padding(.bottom, 4)
-                        Text("Keep leatr.xyz admin tab open (heartbeat ≤90s), then OPEN ADMIN here or left HUD.")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.35))
-                            .padding(.horizontal, 14).padding(.bottom, 6)
                     } else {
-                        Text("Enable Admin (dartsolarpunk) → wait for web circuit → OPEN ADMIN / left HUD")
+                        Text("Enable Admin (dartsolarpunk) → OPEN ADMIN / left HUD")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.white.opacity(0.35))
                             .padding(.horizontal, 14).padding(.bottom, 6)

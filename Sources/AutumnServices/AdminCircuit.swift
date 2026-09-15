@@ -2,8 +2,13 @@ import Foundation
 import Combine
 
 /// One admin gate used by UI and network.
-/// Closed only when GitHub user is dartsolarpunk, the Enable Admin flag is on,
-/// and `admin/circuit.json` is live:true with ts within ~90s (web tab heartbeat).
+/// TF109: fully independent of the web app now, per explicit request — was
+/// originally requiring `admin/circuit.json` to be live:true with a web tab
+/// heartbeating within ~90s (a two-factor-style design), but that was never
+/// actually the intent; it ties iOS admin access to a browser session being
+/// open somewhere, which defeats "sign in anywhere, get full admin access
+/// right there." Closed only on the iOS-side identity: GitHub user is
+/// dartsolarpunk, and the Enable Admin flag is on. No web dependency at all.
 public enum AdminCircuitGate {
     public static let maxAge: TimeInterval = 90
 
@@ -18,9 +23,7 @@ public enum AdminCircuitGate {
         guard githubConnected else { return false }
         guard username.lowercased() == AutumnConfig.adminUsername else { return false }
         guard adminEnabled else { return false }
-        guard live else { return false }
-        guard let ts else { return false }
-        return now.timeIntervalSince(ts) <= maxAge && now.timeIntervalSince(ts) >= -30
+        return true
     }
 }
 
