@@ -30,6 +30,14 @@ struct AskAutumnComposer: UIViewRepresentable {
     @Binding var text: String
     var accent: UIColor
     var onSubmit: () -> Void
+    /// TF104: without this, the composer's height was left to whatever SwiftUI's
+    /// generic UIViewRepresentable sizing guessed from the min/maxHeight range —
+    /// in practice it settled much closer to the max than the actual single-line
+    /// content needed, making the whole input bar visibly too tall. Reporting the
+    /// real measured height back (and having InputBar apply it directly via
+    /// .frame(height:)) makes it size to content: short by default, grows only
+    /// when the text actually wraps to more lines.
+    @Binding var measuredHeight: CGFloat
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -70,6 +78,7 @@ struct AskAutumnComposer: UIViewRepresentable {
                 uiView.selectedRange = selected
             }
         }
+        context.coordinator.measureHeight(uiView)
         uiView.tintColor = accent
         uiView.attributedPlaceholder = placeholder(accent: accent)
         uiView.setPlaceholderVisible(text.isEmpty && !uiView.isFirstResponder)
@@ -94,6 +103,19 @@ struct AskAutumnComposer: UIViewRepresentable {
             textView.invalidateIntrinsicContentSize()
             if let tv = textView as? AskAutumnTextView {
                 tv.setPlaceholderVisible((textView.text ?? "").isEmpty)
+            }
+            measureHeight(textView)
+        }
+
+        /// Measures the actual content height (1 line by default, grows as text
+        /// wraps) and writes it back to InputBar's @State so .frame(height:) uses
+        /// a real value instead of SwiftUI guessing within the min/maxHeight range.
+        func measureHeight(_ textView: UITextView) {
+            let width = textView.bounds.width > 0 ? textView.bounds.width : UIScreen.main.bounds.width - 140
+            let fitSize = textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+            let clamped = min(96, max(40, fitSize.height))
+            if abs(parent.measuredHeight - clamped) > 0.5 {
+                DispatchQueue.main.async { self.parent.measuredHeight = clamped }
             }
         }
 
