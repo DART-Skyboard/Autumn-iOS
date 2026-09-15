@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 105 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 106 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 106 — Ash Shard: searchable contacts + scroll-to-bottom fix
+
+`ShardOverlay`'s GitHub-following contact picker had two issues: no way to filter a
+long following list (matches the web app's contact search), and the last row or two
+could feel unreachable — the list technically scrolled, but the final item sat flush
+against the ScrollView's own bottom edge with no clearance, reading as cut off.
+
+Added a search field (filters by login, case-insensitive) above the list, and a small
+bottom content padding inside the ScrollView so the last row actually clears the
+edge — a content change, not a frame change, so it doesn't affect the list's overall
+height budget.
+
+Also this session (web app, same session as build 105 — see the `Autumn` repo, not
+this one): ported the LIVE FEED toggle (hide/show remote users' presence in the 3D
+scene) to the web app, which never had one despite iOS already having it; restyled
+the header's FROST/theme pills from a dark fill to the lighter frosted look iOS uses.
+
+Not done in this build (deferred — genuinely separate, larger features): full iOS
+Admin Console parity with the web's "USER DATA SHARING" category filter/table, which
+depends on a per-user privacy-preferences feature (`data-prefs.json` in each user's
+own vault repo) that doesn't exist on iOS at all yet — that's new feature work, not
+a resize/parity fix like the rest of this build.
 
 ## Build 105 — custom username system + Apple ID email fallback
 
