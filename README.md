@@ -2,9 +2,25 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 108 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 109 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 109 — Admin fully independent of the web app (by request, not a bug fix)
+
+Build 108 correctly identified that the admin drawer required an active leatr.xyz
+browser session heartbeating `admin/circuit.json` — that was working as originally
+designed, but on confirming with Justin, that was never actually the intent: the
+goal is sign in on any device, get full admin access right there, with the web app
+doing its own thing independently. Not tied together.
+
+Removed the circuit/heartbeat requirement from `AdminCircuitGate.allows()` — the
+only gate now is GitHub connected as `dartsolarpunk` + the Enable Admin toggle.
+Every existing call site (`LeftHUDView`'s ADMIN tab, `AppShellView`'s drawer
+presentation, `AdminDataConsole`/`SYSOverlay`'s write guards) reads through this
+one function, so simplifying it there was enough — no per-call-site changes
+needed. Updated Profile's admin section text and the ADMIN tab's help text to
+stop describing a web-tab requirement that no longer exists.
 
 ## Build 108 — Ash Shard contacts reload fix; admin tab explained (not a bug)
 
