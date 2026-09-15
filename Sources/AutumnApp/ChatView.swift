@@ -10,6 +10,11 @@ public struct ChatView: View {
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @Namespace private var bottomID
+    /// Set by AppShellView's landscape pane, which is narrower than the portrait
+    /// chat column — see InputBar's own comment for what this changes.
+    public var compact: Bool = false
+
+    public init(compact: Bool = false) { self.compact = compact }
 
     public var body: some View {
         ZStack {
@@ -53,7 +58,7 @@ public struct ChatView: View {
                 }
 
                 // MARK: — Input bar
-                InputBar()
+                InputBar(compact: compact)
             }
         }
     }
@@ -202,10 +207,10 @@ struct ThinkingIndicator: View {
 
 // MARK: — Input Bar
 struct InputBar: View {
+    var compact: Bool = false
     @EnvironmentObject var chatVM: ChatViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var appNav: AppNavigation
-    @FocusState var inputFocused: Bool
 
     @State private var showAttachMenu = false
     @State private var showImporter = false
@@ -218,27 +223,35 @@ struct InputBar: View {
     }
 
     var body: some View {
+        // TF103: in landscape the chat pane is narrower than portrait's full-width
+        // bar, so the same leading buttons + fixed spacing ate proportionally more
+        // of the row, leaving the composer cramped. `compact` tightens spacing and
+        // shrinks those buttons (same icons/shapes, smaller) so they sit as a
+        // tight left-hand group, giving the composer the reclaimed width; send
+        // stays pinned right. Portrait (compact == false) is unaffected.
+        let btn: CGFloat = compact ? 30 : 36
+        let leadingSpacing: CGFloat = compact ? 4 : 8
         VStack(spacing: 0) {
         PendingAttachmentStrip()
-        // Keyboard collapse lives ONLY on ToolbarItemGroup(placement: .keyboard) —
-        // do not float a chevron chip above Ask Autumn when focused without a real keyboard (TF81).
-        HStack(spacing: 8) {
+        // Keyboard collapse lives ONLY on the composer's own inputAccessoryView
+        // (AskAutumnComposer) — do not float a chevron chip above Ask Autumn.
+        HStack(spacing: leadingSpacing) {
             Button {
                 chatVM.toggleListening()
             } label: {
                 Image(systemName: chatVM.isListening ? "mic.fill" : "mic")
                     .foregroundColor(chatVM.isListening ? .red : themeVM.current.accent)
-                    .frame(width: 36, height: 36)
+                    .frame(width: btn, height: btn)
                     .background(themeVM.current.surface)
-                    .cornerRadius(18)
+                    .cornerRadius(btn / 2)
             }
 
             Button { showAttachMenu = true } label: {
                 Image(systemName: "paperclip")
                     .foregroundColor(themeVM.current.accent)
-                    .frame(width: 36, height: 36)
+                    .frame(width: btn, height: btn)
                     .background(themeVM.current.surface)
-                    .cornerRadius(18)
+                    .cornerRadius(btn / 2)
             }
             .accessibilityLabel("Attach")
 
@@ -246,29 +259,27 @@ struct InputBar: View {
                 Text("fx")
                     .font(.system(size: 13, weight: .bold, design: .serif)).italic()
                     .foregroundColor(themeVM.current.accent)
-                    .frame(width: 36, height: 36)
+                    .frame(width: btn, height: btn)
                     .background(themeVM.current.surface)
-                    .cornerRadius(18)
+                    .cornerRadius(btn / 2)
             }
             .accessibilityLabel("Math Solver")
 
-            TextField("Ask Autumn...", text: $chatVM.inputText, axis: .vertical)
-                .lineLimit(1...5)
-                .textInputAutocapitalization(.sentences)
-                .submitLabel(.send)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(themeVM.current.surface)
-                .cornerRadius(20)
-                .foregroundColor(.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
-                )
-                .focused($inputFocused)
-                .onSubmit {
-                    Task { await chatVM.send() }
-                }
+            AskAutumnComposer(
+                text: $chatVM.inputText,
+                accent: UIColor.fromSwiftUI(themeVM.current.accent),
+                onSubmit: { Task { await chatVM.send() } }
+            )
+            .frame(minHeight: 40, maxHeight: 96)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(themeVM.current.surface)
+            .cornerRadius(20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(themeVM.current.accent.opacity(0.25), lineWidth: 1)
+            )
+            .layoutPriority(1)
 
             Button {
                 Task { await chatVM.send() }
@@ -278,6 +289,7 @@ struct InputBar: View {
                     .foregroundColor(canSend ? themeVM.current.accent : themeVM.current.textSecondary)
             }
             .disabled(!canSend || chatVM.isThinking)
+            .padding(.leading, compact ? 4 : 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -312,23 +324,10 @@ struct InputBar: View {
                 chatVM.importFiles(from: urls)
             }
         }
-        // Collapse control on the keyboard accessory (DART pattern) — swipe alone is not enough on device.
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button {
-                    inputFocused = false
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil, from: nil, for: nil)
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(themeVM.current.accent)
-                }
-                .accessibilityLabel("Hide keyboard")
-            }
-        }
+        // Keyboard hide lives on UITextView.inputAccessoryView (AskAutumnComposer).
+        // SwiftUI ToolbarItemGroup(.keyboard) without NavigationStack ate first
+        // responder before (TF81/82); with the composer owning first-responder
+        // directly there's no SwiftUI focus/toolbar interaction left to break.
     }
 
     /// Copy PhotosPicker items into temp files, then reuse importFiles (pending strip + send).
