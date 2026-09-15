@@ -18,6 +18,8 @@ public struct ShardOverlay: View {
     @State private var seed: Int = 0
     @State private var generation = 0
     @State private var contactSearch: String = ""
+    @State private var contactsError: String? = nil
+    @State private var contactsLoading: Bool = false
 
     private var filteredContacts: [GitHubFollowUser] {
         let q = contactSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -84,9 +86,34 @@ public struct ShardOverlay: View {
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .foregroundColor(themeVM.chrome.accent.opacity(0.6))
                     if contacts.isEmpty {
-                        Text(authVM.githubConnected ? "NO FOLLOWING LOADED" : "CONNECT GITHUB TO LOAD FOLLOWING")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.35))
+                        if contactsLoading {
+                            HStack(spacing: 6) {
+                                ProgressView().tint(themeVM.chrome.accent).scaleEffect(0.7)
+                                Text("LOADING FOLLOWING…")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                        } else if let contactsError {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("COULDN'T LOAD: \(contactsError)")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(Color(hex: "#ff7864"))
+                                Button("↻ Retry") { Task { await loadContacts() } }
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(themeVM.chrome.accent)
+                            }
+                        } else {
+                            HStack {
+                                Text(authVM.githubConnected ? "NO FOLLOWING LOADED" : "CONNECT GITHUB TO LOAD FOLLOWING")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.35))
+                                if authVM.githubConnected {
+                                    Button("↻ Retry") { Task { await loadContacts() } }
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(themeVM.chrome.accent)
+                                }
+                            }
+                        }
                     } else {
                         // Searchable — matches the web app; with a large following list,
                         // scrolling through every name to find one contact isn't
@@ -159,6 +186,14 @@ public struct ShardOverlay: View {
         }
         .task { await loadContacts() }
         .onAppear { restoreStarred() }
+        .onChange(of: authVM.githubUsername) { _ in
+            // TF108: reload whenever the active GitHub account changes — the
+            // .task above only ever fires once per view identity, so switching
+            // accounts while Ash Shard was already open (or right before
+            // opening it) left contacts stuck on whichever account's data
+            // happened to load first.
+            Task { await loadContacts() }
+        }
     }
 
     private var textileCanvas: some View {
@@ -284,12 +319,27 @@ public struct ShardOverlay: View {
 
     private func loadContacts() async {
         restoreStarred()
+        contactsError = nil
         guard authVM.githubConnected else { return }
+        contactsLoading = true
         do {
+            // TF108: fetchFollowing() uses whatever token is currently loaded into
+            // GitHubClient.shared. Right after switchGitHubAccount() this token
+            // swap happens in a separate, only-just-launched Task — if Ash Shard's
+            // own .task fired before that finished, this ran against the OLD
+            // account's token (or none at all), silently returning empty/erroring,
+            // and nothing here reloaded when the account changed later. Retrying
+            // once after a short delay covers that race without needing a hard
+            // dependency between the two async flows.
             contacts = try await GitHubClient.shared.fetchFollowing()
+            if contacts.isEmpty {
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                contacts = try await GitHubClient.shared.fetchFollowing()
+            }
         } catch {
-            status = "CONTACTS: \(error.localizedDescription)"
+            contactsError = error.localizedDescription
         }
+        contactsLoading = false
         // Restore from the user's Autumn-Ash repo if local cache is empty.
         if starred.isEmpty, let user = authVM.githubUsername.isEmpty ? nil : authVM.githubUsername {
             if let raw = await UserVaultService.shared.readRemote(folder: .shard, filename: "starred.json", githubUsername: user),

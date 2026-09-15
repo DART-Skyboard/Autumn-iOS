@@ -2,9 +2,34 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 107 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 108 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 108 — Ash Shard contacts reload fix; admin tab explained (not a bug)
+
+**Ash Shard contacts still empty even for an account that does follow people
+(`dartsolarpunk`):** real bug this time, not an empty-following false alarm. Two
+likely causes, both fixed: (1) `.task` only fires once per view identity, so
+switching GitHub accounts while Ash Shard was already open, or right before
+opening it, left contacts stuck on stale/no data — now reloads via
+`.onChange(of: authVM.githubUsername)`. (2) `switchGitHubAccount()` swaps the
+`GitHubClient` token in a separately-launched `Task`; if Ash Shard's own load ran
+before that finished, `fetchFollowing()` could silently return empty against a
+stale/missing token — added one short-delay retry when the first attempt comes
+back empty. Also surfaced a dedicated error state with a Retry button, instead of
+errors only ever reaching a shared status line that the very next unrelated action
+(e.g. tapping CYCLE) would silently overwrite.
+
+**Admin tab not appearing despite "DISABLE ADMIN" showing (i.e. admin enabled):**
+working as designed, confirmed by reading `AdminCircuitGate.allows()` — the iOS
+admin drawer requires ALL of: GitHub connected as `dartsolarpunk`, the Enable Admin
+toggle on, AND `admin/circuit.json` in `leatr-ash` reporting `live:true` with a
+timestamp from the last ~90 seconds. That last part means an active leatr.xyz
+admin-tab session heartbeating in a browser at the same time — Profile's own
+"Admin waits for web circuit · CIRCUIT OPEN" text already describes this
+accurately, it's just easy to miss that a browser tab is genuinely required
+alongside the app, not just the toggle.
 
 ## Build 107 — username claim was always "taken", Profile scroll, GitHub/Apple identity priority
 
