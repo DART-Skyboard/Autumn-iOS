@@ -50,6 +50,22 @@ public enum MailboxFolder: String, CaseIterable, Sendable {
     public var path: String {
         self == .inbox ? AutumnConfig.feedbackInboxPath : "feedback/\(rawValue).json"
     }
+
+    /// TF113: the web app's admin console tries these paths in order for the
+    /// ANALYSIS folder (it's been renamed a couple of times over the app's
+    /// history — `_admFbLegacyPaths` in index.html) and uses whichever actually
+    /// has entries. iOS only ever checked the current name, so a user whose
+    /// existing analysis messages are still under one of the earlier filenames
+    /// saw "0 entries" here despite the data genuinely being there in leatr-ash.
+    public var legacyPaths: [String] {
+        switch self {
+        case .analysis:
+            return ["feedback/analysis.json", "feedback/archive.json",
+                    "feedback/inbox-archive.json", "feedback/inbox_archive.json"]
+        default:
+            return [path]
+        }
+    }
 }
 
 public struct MailboxSnapshot: Sendable {
@@ -85,18 +101,33 @@ public actor FeedbackService {
     }
 
     public func loadFolder(_ folder: MailboxFolder) async throws -> MailboxSnapshot {
-        if let parsed = await readViaGAS(folder.path) {
-            return MailboxSnapshot(folder: folder, entries: parsed)
+        // TF113: try the primary path first — if it already has entries, we're
+        // done (matches web's behavior and avoids the extra round-trips on the
+        // common case). Only fall through to the legacy paths when it's empty.
+        let primaryEntries = await loadPath(folder.path)
+        if !primaryEntries.isEmpty || folder.legacyPaths.count < 2 {
+            return MailboxSnapshot(folder: folder, entries: primaryEntries)
         }
+        var best = primaryEntries
+        for path in folder.legacyPaths.dropFirst() {
+            let entries = await loadPath(path)
+            if entries.count > best.count { best = entries }
+        }
+        return MailboxSnapshot(folder: folder, entries: best)
+    }
+
+    /// Reads one exact path — GAS first, then a direct GitHub read as fallback.
+    private func loadPath(_ path: String) async -> [FeedbackEntry] {
+        if let parsed = await readViaGAS(path) { return parsed }
         do {
             let file = try await GitHubClient.shared.readFile(
                 owner: AutumnConfig.ashOwner,
                 repo: AutumnConfig.ashRepo,
-                path: folder.path
+                path: path
             )
-            return MailboxSnapshot(folder: folder, entries: Self.decodeEntries(file.decodedContent))
+            return Self.decodeEntries(file.decodedContent)
         } catch {
-            return MailboxSnapshot(folder: folder, entries: [])
+            return []
         }
     }
 

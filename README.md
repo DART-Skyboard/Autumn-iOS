@@ -2,9 +2,35 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 112 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 113 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 113 — real GitHub reconnect flow + found the missing MESSAGES
+
+**Reconnect GitHub jumped straight to a code-entry page with no code shown:** both
+Ash Shard's and Admin's "Reconnect GitHub" buttons called `startGitHubAuth()` with its
+default `openVerification: true`, which opens Safari immediately — skipping the step
+that actually requests and displays the device code. `GitHubDeviceFlowSheet` (already
+used correctly by Profile's own connect flow) is what should have been shown instead:
+it displays the code prominently, **auto-copies it to the clipboard the instant it's
+generated**, and deep-links to `github.com/login/device?user_code=...` — GitHub's own
+page pre-fills the code from that URL parameter, so the only thing left to do is tap
+Continue. That's exactly the copy-then-continue flow described — it already existed,
+it just wasn't wired up on these two reconnect buttons. Fixed both to present the same
+sheet instead of skipping straight to Safari.
+
+**MESSAGES showing "0 entries" despite real messages existing:** found by comparing
+directly against the web app's own admin console source. The ANALYSIS folder has been
+renamed more than once over this app's history, and the web app's `_admFbLegacyPaths`
+already accounts for that — it tries `feedback/analysis.json`, then
+`feedback/archive.json`, `feedback/inbox-archive.json`, and
+`feedback/inbox_archive.json`, and uses whichever one actually has entries. iOS only
+ever checked the current filename, so any account whose existing analysis messages are
+still stored under one of the older names saw a genuinely empty result — the data was
+never missing, just unreachable at the one path iOS knew about. Ported the same
+fallback logic; INBOX/READ/TRASH are unaffected since the web app doesn't apply this
+fallback to those either — there's only ever been one settled name for those.
 
 ## Build 112 — CI compile fix: builds 110 and 111 never actually reached TestFlight
 
