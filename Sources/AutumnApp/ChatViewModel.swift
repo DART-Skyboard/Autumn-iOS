@@ -126,6 +126,39 @@ public final class ChatViewModel: ObservableObject {
         isThinking = true
         sentienceState = .reflexing
 
+        // TF118: route to a real, computed answer for anything with an actual
+        // capability behind it — see WeatherIntent's own doc comment for why
+        // this matters more than it might look (a template can never be a
+        // real answer to a factual question; only fetched data can).
+        if WeatherIntent.wantsWeather(text) {
+            let weatherReply = await WeatherIntent.answer()
+            let turn = await GrammarEngine.shared.processForChat(grammar, facts: ["_memoryOwner": memoryOwner])
+            currentEmotion = turn.emotion
+            currentBuoyancy = turn.buoyancy
+            currentTool = turn.tool
+            currentShell = turn.shell
+            sentienceState = .idle
+            var assistantMsg = ChatMessage(role: .assistant, content: weatherReply)
+            assistantMsg.leatrMeta = LexicalMetadata(
+                toolRoute: turn.tool.displayName,
+                buoyancy: turn.buoyancy,
+                emotion: turn.emotion.rawValue,
+                shell: turn.shell.displayName,
+                expressionLayer: turn.sentenceType
+            )
+            messages.append(assistantMsg)
+            isThinking = false
+            tts.speak(weatherReply, emotion: turn.emotion)
+            let owner = memoryOwner
+            let sid = sessionSID
+            Task.detached(priority: .background) {
+                await AutumnGASClient.shared.writeJournal(uid: owner, thought: text, reply: weatherReply, emotion: turn.emotion.rawValue, buoyancy: turn.buoyancy)
+                await AutumnGASClient.shared.writeSession(uid: owner, sid: sid, extra: ["emotion": turn.emotion.rawValue, "tool": turn.tool.displayName])
+            }
+            autosaveIfNeeded()
+            return
+        }
+
         let turn = await GrammarEngine.shared.processForChat(grammar, facts: ["_memoryOwner": memoryOwner])
         currentEmotion = turn.emotion
         currentBuoyancy = turn.buoyancy
