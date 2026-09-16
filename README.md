@@ -2,9 +2,36 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 116 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 117 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 117 — the real dynamic-sync loop: GrammarEngine reads live reference data, no rebuild needed
+
+First real, working piece of "she should always be dynamically syncing with reference
+material." Added `ashtree/reference/grammar-en.json` to `leatr-ash`'s **main** branch
+(not `training` — confirmed the app's GitHub reads are hardcoded to `main`, so that's
+where anything she actually reads at runtime has to live; `training` stays the staging
+ground for building new material before merging finished pieces over). This file is
+genuinely structured data — feeling-phrase variants per emotion, follow-up question
+banks, acknowledgment templates — unlike `Training/grammar/`'s citation catalogs.
+
+New `GrammarReferenceSync` (`AutumnServices`) fetches that file once per launch via the
+existing no-token `ashread` GAS proxy and hands it to `GrammarEngine` as a plain
+`GrammarReference` value. `GrammarEngine` itself never reaches out over the network —
+it lives in `LEATRCore`, which by design has no network access and can't depend on
+`AutumnServices` without a circular dependency, so the fetch happens one layer up and
+gets handed down. `compose()`'s feeling-phrases, follow-ups, thanks, farewells, and
+acknowledgment templates all now prefer this live data (multiple phrasing variants,
+picked at random) and fall back to the small built-in set from build 116 if the fetch
+hasn't completed or ever fails — so she always has something to say, online or off.
+
+**What this actually proves:** editing `grammar-en.json` on `main` changes what she
+says on both platforms' next launch, with zero app rebuild — the concrete, working
+version of "the training branch lets her keep growing without touching the app,"
+scoped honestly to what's real today (one file, one composer) rather than promised
+broadly. Expanding her range from here is editing that JSON (or adding new reference
+files following the same pattern), not writing more Swift.
 
 ## Build 116 — GrammarEngine.compose() speaks like conversation, not a log line
 

@@ -30,7 +30,12 @@ public struct RootView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
         }
-        .onAppear { authVM.restoreSession() }
+        .onAppear {
+            authVM.restoreSession()
+            // TF117: fetch the live grammar reference once per launch — see
+            // GrammarReferenceSync's own doc comment for what this does.
+            Task { await GrammarReferenceSync.fetchAndApply() }
+        }
         .onOpenURL { url in
             guard url.scheme == AutumnConfig.oauthCallbackScheme else { return }
             if let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
