@@ -88,6 +88,10 @@ public final class AuthViewModel: NSObject, ObservableObject {
     private let oauthTokenKey  = "github_oauth_token"
     private let oauthUserKey   = "github_username"
     private let customUsernameKey = "autumn_custom_username"
+    /// TF114: persisted pending device-flow state — see startGitHubAuth/resumePendingGitHubAuthIfNeeded.
+    private let pendingDeviceCodeKey = "autumn_pending_device_code"
+    private let pendingDeviceIntervalKey = "autumn_pending_device_interval"
+    private let pendingDeviceStartedKey = "autumn_pending_device_started"
 
     private var _currentNonce = ""
     /// Strongly retain the ProfileSheet-driven ASAuthorizationController.
@@ -131,6 +135,10 @@ public final class AuthViewModel: NSObject, ObservableObject {
                 }
             }
         }
+
+        // TF114: resume a pending device-flow poll that survived an app kill —
+        // see resumePendingGitHubAuthIfNeeded's own comment for why this exists.
+        resumePendingGitHubAuthIfNeeded()
 
         guard let savedUID = KeychainService.shared.load(key: keychainKey),
               !savedUID.isEmpty else { return }
@@ -221,6 +229,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
             deviceFlowCode = DeviceFlowDisplay(
                 userCode: flow.userCode, verificationUrl: flow.verificationUri,
                 deviceCode: flow.deviceCode, interval: flow.interval)
+            persistPendingDeviceFlow(deviceCode: flow.deviceCode, interval: flow.interval)
             if openVerification, let url = URL(string: flow.verificationUri) {
                 GitHubOAuth.shared.openDeviceVerification(url: url)
             }
@@ -236,6 +245,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
                 deviceFlowCode = DeviceFlowDisplay(
                     userCode: userCode, verificationUrl: uri,
                     deviceCode: deviceCode, interval: interval)
+                persistPendingDeviceFlow(deviceCode: deviceCode, interval: interval)
                 if openVerification, let url = URL(string: uri) {
                     GitHubOAuth.shared.openDeviceVerification(url: url)
                 }
@@ -253,6 +263,55 @@ public final class AuthViewModel: NSObject, ObservableObject {
         deviceFlowCode = nil
         isAuthenticating = false
         GitHubOAuth.shared.cancel()
+        clearPendingDeviceFlow()
+    }
+
+    // MARK: — Pending device-flow persistence (TF114)
+    // A plain in-memory poll loop (below) doesn't survive the app being fully
+    // terminated by iOS while backgrounded during the Safari round-trip — not
+    // just suspended, actually killed, which does happen under memory pressure
+    // or after enough time away. That wipes deviceFlowCode and the poll Task,
+    // so on relaunch GitHubDeviceFlowSheet saw a nil deviceFlowCode and started
+    // an entirely new device flow — a new code, orphaning the one the person
+    // had just approved in Safari, which is exactly the "never completes,
+    // has to start over" symptom. Persisting the pending code (until success,
+    // cancel, or its own timeout) lets a fresh launch resume polling the SAME
+    // code instead of silently discarding real progress.
+    private func persistPendingDeviceFlow(deviceCode: String, interval: Int) {
+        let d = UserDefaults.standard
+        d.set(deviceCode, forKey: pendingDeviceCodeKey)
+        d.set(interval, forKey: pendingDeviceIntervalKey)
+        d.set(Date().timeIntervalSince1970, forKey: pendingDeviceStartedKey)
+    }
+
+    private func clearPendingDeviceFlow() {
+        let d = UserDefaults.standard
+        d.removeObject(forKey: pendingDeviceCodeKey)
+        d.removeObject(forKey: pendingDeviceIntervalKey)
+        d.removeObject(forKey: pendingDeviceStartedKey)
+    }
+
+    /// Called on launch (restoreSession) and whenever GitHubDeviceFlowSheet
+    /// appears with no in-memory deviceFlowCode — if a still-valid pending
+    /// code exists from before the app was killed, resume polling it instead
+    /// of starting fresh. Device codes are valid for the ~15 minutes GitHub
+    /// itself allots; past that there's nothing worth resuming.
+    public func resumePendingGitHubAuthIfNeeded() {
+        guard deviceFlowCode == nil, !isAuthenticating, !githubConnected else { return }
+        let d = UserDefaults.standard
+        guard let code = d.string(forKey: pendingDeviceCodeKey) else { return }
+        let interval = d.integer(forKey: pendingDeviceIntervalKey)
+        let started = d.double(forKey: pendingDeviceStartedKey)
+        let age = Date().timeIntervalSince1970 - started
+        guard age < 15 * 60, age >= 0 else { clearPendingDeviceFlow(); return }
+        isAuthenticating = true
+        githubPollGeneration += 1
+        let gen = githubPollGeneration
+        // No userCode/verificationUrl survive the kill (never persisted — GitHub
+        // doesn't need them for polling, only the person re-entering the code
+        // did, and they already did that in Safari). Resume the poll silently;
+        // if it succeeds the sheet dismisses on its own via githubConnected.
+        Task { await pollForGitHubToken(deviceCode: code, interval: max(interval, 5), generation: gen) }
     }
 
     /// If a web-flow `code` ever lands (universal link / autumn://oauth?code=), exchange via GAS.
@@ -282,6 +341,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
         deviceFlowCode = nil
         isAuthenticating = false
         GitHubOAuth.shared.cancel()
+        clearPendingDeviceFlow()
         error = "Authorization timed out. Please try again."
     }
 
@@ -292,6 +352,7 @@ public final class AuthViewModel: NSObject, ObservableObject {
         await applyGitHubProfile()
         deviceFlowCode  = nil
         isAuthenticating = false
+        clearPendingDeviceFlow()
         isSignedIn = true
         isGuest = false
         GitHubOAuth.shared.cancel()

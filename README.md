@@ -2,9 +2,30 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 113 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 114 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 114 — device-flow auth survives the app being killed during the Safari round-trip
+
+Confirmed by the reported symptom: code generated fine (build 113's fix worked),
+Safari showed "Congratulations, you're all set!", but back in the app it was still
+"waiting for a connection" and eventually reset to the very first "Start GitHub
+Authorization" screen — as if nothing had happened. A plain in-memory polling loop
+(`Task.sleep` in a cycle) does not survive the app being fully **terminated** by iOS
+while backgrounded — not just suspended, actually killed, which does happen under
+memory pressure or after enough time away during the Safari hand-off. That wipes
+`deviceFlowCode` and the poll task entirely; on relaunch the sheet saw a nil code and
+started an entirely new device flow, silently orphaning the one already approved in
+Safari — a real bug, not just something to "simplify."
+
+Now persists the pending device code (UserDefaults) the moment it's generated, and
+clears it on success, cancel, or its own 10-minute timeout. On relaunch — from
+`restoreSession()` or whenever the connect sheet appears — if a still-valid pending
+code exists (younger than GitHub's own ~15 minute validity window), it resumes
+polling that exact code instead of starting over. Reinstalling worked because it
+reset the account to a clean state before the same underlying race could recur — not
+a coincidence, the actual bug just wasn't there yet to trip.
 
 ## Build 113 — real GitHub reconnect flow + found the missing MESSAGES
 
