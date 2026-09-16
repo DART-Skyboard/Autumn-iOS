@@ -3,6 +3,9 @@ import LEATRCore
 
 // MARK: — ReasoningProvider Protocol
 // Swappable: on-device Foundation Models (primary) or remote Claude (fallback)
+// TF115: AnthropicClaudeProvider now lives in ClaudeIntegration/ — Autumn's one
+// optional external collaborator, isolated so it can be removed entirely
+// without touching this protocol, LEATROnlyProvider, or anything else here.
 public protocol ReasoningProvider: Actor {
     func respond(
         to prompt: String,
@@ -205,68 +208,6 @@ public actor AppleIntelligenceProvider: ReasoningProvider {
         // Placeholder until Foundation Models framework is available in toolchain
         // Replace this block with actual FM calls when building on Xcode 26+
         return "[Foundation Models response placeholder — build with Xcode 26+ to activate]"
-    }
-}
-
-// MARK: — Anthropic Claude Provider (fallback / power users)
-public actor AnthropicClaudeProvider: ReasoningProvider {
-
-    private let apiKey: String
-    private let model = "claude-sonnet-4-6"
-    private let session = URLSession.shared
-
-    public init(apiKey: String) {
-        self.apiKey = apiKey
-    }
-
-    public var isAvailable: Bool { !apiKey.isEmpty }
-
-    public func respond(
-        to prompt: String,
-        systemContext: String,
-        conversationHistory: [ChatMessage],
-        leatrContext: LexicalResult
-    ) async throws -> String {
-        let url = URL(string: "https://api.anthropic.com/v1/messages")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-
-        // Build message history (exclude internal thoughts)
-        let messages = conversationHistory
-            .filter { !$0.isInternal }
-            .map { ["role": $0.role.rawValue, "content": $0.content] }
-        + [["role": "user", "content": prompt]]
-
-        let leatrNote = """
-            [LEATR Context: tool=\(leatrContext.toolRoute.displayName), \
-            buoyancy=\(String(format: "%.3f", leatrContext.buoyancy)), \
-            emotion=\(leatrContext.emotion.displayName), \
-            shell=\(leatrContext.toolRoute.shell.role)]
-            """
-
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": 1024,
-            "system": systemContext + "\n\n" + leatrNote,
-            "messages": messages
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw ReasoningError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
-        }
-
-        struct Response: Decodable {
-            struct Content: Decodable { let text: String }
-            let content: [Content]
-        }
-        let decoded = try JSONDecoder().decode(Response.self, from: data)
-        return decoded.content.first?.text ?? ""
     }
 }
 
