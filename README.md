@@ -2,9 +2,45 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 117 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 118 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 118 — real weather answers instead of a template (the "prescriptive, not proportional" fix)
+
+Confirmed live in the recording: "What's the weather today?" got "On What's weather
+today — tell me a bit more and I'll work through it with you. Picking up where we left
+off." — a fair, important catch. That's still a template, just a nicer-sounding one
+than build 116's; for a factual question with a real answer, no template can ever be
+a genuinely proportional response, because there's nothing to compute from in a
+template — only in real fetched data.
+
+Found the same pattern as MusicKit before it: `AutumnWeather.swift` is a complete,
+correctly-written WeatherKit integration (current conditions + hourly forecast) that
+was never called from anywhere. New `WeatherIntent` detects weather questions and
+routes them to actually fetch real weather via `AutumnWeather` + the existing
+`AutumnMaps` location manager, then reports genuinely computed data — actual
+temperature, condition, feels-like, UV index — instead of falling into
+`GrammarEngine`'s generic templates. If location isn't available or the fetch fails,
+it says so honestly (no location access yet; the request failed) rather than
+fabricating a plausible-sounding non-answer.
+
+**Scope note, stated plainly:** this fixes the one concrete example shown — weather —
+by giving it a real capability to route to. It is not a general solution to every
+open-ended question; genuinely conversational exchanges ("how are you") still use the
+build 116/117 template system, honestly, because there's no objective fact to compute
+for those — a feeling isn't something you fetch. The distinction going forward: does
+this question have a real, computable answer? If yes, it should get its own intent
+route like this one, not a nicer template. If no, template variety (already reference-
+data-driven since build 117) is the honest approach.
+
+**Also investigated, not yet fixed:** the MESSAGES tab still showing "0 entries in
+ANALYSIS (feedback/analysis.json)" despite that file genuinely having 2 valid entries
+on `leatr-ash` main — confirmed the file itself is fine and build 113's legacy-path
+fix wasn't the actual problem here (the primary path already has real data). The
+actual failure is somewhere further down the read pipeline (`readViaGAS`/`coerce` in
+`FeedbackService`) that I haven't isolated yet — flagging honestly rather than
+shipping a second guess in the same build.
 
 ## Build 117 — the real dynamic-sync loop: GrammarEngine reads live reference data, no rebuild needed
 
