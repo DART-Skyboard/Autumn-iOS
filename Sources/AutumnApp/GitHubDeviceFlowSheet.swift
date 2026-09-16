@@ -146,7 +146,12 @@ struct GitHubDeviceFlowSheet: View {
         .interactiveDismissDisabled(false)
         .presentationDragIndicator(.visible)
         .onAppear {
-            // Auto-start device flow once; do NOT auto-open Safari.
+            // TF114: try resuming a pending device-flow poll (survived-a-kill
+            // case) before starting a brand new one — see
+            // resumePendingGitHubAuthIfNeeded's comment. It only acts when
+            // there's genuinely a valid pending code to resume; otherwise this
+            // is a no-op and the fresh-start path below still runs.
+            authVM.resumePendingGitHubAuthIfNeeded()
             if authVM.deviceFlowCode == nil && !authVM.isAuthenticating {
                 Task { await authVM.startGitHubAuth(openVerification: false) }
             } else if let flow = authVM.deviceFlowCode {
