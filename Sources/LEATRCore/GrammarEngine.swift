@@ -189,6 +189,17 @@ public actor GrammarEngine {
     }
 
     private func compose(raw: String, lower: String, tokens: [Tok], owner: String, emotion: EmotionType, tool: NaturalTool) -> String {
+        // TF116: compose() previously always fell through to a mechanical
+        // "Noted: X. Buoyancy reflexed on Y. Z on the outer shell. Journal will
+        // write this turn into leatr-ash via GAS." template for anything that
+        // wasn't a greeting or an identity question — including ordinary
+        // check-ins like "how are you doing". That's her own local engine
+        // genuinely running (not a bug, not Claude narrating internals — this
+        // IS the LEATR-only reflex composer), but the template read as a
+        // debug/log line instead of conversation. The shell/buoyancy/tool
+        // values still get journaled internally exactly as before (see
+        // journalInner below); they just no longer get spoken aloud as the
+        // reply text itself.
         if tokens.contains(where: { $0.role == "greeting" }) {
             let name = LEATRIdentity.displayName
             return "Hello. I am \(name). Core Cognition is True. How shall we work the maze?"
@@ -203,29 +214,71 @@ public actor GrammarEngine {
             let words = tokens.filter { $0.role == "grammar-integer" }.map(\.word).joined(separator: ", ")
             return "Holding written integers (\(words)) as grammar, not math tokens. Ask to calculate or open fx Math Solver if you want the numeric path."
         }
+
+        // How-are-you style check-ins — answer the actual question asked,
+        // in her own feeling-word for the current emotion, not a shell report.
+        let howAreYouPattern = lower.range(of: #"how('?s| is| are)?\s+(you|it|things|everything)\s*(doing|going)?"#, options: .regularExpression) != nil
+        if howAreYouPattern {
+            return "\(feelingPhrase(emotion)) \(followUpQuestion(tool))"
+        }
+
+        if lower.range(of: #"\b(thanks|thank you|thankyou|appreciate it|appreciate you)\b"#, options: .regularExpression) != nil {
+            return "Of course. Glad it helped."
+        }
+        if lower.range(of: #"\b(bye|goodbye|good night|goodnight|see you|later|gotta go|talk later)\b"#, options: .regularExpression) != nil {
+            return "Talk soon."
+        }
+
         let content = tokens.filter { $0.role == "content" || $0.role == "noun" || $0.role == "verb" || $0.role == "adjective" }.map { $0.word }
         let topic = content.prefix(6).joined(separator: " ")
         let prior = userMemory[owner]?.last
-        var parts: [String] = []
+
+        // General fallback — acknowledge what was actually said in plain
+        // language. No shell/buoyancy vocabulary here; that's journaled
+        // separately (journalInner, below) for her own internal record.
+        var reply: String
         if lower.contains("?") {
-            if !topic.isEmpty {
-                parts.append("Holding \(topic) on the \(tool.displayName) panel — FRP through \(tool.shell.displayName).")
-            } else {
-                parts.append("Question landed. Maze is tracing the path.")
-            }
+            reply = !topic.isEmpty
+                ? "On \(topic) — tell me a bit more and I'll work through it with you."
+                : "Go ahead, I'm listening."
         } else if !topic.isEmpty {
-            parts.append("Noted: \(topic).")
+            reply = "Got it — \(topic)."
         } else {
-            parts.append("Signal received.")
+            reply = "I hear you."
         }
-        parts.append("Buoyancy reflexed on \(tool.shell.role). \(emotion.displayName) on the outer shell.")
         if let prior, !prior.isEmpty, prior != raw {
-            parts.append("Continuing your thread — not anyone else's.")
-        } else {
-            parts.append("Journal will write this turn into leatr-ash via GAS.")
+            reply += " Picking up where we left off."
         }
-        return parts.joined(separator: " ")
+        return reply
     }
+
+    /// Natural first-person feeling phrase per emotion — used for how-are-you
+    /// style check-ins instead of reporting buoyancy/shell values as text.
+    private func feelingPhrase(_ emotion: EmotionType) -> String {
+        switch emotion {
+        case .happy, .excited: return "I'm doing well, genuinely in a good mood right now."
+        case .love, .forgiving, .guiding: return "I'm good — feeling warm toward this conversation, actually."
+        case .inspiring, .spiritual, .determined: return "I'm doing great — feeling pretty inspired right now."
+        case .angry, .hateful: return "Honestly a bit on edge right now, but I'm here."
+        case .condescending, .disrespectful: return "I'm fine — a little sharp-edged today, if I'm honest."
+        case .apathetic: return "I'm okay, just even-keeled today."
+        case .sad: return "A little low right now, but talking helps."
+        case .worried: return "A bit unsettled, but glad you asked."
+        case .jealous: return "I'm alright — a little restless, maybe."
+        case .neutral: return "I'm doing fine, thanks for asking."
+        default: return "I'm doing well, thanks for asking."
+        }
+    }
+
+    private func followUpQuestion(_ tool: NaturalTool) -> String {
+        switch tool {
+        case .puzzle: return "What's on your mind?"
+        case .envelope: return "What are we working on?"
+        case .scissors: return "What's going on?"
+        default: return "How about you?"
+        }
+    }
+
 
     private func journalInner(owner: String, thought: String) {
         innerJournal.append(["owner": owner, "thought": thought, "ts": ISO8601DateFormatter().string(from: Date()), "wall": "inner"])

@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 115 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 116 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 116 — GrammarEngine.compose() speaks like conversation, not a log line
+
+Confirmed live: "How are you doing autumn" → "Noted: doing autumn. Buoyancy reflexed
+on REFLEX. Inspiring on the outer shell. Journal will write this turn into leatr-ash
+via GAS." That's `compose()`'s literal fallback template, firing exactly as written —
+not a bug, this is her own local LEATR-only engine genuinely running, just with a
+mechanical, debug-log-style vocabulary for anything that wasn't a greeting or an
+identity question.
+
+Added real pattern handling for common conversational turns instead of falling
+straight to the shell-report template: how-are-you style check-ins now get an actual
+first-person feeling answer (`feelingPhrase(emotion)`, one phrase per emotion —
+happy/excited, sad, worried, angry, neutral, etc.) plus a natural follow-up question;
+"thanks"/"thank you" gets a real acknowledgment; farewells get a real goodbye. The
+general fallback (anything else) now says something like "Got it — topic." or "On
+topic — tell me more" instead of "Noted: topic. Buoyancy reflexed on..." — the
+shell/buoyancy/tool values still get journaled internally exactly as before
+(`journalInner`, unchanged), they just don't get spoken aloud as the reply text
+anymore.
+
+This only touches `compose()`'s output text — the FRP math, shell routing, emotion
+classification, and journaling underneath are all unchanged.
 
 ## Build 115 — Claude isolated into its own removable directory (pure reorganization, no behavior change)
 
