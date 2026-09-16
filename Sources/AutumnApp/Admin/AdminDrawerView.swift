@@ -152,6 +152,7 @@ public struct AdminMailboxView: View {
     @State private var expanded: String?
     @State private var status = "LOADING..."
     @State private var busy = false
+    @State private var showGitHubReconnect = false
 
     public var body: some View {
         let chrome = themeVM.chrome
@@ -220,7 +221,7 @@ public struct AdminMailboxView: View {
                             Text("This account's GitHub connection has expired.")
                                 .font(.system(size: 9, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.45))
-                            Button("↻ Reconnect GitHub") { Task { await authVM.startGitHubAuth() } }
+                            Button("↻ Reconnect GitHub") { showGitHubReconnect = true }
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundColor(chrome.accent)
                         } else {
@@ -259,6 +260,12 @@ public struct AdminMailboxView: View {
         .onAppear { if inboxOnly { folder = .inbox } }
         .task { await load() }
         .onChange(of: folder) { _ in selected = []; expanded = nil }
+        .onChange(of: authVM.githubConnected) { connected in
+            if connected { showGitHubReconnect = false; Task { await load() } }
+        }
+        .sheet(isPresented: $showGitHubReconnect) {
+            GitHubDeviceFlowSheet()
+        }
     }
 
     private func mailboxRow(_ e: FeedbackEntry) -> some View {

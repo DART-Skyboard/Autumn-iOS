@@ -19,6 +19,7 @@ public struct ShardOverlay: View {
     @State private var generation = 0
     @State private var contactSearch: String = ""
     @State private var contactsError: String? = nil
+    @State private var showGitHubReconnect = false
     @State private var contactsLoading: Bool = false
 
     private var filteredContacts: [GitHubFollowUser] {
@@ -113,7 +114,15 @@ public struct ShardOverlay: View {
                                     Text("This account's GitHub connection has expired.")
                                         .font(.system(size: 10, design: .monospaced))
                                         .foregroundColor(.white.opacity(0.5))
-                                    Button("↻ Reconnect GitHub") { Task { await authVM.startGitHubAuth() } }
+                                    // TF113: was calling startGitHubAuth() with its default
+                                    // openVerification: true, which jumps straight to Safari
+                                    // WITHOUT ever showing/copying the device code first — the
+                                    // user landed on GitHub's code-entry page with no code in
+                                    // hand. GitHubDeviceFlowSheet is the flow that actually
+                                    // shows the code, auto-copies it, and deep-links with
+                                    // ?user_code= so GitHub's own page pre-fills it — exactly
+                                    // what Profile's connect flow already does correctly.
+                                    Button("↻ Reconnect GitHub") { showGitHubReconnect = true }
                                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                                         .foregroundColor(themeVM.chrome.accent)
                                 } else {
@@ -213,6 +222,12 @@ public struct ShardOverlay: View {
             // opening it) left contacts stuck on whichever account's data
             // happened to load first.
             Task { await loadContacts() }
+        }
+        .onChange(of: authVM.githubConnected) { connected in
+            if connected { showGitHubReconnect = false; Task { await loadContacts() } }
+        }
+        .sheet(isPresented: $showGitHubReconnect) {
+            GitHubDeviceFlowSheet()
         }
     }
 
