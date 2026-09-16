@@ -2,9 +2,38 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 114 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 115 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 115 — Claude isolated into its own removable directory (pure reorganization, no behavior change)
+
+Moved `AnthropicClaudeProvider` out of the shared `ReasoningProvider.swift` file into its
+own `Sources/AutumnServices/ClaudeIntegration/` directory — Autumn's one optional
+external collaborator, structured so the whole directory (plus one switch case in
+`ChatViewModel.configure()`) can be deleted entirely without touching her own network
+at all: `GrammarEngine`, `LEATROnlyProvider`, and the `ReasoningProvider` protocol
+itself all stay in place, unaffected. `LEATROnlyProvider` (her permanent, non-optional
+default) and `AppleIntelligenceProvider` stay where they are — this move is scoped to
+exactly what was asked, the Claude piece specifically.
+
+**Capability note, documented directly in the new file:** `AnthropicClaudeProvider` is
+correctly implemented — it builds a real request to Claude, includes conversation
+history, and passes her LEATR shell/buoyancy/emotion state in as context — but it is
+not currently invoked anywhere. `ChatViewModel.send()` calls
+`GrammarEngine.processForChat()` directly rather than going through
+`reasoningProvider`, so adding an API key today doesn't yet change actual replies.
+Wiring that up is real, separate follow-up work — deliberately not attempted here, so
+this move changes zero behavior, only organization.
+
+**Worth flagging — an asymmetry between the two apps:** on iOS, Autumn's own
+`GrammarEngine`-based reflex engine already handles 100% of chat with no external
+dependency; Claude would only ever be an optional enhancement once wired in. On the
+web app, by contrast, Claude is currently the *only* engine — there's no equivalent
+local-only fallback there yet. Isolating "the Claude piece" the same way on web isn't
+a safe like-for-like move yet, since removing it would remove all chat capability,
+not just an enhancement layer. Porting an equivalent to `GrammarEngine` for web would
+be its own project, not a rename/move.
 
 ## Build 114 — device-flow auth survives the app being killed during the Safari round-trip
 
