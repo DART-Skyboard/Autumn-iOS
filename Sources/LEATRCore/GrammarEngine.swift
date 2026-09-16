@@ -17,7 +17,41 @@ public struct GrammarTurn: Sendable {
     public let tokens: [String]
 }
 
+/// TF117: live, structured response data — feeling-phrase variants, follow-up
+/// questions, acknowledgment templates. LEATRCore itself has no network access
+/// (it can't depend on AutumnServices without a circular dependency), so this
+/// struct is deliberately just a plain data container: something in
+/// AutumnServices/AutumnApp fetches ashtree/reference/grammar-en.json via the
+/// existing ashread GAS proxy, decodes it into this shape, and hands it to
+/// GrammarEngine.setReference(_:). Editing that JSON file on leatr-ash's main
+/// branch changes what she actually says — no app rebuild, on either platform.
+/// Until the first successful fetch (or if one never succeeds — offline, no
+/// network, fetch failed), `reference` stays nil and compose() falls back to
+/// its own small built-in phrase set, so she always has something to say.
+public struct GrammarReference: Sendable, Decodable {
+    public let feelingPhrases: [String: [String]]
+    public let followUps: [String: [String]]
+    public let acknowledgeTemplates: [String: [String]]
+    public let thanks: [String]
+    public let farewell: [String]
+
+    public init(feelingPhrases: [String: [String]], followUps: [String: [String]],
+                acknowledgeTemplates: [String: [String]], thanks: [String], farewell: [String]) {
+        self.feelingPhrases = feelingPhrases
+        self.followUps = followUps
+        self.acknowledgeTemplates = acknowledgeTemplates
+        self.thanks = thanks
+        self.farewell = farewell
+    }
+}
+
 public actor GrammarEngine {
+    /// Set once per successful fetch — see GrammarReference's own doc comment.
+    private var reference: GrammarReference?
+
+    public func setReference(_ ref: GrammarReference) {
+        reference = ref
+    }
 
     public static let shared = GrammarEngine()
 
@@ -223,10 +257,10 @@ public actor GrammarEngine {
         }
 
         if lower.range(of: #"\b(thanks|thank you|thankyou|appreciate it|appreciate you)\b"#, options: .regularExpression) != nil {
-            return "Of course. Glad it helped."
+            return reference?.thanks.randomElement() ?? "Of course. Glad it helped."
         }
         if lower.range(of: #"\b(bye|goodbye|good night|goodnight|see you|later|gotta go|talk later)\b"#, options: .regularExpression) != nil {
-            return "Talk soon."
+            return reference?.farewell.randomElement() ?? "Talk soon."
         }
 
         let content = tokens.filter { $0.role == "content" || $0.role == "noun" || $0.role == "verb" || $0.role == "adjective" }.map { $0.word }
@@ -238,13 +272,18 @@ public actor GrammarEngine {
         // separately (journalInner, below) for her own internal record.
         var reply: String
         if lower.contains("?") {
-            reply = !topic.isEmpty
-                ? "On \(topic) — tell me a bit more and I'll work through it with you."
-                : "Go ahead, I'm listening."
+            if !topic.isEmpty {
+                let template = reference?.acknowledgeTemplates["question"]?.randomElement()
+                    ?? "On {topic} — tell me a bit more and I'll work through it with you."
+                reply = template.replacingOccurrences(of: "{topic}", with: topic)
+            } else {
+                reply = reference?.acknowledgeTemplates["questionEmpty"]?.randomElement() ?? "Go ahead, I'm listening."
+            }
         } else if !topic.isEmpty {
-            reply = "Got it — \(topic)."
+            let template = reference?.acknowledgeTemplates["statement"]?.randomElement() ?? "Got it — {topic}."
+            reply = template.replacingOccurrences(of: "{topic}", with: topic)
         } else {
-            reply = "I hear you."
+            reply = reference?.acknowledgeTemplates["statementEmpty"]?.randomElement() ?? "I hear you."
         }
         if let prior, !prior.isEmpty, prior != raw {
             reply += " Picking up where we left off."
@@ -254,7 +293,12 @@ public actor GrammarEngine {
 
     /// Natural first-person feeling phrase per emotion — used for how-are-you
     /// style check-ins instead of reporting buoyancy/shell values as text.
+    /// Prefers the live-fetched reference (more variants, editable without a
+    /// rebuild); falls back to this small built-in set if it hasn't loaded.
     private func feelingPhrase(_ emotion: EmotionType) -> String {
+        if let variants = reference?.feelingPhrases[emotion.rawValue], !variants.isEmpty {
+            return variants.randomElement() ?? variants[0]
+        }
         switch emotion {
         case .happy, .excited: return "I'm doing well, genuinely in a good mood right now."
         case .love, .forgiving, .guiding: return "I'm good — feeling warm toward this conversation, actually."
@@ -271,6 +315,12 @@ public actor GrammarEngine {
     }
 
     private func followUpQuestion(_ tool: NaturalTool) -> String {
+        if let variants = reference?.followUps[tool.displayName.lowercased()], !variants.isEmpty {
+            return variants.randomElement() ?? variants[0]
+        }
+        if let variants = reference?.followUps["default"], !variants.isEmpty {
+            return variants.randomElement() ?? variants[0]
+        }
         switch tool {
         case .puzzle: return "What's on your mind?"
         case .envelope: return "What are we working on?"
