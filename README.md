@@ -2,9 +2,22 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 111 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 112 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 112 — CI compile fix: builds 110 and 111 never actually reached TestFlight
+
+Both builds 110 (MusicKit) and 111 (Admin/Ash Shard) **failed CI** — a genuine miss on
+my part, they were never caught before being reported as shipped. Root cause: my own
+`MusicItem` struct in `AutumnMusic.swift` collides by name with a type the real
+`MusicKit` framework itself defines — `'MusicItem' is ambiguous for type lookup`.
+Since 111 built forward from 110's already-broken source, it hit the identical error
+and also never reached TestFlight; none of build 111's own admin/Ash Shard changes
+were at fault. Fixed by fully qualifying the two usages as `AutumnServices.MusicItem`
+in `MusicPanel.swift` — no logic changes, everything from 110 and 111 (MusicKit HUD
+tool, admin tab consolidation + draggable panel, Ash Shard reconnect-GitHub flow,
+contacts list height) is included here and should actually build this time.
 
 ## Build 111 — Admin polish + the real Ash Shard bug (invalid token, not a UI bug)
 

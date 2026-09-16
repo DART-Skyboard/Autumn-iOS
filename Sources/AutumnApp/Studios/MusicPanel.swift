@@ -13,7 +13,7 @@ struct MusicPanel: View {
 
     @State private var authStatus: MusicAuthorization.Status = MusicAuthorization.currentStatus
     @State private var query: String = ""
-    @State private var results: [MusicItem] = []
+    @State private var results: [AutumnServices.MusicItem] = []
     @State private var isSearching = false
     @State private var searchError: String? = nil
     @State private var nowPlayingTitle: String? = nil
@@ -244,7 +244,7 @@ struct MusicPanel: View {
         isSearching = false
     }
 
-    private func play(_ item: MusicItem) async {
+    private func play(_ item: AutumnServices.MusicItem) async {
         guard item.type == "song" else { return } // albums/artists: browse only for now
         playError = nil
         do {
