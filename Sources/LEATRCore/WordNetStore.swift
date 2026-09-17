@@ -1,20 +1,38 @@
 import Foundation
 
-public struct WordNetEntry: Sendable, Codable {
+/// TF122: a single word sense — one part-of-speech/definition/synonym set.
+/// A word can have several (e.g. "volcano" has two noun senses). Matches the
+/// ACTUAL leatr-ash schema: {"word": [{"pos":..., "def":..., "syn":[...]}]}.
+/// The previous version of this file expected one object per word directly
+/// ({"word": {"definition":..., ...}}) — real data, real bucket files, but a
+/// shape that never matched, so decoding silently failed for every lookup.
+/// Same failure pattern found repeatedly this session (AutumnMusic,
+/// AutumnWeather): correct-looking code that was never actually exercised
+/// end to end against its real data.
+public struct WordSense: Sendable, Codable {
+    public let pos: String
+    public let def: String
+    public let syn: [String]
+}
+
+public struct WordNetEntry: Sendable {
     public let word: String
-    public let definition: String
-    public let synonyms: [String]
-    public let partOfSpeech: String
+    public let senses: [WordSense]
+
+    /// A short, natural one-line definition for the most common sense —
+    /// what GrammarEngine actually speaks for an unknown-topic lookup.
+    public var primaryDefinition: String? { senses.first?.def }
 }
 
 // MARK: — WordNet Store
 // Lazy-loads 3 JSON buckets (a–h, i–r, s–z) matching the web app's structure.
-// Buckets are loaded on first access and cached in memory.
+// Buckets are loaded on first access and cached in memory. ~66K real entries
+// per bucket, sourced from Princeton WordNet via leatr-ash.
 public actor WordNetStore {
 
     public static let shared = WordNetStore()
 
-    private var buckets: [String: [String: WordNetEntry]] = [:]
+    private var buckets: [String: [String: [WordSense]]] = [:]
     private var loadedBuckets: Set<String> = []
 
     private let bucketRanges: [(name: String, start: Character, end: Character)] = [
@@ -40,18 +58,19 @@ public actor WordNetStore {
         for url in local.compactMap({ $0 }) {
             do {
                 let data = try Data(contentsOf: url)
-                let entries = try JSONDecoder().decode([String: WordNetEntry].self, from: data)
+                let entries = try JSONDecoder().decode([String: [WordSense]].self, from: data)
                 buckets[name] = entries
                 return
             } catch {}
         }
 
-        // Remote fallback: leatr-ash raw GitHub
+        // Remote fallback: leatr-ash raw GitHub (main branch — the same one
+        // every other reference file in this system reads from).
         let remoteURL = "https://raw.githubusercontent.com/DART-Skyboard/leatr-ash/main/wordnet/\(name).json"
         guard let url = URL(string: remoteURL) else { return }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            let entries = try JSONDecoder().decode([String: WordNetEntry].self, from: data)
+            let entries = try JSONDecoder().decode([String: [WordSense]].self, from: data)
             buckets[name] = entries
         } catch {
             // Graceful degradation — operate without WordNet
@@ -62,11 +81,7 @@ public actor WordNetStore {
     public func lookup(words: [String]) async -> [WordNetEntry] {
         var results: [WordNetEntry] = []
         for word in words {
-            guard let bname = bucketName(for: word) else { continue }
-            await loadBucket(bname)
-            if let entry = buckets[bname]?[word.lowercased()] {
-                results.append(entry)
-            }
+            if let entry = await define(word) { results.append(entry) }
         }
         return results
     }
@@ -74,6 +89,7 @@ public actor WordNetStore {
     public func define(_ word: String) async -> WordNetEntry? {
         guard let bname = bucketName(for: word) else { return nil }
         await loadBucket(bname)
-        return buckets[bname]?[word.lowercased()]
+        guard let senses = buckets[bname]?[word.lowercased()], !senses.isEmpty else { return nil }
+        return WordNetEntry(word: word.lowercased(), senses: senses)
     }
 }

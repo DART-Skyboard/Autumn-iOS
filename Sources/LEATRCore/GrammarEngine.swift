@@ -164,7 +164,7 @@ public actor GrammarEngine {
         } else if let spoken = mathSpeak, !spoken.isEmpty {
             reply = spoken
         } else {
-            reply = compose(raw: raw, lower: lower, tokens: tokens, owner: owner, emotion: emotion, tool: tool)
+            reply = await compose(raw: raw, lower: lower, tokens: tokens, owner: owner, emotion: emotion, tool: tool)
         }
 
         let inner = "FRP \(String(format: "%.3f", frp.score)) · \(tool.displayName) · \(reflex.sig) · \(reflex.sentenceType) · owner=\(owner)"
@@ -269,7 +269,7 @@ public actor GrammarEngine {
         EmotionClassifier.classify(buoyancy: buoyancy, expression: raw.contains("?") ? .question : (raw.contains("!") ? .exclamation : .contextualStatement), text: raw)
     }
 
-    private func compose(raw: String, lower: String, tokens: [Tok], owner: String, emotion: EmotionType, tool: NaturalTool) -> String {
+    private func compose(raw: String, lower: String, tokens: [Tok], owner: String, emotion: EmotionType, tool: NaturalTool) async -> String {
         // TF116: compose() previously always fell through to a mechanical
         // "Noted: X. Buoyancy reflexed on Y. Z on the outer shell. Journal will
         // write this turn into leatr-ash via GAS." template for anything that
@@ -301,6 +301,19 @@ public actor GrammarEngine {
         // match wins over "tell me a bit more" every time.
         if let hit = matchTopic(lower) {
             return hit
+        }
+
+        // TF122: WordNet dictionary lookup — the general-purpose version of
+        // topic knowledge. matchTopic only covers the handful of subjects
+        // someone's written a real summary for; WordNet covers ~66K English
+        // words with real definitions, so an "unknown" topic that's still an
+        // ordinary noun ("what's a volcano") gets a genuine, specific answer
+        // instead of falling through to a generic acknowledge template. This
+        // is still retrieval — a real definition that already exists,
+        // looked up — not generation; it won't discuss, explain further, or
+        // hold an opinion on the word, only define it.
+        if let wordHit = await defineFromMessage(tokens: tokens) {
+            return wordHit
         }
 
         // TF120: "tell me a story" was falling through to the generic
@@ -396,6 +409,30 @@ public actor GrammarEngine {
         case .neutral: return "I'm doing fine, thanks for asking."
         default: return "I'm doing well, thanks for asking."
         }
+    }
+
+    /// Looks for an explicit "what is/what's/define X" pattern first (most
+    /// reliable — we know exactly which word is being asked about); falls
+    /// back to the most prominent noun in a genuine question if no explicit
+    /// pattern matched, so "what's a volcano" and "tell me about volcanoes"
+    /// both have a real path to an answer.
+    private func defineFromMessage(tokens: [Tok]) async -> String? {
+        let raw = tokens.map(\.word).joined(separator: " ")
+        let lower = raw.lowercased()
+        var target: String?
+        if let range = lower.range(of: #"(?:what(?:'s| is| are)|define|what does)\s+(?:a |an |the )?([a-z-]+)"#, options: .regularExpression) {
+            let match = String(lower[range])
+            target = match.components(separatedBy: .whitespaces).last?.trimmingCharacters(in: CharacterSet(charactersIn: "?.! "))
+        }
+        if target == nil, lower.contains("?") {
+            // Last noun-role token as a broad fallback — better than nothing
+            // for "tell me about X" style questions without the explicit
+            // "what is" phrasing.
+            target = tokens.last(where: { $0.role == "noun" || $0.role == "content" })?.word.lowercased()
+        }
+        guard let word = target, word.count > 2 else { return nil }
+        guard let entry = await WordNetStore.shared.define(word), let def = entry.primaryDefinition else { return nil }
+        return "\(word.capitalized): \(def)."
     }
 
     /// Real topic retrieval — longest matching key wins (so "roman empire"
