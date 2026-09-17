@@ -205,6 +205,9 @@ public final class ChatViewModel: ObservableObject {
                 "emotion": turn.emotion.rawValue,
                 "tool": turn.tool.displayName
             ])
+            if let gap = turn.studyGap {
+                await AutumnGASClient.shared.writeStudyGap(uid: owner, word: gap, context: text)
+            }
             await AutumnGASClient.shared.pingPresence(
                 message: text,
                 response: response,

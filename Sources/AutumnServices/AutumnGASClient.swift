@@ -47,6 +47,25 @@ public actor AutumnGASClient {
         _ = await ashwrite(path: AutumnConfig.journalPath, uid: uid, append: true, payload: [entry])
     }
 
+    /// TF124: the actual "she educates herself" mechanism — not generating
+    /// new knowledge (nothing rule-based can), but recording exactly what she
+    /// was asked and couldn't answer from her curated topics or WordNet, so
+    /// there's a real, growing, reviewable record of specific gaps to fill —
+    /// by adding real content to ashtree/reference/, the same place every
+    /// other piece of her knowledge already lives. This is the honest version
+    /// of self-directed learning available without training an actual model.
+    public func writeStudyGap(uid: String, word: String, context: String, platform: String = "ios") async {
+        let entry: [String: Any] = [
+            "id": hexId(),
+            "ts": ISO8601DateFormatter().string(from: Date()),
+            "word": word,
+            "context": String(context.prefix(200)),
+            "platform": platform,
+            "uid": uid
+        ]
+        _ = await ashwrite(path: AutumnConfig.studyQueuePath, uid: uid, append: true, payload: [entry])
+    }
+
     public func writeSession(uid: String, sid: String, extra: [String: Any] = [:]) async {
         var payload: [String: Any] = [
             "uid": uid,
