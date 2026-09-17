@@ -157,19 +157,25 @@ public struct AdminMailboxView: View {
     public var body: some View {
         let chrome = themeVM.chrome
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                mini("ALL") { selected = Set(entries.map(\.id)) }
-                mini("NONE") { selected = [] }
-                if folder != .inbox {
-                    mini("UNREAD", warn: true) { Task { await moveSel(.inbox) } }
+            // TF119: the row is one button wider on non-Inbox folders (UNREAD
+            // only shows there) than the fixed-width panel comfortably fits —
+            // that's what was squeezing/deforming every button. A horizontal
+            // scroll means the row never has to compress to fit; it just
+            // scrolls the same way regardless of which folder is active.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    mini("ALL") { selected = Set(entries.map(\.id)) }
+                    mini("NONE") { selected = [] }
+                    if folder != .inbox {
+                        mini("UNREAD", warn: true) { Task { await moveSel(.inbox) } }
+                    }
+                    mini("→ ANAL", warn: true) { Task { await moveSel(.analysis) } }
+                    mini("→ READ", warn: true) { Task { await moveSel(.read) } }
+                    mini("→ TRASH", warn: true) { Task { await moveSel(.trash) } }
+                    mini("DELETE", danger: true) { Task { await deleteSel() } }
                 }
-                mini("→ ANAL", warn: true) { Task { await moveSel(.analysis) } }
-                mini("→ READ", warn: true) { Task { await moveSel(.read) } }
-                mini("→ TRASH", warn: true) { Task { await moveSel(.trash) } }
-                mini("DELETE", danger: true) { Task { await deleteSel() } }
-                Spacer()
+                .padding(.horizontal, 8).padding(.vertical, 6)
             }
-            .padding(.horizontal, 8).padding(.vertical, 6)
 
             if inboxOnly {
                 Text("INBOX")
@@ -340,7 +346,16 @@ public struct AdminMailboxView: View {
         busy = true
         status = "LOADING \(folder.rawValue.uppercased())..."
         do {
-            let snap = try await FeedbackService.shared.loadFolder(folder)
+            // TF119: was possible to hang indefinitely with no visible error —
+            // loadFolder can fall through several fetch attempts internally
+            // (GAS, then GitHub, and for ANALYSIS specifically several legacy
+            // paths), and while each individual request has its own timeout,
+            // nothing bounded the total. A hard overall timeout means the UI
+            // always recovers to a real error + Retry instead of sitting on
+            // "LOADING..." with no way to tell if it's still working or stuck.
+            let snap = try await withTimeout(seconds: 15) {
+                try await FeedbackService.shared.loadFolder(folder)
+            }
             entries = snap.entries
             selected = []
             status = "\(entries.count) entries in \(folder.rawValue.uppercased()) (\(folder.path))"
@@ -349,6 +364,19 @@ public struct AdminMailboxView: View {
             status = "Error: \(error.localizedDescription)"
         }
         busy = false
+    }
+
+    private func withTimeout<T>(seconds: Double, _ operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw NSError(domain: "AdminMailbox", code: -1, userInfo: [NSLocalizedDescriptionKey: "Timed out after \(Int(seconds))s"])
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 
     private func uid() -> String { authVM.githubUsername.isEmpty ? "admin" : authVM.githubUsername }

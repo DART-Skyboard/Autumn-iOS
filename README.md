@@ -2,9 +2,39 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 118 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 119 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 119 — repetition bug, mailbox hang, and button layout — three confirmed, fixed
+
+**"Picking up where we left off" gluing onto nearly every reply:** found the exact
+bug — the condition was "previous message text != current message text," which is
+true for almost any two real consecutive messages a person actually sends. It wasn't
+narrowly catching genuine continuity, it was firing on nearly everything. Removed
+entirely rather than trying to narrow the condition — it wasn't referencing anything
+specific from the prior turn anyway, so it added repetition without adding real
+continuity. Also fixed the garbled topic extraction ("Einstein learning have you
+learned who" → "Einstein learning learned") by echoing a cleaned version of what was
+actually said instead of reassembling scattered content-word tokens, which isn't
+sentence reconstruction and can come out scrambled.
+
+**MESSAGES tab stuck on "LOADING..." indefinitely (both INBOX and ANALYSIS):** added
+a hard 15-second overall timeout around the whole folder load. Each individual fetch
+attempt inside `loadFolder` already had its own timeout, but nothing bounded the total
+across all of them, so a slow chain could look identical to a permanent hang with no
+way to tell the difference. Now it always resolves to either real data or a visible
+error with Retry.
+
+**Button row deforming when switching to ANALYSIS/READ:** the UNREAD button only
+shows on non-Inbox folders, making that row one button wider than the fixed-width
+admin panel comfortably fits — that's what was squeezing everything. Row now scrolls
+horizontally instead of trying to compress to fit.
+
+**Not done this build, scoped honestly:** Ash Star's per-user save-to-"Autumn Ash"
+library (folder picker, Save All, matching the web app) is real, substantial new
+feature work — building it into this same pass risked rushing three fixes that
+needed to be verified. Next up once these are confirmed.
 
 ## Build 118 — real weather answers instead of a template (the "prescriptive, not proportional" fix)
 

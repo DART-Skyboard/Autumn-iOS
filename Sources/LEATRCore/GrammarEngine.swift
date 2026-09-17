@@ -263,9 +263,12 @@ public actor GrammarEngine {
             return reference?.farewell.randomElement() ?? "Talk soon."
         }
 
-        let content = tokens.filter { $0.role == "content" || $0.role == "noun" || $0.role == "verb" || $0.role == "adjective" }.map { $0.word }
-        let topic = content.prefix(6).joined(separator: " ")
-        let prior = userMemory[owner]?.last
+        // TF119: was reassembling scattered content-word tokens into a "topic"
+        // ("Einstein learning have you learned who" -> "Einstein learning
+        // learned") -- grammatically incoherent because token-role filtering
+        // isn't sentence reconstruction. Using a cleaned version of what was
+        // actually said reads far more naturally, even unparsed.
+        let topic = cleanedEcho(raw)
 
         // General fallback — acknowledge what was actually said in plain
         // language. No shell/buoyancy vocabulary here; that's journaled
@@ -285,10 +288,27 @@ public actor GrammarEngine {
         } else {
             reply = reference?.acknowledgeTemplates["statementEmpty"]?.randomElement() ?? "I hear you."
         }
-        if let prior, !prior.isEmpty, prior != raw {
-            reply += " Picking up where we left off."
-        }
+        // TF119: removed the "Picking up where we left off" appendage entirely
+        // — its firing condition (prior message text != current message text)
+        // is true for almost any two consecutive real messages, so it was
+        // gluing onto nearly every reply in a session instead of the rare
+        // continuity moments it was meant for. Not worth a narrower condition;
+        // it wasn't referencing anything specific from the prior turn anyway,
+        // so it added repetition without adding real continuity.
         return reply
+    }
+
+    /// A short, readable echo of what was actually said — strips a leading
+    /// question word and trailing punctuation, keeps it recognizable rather
+    /// than reconstructing "topic words" that can come out scrambled.
+    private func cleanedEcho(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: "?!."))
+        if s.count > 60 {
+            let idx = s.index(s.startIndex, offsetBy: 60)
+            s = String(s[..<idx]).trimmingCharacters(in: .whitespaces) + "…"
+        }
+        return s
     }
 
     /// Natural first-person feeling phrase per emotion — used for how-are-you
