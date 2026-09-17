@@ -28,6 +28,19 @@ public struct GrammarTurn: Sendable {
 /// Until the first successful fetch (or if one never succeeds — offline, no
 /// network, fetch failed), `reference` stays nil and compose() falls back to
 /// its own small built-in phrase set, so she always has something to say.
+public struct TopicEntry: Sendable, Decodable {
+    /// Match words/phrases (lowercase) — if any appears in the user's message,
+    /// this topic is a candidate. Real retrieval, not a phrase bank: the
+    /// content itself is what gets returned, not a template around it.
+    public let keys: [String]
+    public let summary: String
+
+    public init(keys: [String], summary: String) {
+        self.keys = keys
+        self.summary = summary
+    }
+}
+
 public struct GrammarReference: Sendable, Decodable {
     public let feelingPhrases: [String: [String]]
     public let followUps: [String: [String]]
@@ -39,20 +52,29 @@ public struct GrammarReference: Sendable, Decodable {
     /// decoder so older or not-yet-updated grammar-en.json payloads (without
     /// a "stories" key) don't break the whole reference fetch.
     public let stories: [String]
+    /// TF121: real topic knowledge — retrieval, not training. When a message
+    /// matches a topic's keys, its summary is what actually answers the
+    /// question, not a template wrapped around an echo of the question. This
+    /// is the mechanism for "world event / history / general knowledge"
+    /// requests — the honest, buildable version of "always ready for
+    /// whatever a new user brings up": real content, matched and returned,
+    /// scaling with how much content exists here rather than with training.
+    public let topics: [TopicEntry]
 
     public init(feelingPhrases: [String: [String]], followUps: [String: [String]],
                 acknowledgeTemplates: [String: [String]], thanks: [String], farewell: [String],
-                stories: [String] = []) {
+                stories: [String] = [], topics: [TopicEntry] = []) {
         self.feelingPhrases = feelingPhrases
         self.followUps = followUps
         self.acknowledgeTemplates = acknowledgeTemplates
         self.thanks = thanks
         self.farewell = farewell
         self.stories = stories
+        self.topics = topics
     }
 
     enum CodingKeys: String, CodingKey {
-        case feelingPhrases, followUps, acknowledgeTemplates, thanks, farewell, stories
+        case feelingPhrases, followUps, acknowledgeTemplates, thanks, farewell, stories, topics
     }
 
     public init(from decoder: Decoder) throws {
@@ -63,6 +85,7 @@ public struct GrammarReference: Sendable, Decodable {
         thanks = try c.decode([String].self, forKey: .thanks)
         farewell = try c.decode([String].self, forKey: .farewell)
         stories = try c.decodeIfPresent([String].self, forKey: .stories) ?? []
+        topics = try c.decodeIfPresent([TopicEntry].self, forKey: .topics) ?? []
     }
 }
 
@@ -273,6 +296,13 @@ public actor GrammarEngine {
             return "Holding written integers (\(words)) as grammar, not math tokens. Ask to calculate or open fx Math Solver if you want the numeric path."
         }
 
+        // TF121: real topic knowledge — see GrammarReference.topics' own doc
+        // comment. Checked before the generic fallback so a genuine content
+        // match wins over "tell me a bit more" every time.
+        if let hit = matchTopic(lower) {
+            return hit
+        }
+
         // TF120: "tell me a story" was falling through to the generic
         // acknowledge template ("Got it — Tell me a story.") — an
         // acknowledgment of the request instead of fulfilling it, which isn't
@@ -366,6 +396,26 @@ public actor GrammarEngine {
         case .neutral: return "I'm doing fine, thanks for asking."
         default: return "I'm doing well, thanks for asking."
         }
+    }
+
+    /// Real topic retrieval — longest matching key wins (so "roman empire"
+    /// beats a looser single-word match), case-insensitive substring match
+    /// against the already-lowercased message. Returns the actual content;
+    /// there's no template here because there's nothing to template around —
+    /// the summary itself is the answer.
+    private func matchTopic(_ lower: String) -> String? {
+        guard let topics = reference?.topics, !topics.isEmpty else { return nil }
+        var best: (summary: String, keyLength: Int)?
+        for topic in topics {
+            for key in topic.keys {
+                let k = key.lowercased()
+                guard lower.contains(k) else { continue }
+                if best == nil || k.count > best!.keyLength {
+                    best = (topic.summary, k.count)
+                }
+            }
+        }
+        return best?.summary
     }
 
     /// Real, complete short stories — from the live reference when available,
