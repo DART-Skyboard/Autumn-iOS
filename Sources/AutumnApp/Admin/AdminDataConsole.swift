@@ -302,11 +302,13 @@ struct AdminGrammarPromptPanel: View {
 
 struct AdminTrainingCatalogPanel: View {
     @Binding var adminLog: [String]
+    @EnvironmentObject var authVM: AuthViewModel
     @State private var section: Section = .grammarCategories
     @State private var selectedSlug: String?
     @State private var catalogPreview = ""
     @State private var loading = false
     @State private var error: String?
+    @State private var showGitHubReconnect = false
 
     enum Section: String, CaseIterable {
         case grammarCategories = "grammar-categories"
@@ -391,6 +393,17 @@ struct AdminTrainingCatalogPanel: View {
                 Text(error)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(Color(hex: "#ff6688"))
+                // TF126: "Bad credentials" is GitHub's real 401 — the stored
+                // token is actually invalid/expired, the same symptom
+                // ShardOverlay already handles for Ash Shard's contact list
+                // (TF111/113). Same fix here for consistency: a plain retry
+                // would just fail identically, reconnecting is what
+                // actually resolves it.
+                if error.localizedCaseInsensitiveContains("bad credentials") {
+                    Button("↻ Reconnect GitHub") { showGitHubReconnect = true }
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(hex: "#00e5ff"))
+                }
             }
             if !catalogPreview.isEmpty {
                 Text(catalogPreview)
@@ -404,6 +417,15 @@ struct AdminTrainingCatalogPanel: View {
             Text("Catalogs are public refs on branch training — workers seed ≥20 open-license refs per topic.")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundColor(.white.opacity(0.35))
+        }
+        .onChange(of: authVM.githubConnected) { connected in
+            if connected, let slug = selectedSlug {
+                showGitHubReconnect = false
+                Task { await loadCatalog(slug) }
+            }
+        }
+        .sheet(isPresented: $showGitHubReconnect) {
+            GitHubDeviceFlowSheet()
         }
     }
 

@@ -2,9 +2,24 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 126 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 127 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 127 — training catalog now shows the real reconnect flow instead of a raw error
+
+Build 126 fixed the anonymous-fetch 404s and correctly moved to an authenticated
+request — which then surfaced "Bad credentials," GitHub's actual 401 response,
+meaning the stored token itself is invalid or expired right now. This is not a new
+bug: it's the identical symptom the Ash Shard's contact list already handles (build
+111/113) — a plain retry fails the same way every time, reconnecting is what actually
+fixes it. `AdminTrainingCatalogPanel` didn't have that handling yet, so it just showed
+the raw error with no path forward.
+
+Applied the same, already-established fix: detecting "bad credentials" now shows a
+"↻ Reconnect GitHub" button that presents the real device-flow sheet (code shown,
+auto-copied, deep-linked so GitHub's page pre-fills it), and automatically retries the
+category that failed once reconnection succeeds.
 
 ## Build 126 — root cause of "HTTP 404 for advertising": leatr-ash is a private repo, and it broke my own build 122 too
 
