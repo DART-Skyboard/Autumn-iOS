@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 120 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 121 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 121 — real topic knowledge (retrieval, not training) — history to start
+
+The actual buildable version of "she needs to know about world events, the Egyptians,
+the Roman Empire, the Iron Age, world economics" without training an actual neural
+network: retrieval. `GrammarReference.topics` — new keyword-matched real content,
+same live-fetch mechanism as build 117's phrases and build 120's stories. A message
+mentioning a topic gets the actual written summary as its answer, not a template
+wrapped around an echo of the question. Longest matching key wins, so "roman empire"
+beats a looser single-word coincidence.
+
+Started narrow and real rather than broad and thin: six genuine history topics (Roman
+Empire, Ancient Egypt, Bronze/Iron Age, Medieval period, Industrial Revolution, world
+economics) with actual written content, to prove the mechanism end to end before
+expanding across every category in the Training branch. Adding more topics — history
+or any other category — is editing `ashtree/reference/grammar-en.json` on `main`, no
+rebuild, same as everything else in this reference-sync system.
+
+**The honest boundary, stated plainly:** this makes her genuinely good at topics that
+have real content written for them. It does not give her an opinion, let her
+synthesize two unrelated topics into something new, or handle a subject nobody's
+written reference material for yet — that's not a bug to fix later, it's the actual
+edge of what retrieval does versus what a trained model does.
 
 ## Build 120 — real story-telling + the actual reason writes could silently fail
 
