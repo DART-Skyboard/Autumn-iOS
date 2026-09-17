@@ -172,7 +172,7 @@ public actor LexicalAnalyzer {
         // S1: tool-keyed opener
         let s1 = "[\(tool.displayName) shell active — \(tool.shell.role)]"
         // S2: intent-mapped from WordNet definitions
-        let s2 = hits.first.flatMap { $0.primaryDefinition.map { def in "Referencing: \($0.word) — \(def)" } }
+        let s2 = hits.first.flatMap { hit in hit.primaryDefinition.map { def in "Referencing: \(hit.word) — \(def)" } }
             ?? "Lexical boundary encountered — structural analysis only."
         // S3: elaboration via synonyms / emotion
         let synonymStr = hits.first?.senses.first?.syn.prefix(3).joined(separator: ", ") ?? "—"

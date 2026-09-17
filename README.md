@@ -2,9 +2,18 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 122 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 123 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 123 — CI compile fix: build 122 never actually shipped
+
+Build 122 **failed CI** — caught this time before reporting it as shipped. A closure
+syntax error in `LexicalAnalyzer.swift`'s fix (nested closures both trying to use
+implicit `$0`, which Swift doesn't allow once the inner one has an explicit parameter
+name). Fixed by naming both closures' parameters explicitly. No logic changes —
+everything from 122 (the real WordNet dictionary wiring, the schema fix) is included
+here and actually builds this time.
 
 ## Build 122 — real dictionary lookup for the "unknown topic" case (~66K words, found already built, wired wrong)
 
