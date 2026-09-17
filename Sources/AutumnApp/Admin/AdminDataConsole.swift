@@ -412,22 +412,23 @@ struct AdminTrainingCatalogPanel: View {
         error = nil
         selectedSlug = slug
         catalogPreview = ""
-        let urlStr = "\(AutumnConfig.trainingRawBase)/\(section.pathPrefix)/\(slug)/refs/catalog.json"
-        guard let url = URL(string: urlStr) else {
-            error = "Bad catalog URL"
-            loading = false
-            return
-        }
+        // TF126: leatr-ash is a private repository — an unauthenticated
+        // fetch to raw.githubusercontent.com always 404s regardless of
+        // whether the file exists (GitHub returns 404 rather than 401/403
+        // for private repos, to avoid confirming they exist). Confirmed:
+        // every category failed identically, not just this one. Switched to
+        // the authenticated Contents API via GitHubClient, which already has
+        // the admin's own stored token from GitHub sign-in, with an explicit
+        // ref=training since this data lives on the training branch, not
+        // leatr-ash's default (main).
         do {
-            let (data, resp) = try await URLSession.shared.data(from: url)
-            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-            guard code == 200 else {
-                error = "HTTP \(code) for \(slug)"
-                loading = false
-                return
-            }
-            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                error = "Invalid JSON"
+            let obj = try await GitHubClient.shared.readJSON(
+                owner: "DART-Skyboard", repo: "leatr-ash",
+                path: "Training/\(section.pathPrefix)/\(slug)/refs/catalog.json",
+                ref: "training"
+            ) as? [String: Any] ?? [:]
+            guard !obj.isEmpty else {
+                error = "Invalid JSON for \(slug)"
                 loading = false
                 return
             }
@@ -446,7 +447,7 @@ struct AdminTrainingCatalogPanel: View {
             catalogPreview = lines.joined(separator: "\n")
             adminLog.append("Training catalog loaded: \(section.pathPrefix)/\(slug) (\(count) refs)")
         } catch {
-            self.error = error.localizedDescription
+            self.error = "\(slug): \(error.localizedDescription) — sign in with GitHub in Profile if this persists."
         }
         loading = false
     }

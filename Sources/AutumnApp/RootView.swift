@@ -35,6 +35,11 @@ public struct RootView: View {
             // TF117: fetch the live grammar reference once per launch — see
             // GrammarReferenceSync's own doc comment for what this does.
             Task { await GrammarReferenceSync.fetchAndApply() }
+            // TF126: WordNet buckets now need an authenticated fetch (see
+            // WordNetRemoteSync's doc comment) — separate from the reference
+            // JSON above since it needs a signed-in GitHub token and skips
+            // itself gracefully when there isn't one.
+            Task { await WordNetRemoteSync.fetchAndApply() }
         }
         .onOpenURL { url in
             guard url.scheme == AutumnConfig.oauthCallbackScheme else { return }

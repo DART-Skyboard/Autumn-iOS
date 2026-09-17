@@ -50,7 +50,7 @@ public actor WordNetStore {
         guard !loadedBuckets.contains(name) else { return }
         loadedBuckets.insert(name)
 
-        // Try bundle first (Resources/NLP + root), then remote leatr-ash CDN
+        // Try bundle first (Resources/NLP + root).
         let local: [URL?] = [
             Bundle.main.url(forResource: name, withExtension: "json", subdirectory: "NLP"),
             Bundle.main.url(forResource: name, withExtension: "json")
@@ -63,19 +63,24 @@ public actor WordNetStore {
                 return
             } catch {}
         }
+        // TF126: no remote fetch attempted here anymore — leatr-ash is a
+        // private repository, and an unauthenticated raw.githubusercontent.com
+        // request always 404s regardless of whether the file exists (that's
+        // how GitHub responds for private repos, to avoid confirming
+        // existence). WordNetStore (LEATRCore) can't hold a GitHub token or
+        // depend on GitHubClient (AutumnServices) without a circular
+        // dependency, so an authenticated fetch has to happen one layer up
+        // and get handed down — see WordNetRemoteSync in AutumnServices,
+        // which calls setBucket(_:entries:) below. Bucket stays empty here
+        // until that runs (or the bundle copy above succeeds).
+    }
 
-        // Remote fallback: leatr-ash raw GitHub (main branch — the same one
-        // every other reference file in this system reads from).
-        let remoteURL = "https://raw.githubusercontent.com/DART-Skyboard/leatr-ash/main/wordnet/\(name).json"
-        guard let url = URL(string: remoteURL) else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let entries = try JSONDecoder().decode([String: [WordSense]].self, from: data)
-            buckets[name] = entries
-        } catch {
-            // Graceful degradation — operate without WordNet
-            print("[WordNetStore] Could not load \(name): \(error.localizedDescription)")
-        }
+    /// TF126: called by WordNetRemoteSync (AutumnServices) after an
+    /// authenticated fetch — the actual fix for the previous remote fallback
+    /// that could never have worked against a private repo.
+    public func setBucket(_ name: String, entries: [String: [WordSense]]) {
+        buckets[name] = entries
+        loadedBuckets.insert(name)
     }
 
     public func lookup(words: [String]) async -> [WordNetEntry] {

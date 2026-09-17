@@ -2,9 +2,29 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 125 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 126 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 126 — root cause of "HTTP 404 for advertising": leatr-ash is a private repo, and it broke my own build 122 too
+
+Confirmed the actual cause, not just this one category: `leatr-ash` is a **private**
+GitHub repository. Every training-catalog category 404s identically (tested
+aerospace, agility, architecture, art — all 404) because the training-catalog panel
+fetched anonymously from `raw.githubusercontent.com`, and GitHub deliberately returns
+404 (not 401/403) for unauthenticated requests to a private repo's raw content, to
+avoid confirming the repo even exists. The file was never missing.
+
+**Also found this broke my own build 122 fix**, and I want to be direct about that:
+`WordNetStore`'s remote fallback used the identical anonymous-fetch pattern, so it
+could never have actually worked, only the bundle-local path could. Fixed both,
+properly this time: `AdminTrainingCatalogPanel` now uses the authenticated GitHub
+Contents API via `GitHubClient` (which already holds the admin's token from sign-in),
+with an explicit `ref=training` since this data lives on the training branch, not
+`leatr-ash`'s default. `WordNetStore` can't hold a token or depend on `GitHubClient`
+itself (same LEATRCore/AutumnServices boundary as everywhere else in this system), so
+a new `WordNetRemoteSync` fetches authenticated at launch and hands the decoded
+buckets down, the same hand-down pattern as `GrammarReferenceSync`.
 
 ## Build 125 — open-topic buffer: a thought split across messages doesn't reset each turn
 

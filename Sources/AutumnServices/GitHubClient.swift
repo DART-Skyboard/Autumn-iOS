@@ -27,6 +27,8 @@ public actor GitHubClient {
 
     private var token: String? { _token }
 
+    public func hasToken() -> Bool { _token != nil && !(_token?.isEmpty ?? true) }
+
     /// GitHub 403s requests with no User-Agent.
     private let userAgent = "Autumn-iOS/1.0.2 (com.dartmeadow.autumn; +https://leatr.xyz)"
 
@@ -117,8 +119,12 @@ public actor GitHubClient {
     }
 
     // MARK: — File read
-    public func readFile(owner: String, repo: String, path: String) async throws -> GitHubFile {
-        let data = try await get("/repos/\(owner)/\(repo)/contents/\(path)")
+    public func readFile(owner: String, repo: String, path: String, ref: String? = nil) async throws -> GitHubFile {
+        var endpoint = "/repos/\(owner)/\(repo)/contents/\(path)"
+        if let ref, let encoded = ref.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            endpoint += "?ref=\(encoded)"
+        }
+        let data = try await get(endpoint)
         return try JSONDecoder().decode(GitHubFile.self, from: data)
     }
 
@@ -209,8 +215,8 @@ public actor GitHubClient {
         return []
     }
 
-    public func readJSON(owner: String, repo: String, path: String) async throws -> Any {
-        let file = try await readFile(owner: owner, repo: repo, path: path)
+    public func readJSON(owner: String, repo: String, path: String, ref: String? = nil) async throws -> Any {
+        let file = try await readFile(owner: owner, repo: repo, path: path, ref: ref)
         guard let raw = file.decodedContent, let data = raw.data(using: .utf8) else {
             throw URLError(.cannotDecodeContentData)
         }
