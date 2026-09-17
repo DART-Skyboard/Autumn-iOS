@@ -24,6 +24,9 @@ public enum AutumnConfig {
     public static let mailboxFolders = ["inbox", "analysis", "read", "trash"]
 
     public static let journalPath = "ashtree/sentient/journal.json"
+    /// TF124: real, specific gaps in what she can currently answer — see
+    /// AutumnGASClient.writeStudyGap's own doc comment.
+    public static let studyQueuePath = "ashtree/sentient/study-queue.json"
     public static let schedulePath = "ashtree/sentient/scheduled.json"
     public static let selfModelPath = "ashtree/sentient/selfmodel.json"
     public static let sessionsPrefix = "ashtree/sessions/"

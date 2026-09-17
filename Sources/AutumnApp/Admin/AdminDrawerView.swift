@@ -102,6 +102,7 @@ public struct AdminDrawerView: View {
                     GrammarStudyButton(adminLog: $adminLog)
                     AdminGrammarPromptPanel(adminLog: $adminLog)
                     AdminTrainingCatalogPanel(adminLog: $adminLog)
+                    StudyQueuePanel()
                     Divider().background(Color.white.opacity(0.15))
                     ForEach(adminLog.indices, id: \.self) { i in
                         Text(adminLog[i]).font(.system(size: 11, design: .monospaced)).foregroundColor(.white.opacity(0.85)).frame(maxWidth: .infinity, alignment: .leading)
@@ -431,5 +432,66 @@ public struct AdminMailboxView: View {
             await load()
             status = "Deleted \(n) entries"
         } catch { status = "Error: \(error.localizedDescription)"; busy = false }
+    }
+}
+
+/// TF124: the study queue admin can actually act on — every word she was
+/// asked about and couldn't answer from her curated topics or WordNet.
+/// Read-only here by design: filling a gap means writing real content to
+/// ashtree/reference/, which happens by editing that file directly (same as
+/// every other reference addition this session), not through this panel.
+struct StudyQueuePanel: View {
+    @EnvironmentObject var themeVM: ThemeViewModel
+    @State private var entries: [[String: Any]] = []
+    @State private var status = "Not loaded"
+    @State private var busy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("STUDY QUEUE — unanswered gaps").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(themeVM.chrome.accent)
+                Spacer()
+                Button(busy ? "…" : "↻ Load") { Task { await load() } }
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(themeVM.chrome.accent)
+                    .disabled(busy)
+            }
+            if entries.isEmpty {
+                Text(status).font(.system(size: 10, design: .monospaced)).foregroundColor(.white.opacity(0.4))
+            } else {
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, e in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text((e["word"] as? String ?? "?").uppercased())
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#ffb347"))
+                        Text(e["context"] as? String ?? "")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.6))
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(8)
+        .task { await load() }
+    }
+
+    private func load() async {
+        busy = true
+        let raw = await AutumnGASClient.shared.ashread(path: AutumnConfig.studyQueuePath)
+        if let arr = raw as? [[String: Any]] {
+            entries = Array(arr.suffix(15).reversed())
+            status = entries.isEmpty ? "No gaps recorded yet" : ""
+        } else if let dict = raw as? [String: Any], let content = dict["content"] as? String,
+                  let decoded = Data(base64Encoded: content.replacingOccurrences(of: "\n", with: "")),
+                  let arr = try? JSONSerialization.jsonObject(with: decoded) as? [[String: Any]] {
+            entries = Array(arr.suffix(15).reversed())
+            status = entries.isEmpty ? "No gaps recorded yet" : ""
+        } else {
+            status = "No gaps recorded yet"
+        }
+        busy = false
     }
 }

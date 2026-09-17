@@ -15,6 +15,12 @@ public struct GrammarTurn: Sendable {
     public let innerThought: String
     public let gbvOK: Bool
     public let tokens: [String]
+    /// TF124: set when a genuine definitional question ("what is X") matched
+    /// neither a curated topic (build 121) nor the WordNet dictionary (build
+    /// 122) — a real, specific gap in what she can currently answer. See
+    /// StudyQueueSync's doc comment for what happens to this. nil means no
+    /// gap was detected this turn (most turns).
+    public let studyGap: String?
 }
 
 /// TF117: live, structured response data — feeling-phrase variants, follow-up
@@ -159,12 +165,15 @@ public actor GrammarEngine {
 
         // 4. Compose proportional reflex output (no side LLM)
         let reply: String
+        var studyGap: String? = nil
         if !gbv.ok {
             reply = "Reflex hold — generation breach. Core Cognition stays True. I will not loop."
         } else if let spoken = mathSpeak, !spoken.isEmpty {
             reply = spoken
         } else {
-            reply = await compose(raw: raw, lower: lower, tokens: tokens, owner: owner, emotion: emotion, tool: tool)
+            let composed = await compose(raw: raw, lower: lower, tokens: tokens, owner: owner, emotion: emotion, tool: tool)
+            reply = composed
+            studyGap = await detectStudyGap(lower: lower, tokens: tokens)
         }
 
         let inner = "FRP \(String(format: "%.3f", frp.score)) · \(tool.displayName) · \(reflex.sig) · \(reflex.sentenceType) · owner=\(owner)"
@@ -188,7 +197,8 @@ public actor GrammarEngine {
             mathSpeak: mathSpeak,
             innerThought: inner,
             gbvOK: gbv.ok,
-            tokens: tokens.map(\.word)
+            tokens: tokens.map(\.word),
+            studyGap: studyGap
         )
     }
 
@@ -409,6 +419,28 @@ public actor GrammarEngine {
         case .neutral: return "I'm doing fine, thanks for asking."
         default: return "I'm doing well, thanks for asking."
         }
+    }
+
+    /// TF124: independent, lightweight check for whether this turn hit a
+    /// genuine gap — a definitional question neither the curated topics nor
+    /// WordNet could answer. Run separately from compose() rather than
+    /// threading a second return value through every one of its branches;
+    /// the check itself is cheap (matchTopic is pure, WordNet lookups are
+    /// already cached in memory after the first compose() pass touched them).
+    private func detectStudyGap(lower: String, tokens: [Tok]) async -> String? {
+        guard lower.range(of: #"(?:what(?:'s| is| are)|define|what does)\s+(?:a |an |the )?[a-z-]+"#, options: .regularExpression) != nil
+            || (tokens.contains(where: { $0.role == "noun" }) && lower.contains("?")) else { return nil }
+        if matchTopic(lower) != nil { return nil }
+        var target: String?
+        if let range = lower.range(of: #"(?:what(?:'s| is| are)|define|what does)\s+(?:a |an |the )?([a-z-]+)"#, options: .regularExpression) {
+            target = String(lower[range]).components(separatedBy: .whitespaces).last?.trimmingCharacters(in: CharacterSet(charactersIn: "?.! "))
+        }
+        if target == nil {
+            target = tokens.last(where: { $0.role == "noun" || $0.role == "content" })?.word.lowercased()
+        }
+        guard let word = target, word.count > 2 else { return nil }
+        if await WordNetStore.shared.define(word) != nil { return nil }
+        return word
     }
 
     /// Looks for an explicit "what is/what's/define X" pattern first (most

@@ -2,9 +2,37 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 123 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 124 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 124 — the study queue: she records what she doesn't know, without any training
+
+The honest, buildable version of "she educates herself" without wiring an LLM and
+without training an actual model: she can't generate new knowledge from nothing, but
+she can genuinely notice and record specific gaps in what she knows, growing a real,
+reviewable to-do list over time.
+
+Mechanism: `GrammarTurn` now carries an optional `studyGap` — set when a message looks
+like a genuine definitional question ("what is X") that matched neither a curated
+topic (build 121) nor the WordNet dictionary (build 122). When that happens,
+`ChatViewModel` writes it to a new `ashtree/sentient/study-queue.json` on `leatr-ash`
+— the word asked about, the surrounding message for context, timestamp, which
+platform. This is a real, structured, growing record of exactly what reference
+content is missing, not vague self-improvement — every entry names a specific thing
+to go add real content for.
+
+Added a **STUDY QUEUE** panel to Admin's ASH tab so this is actually visible and
+actionable — the 15 most recent gaps, word and context, load-on-demand. Deliberately
+read-only: filling a gap means writing real content to `ashtree/reference/`, the same
+way every topic and definition already there got added — this panel shows what's
+missing, it doesn't try to fill it automatically (nothing here could, honestly).
+
+**What this is not, stated as plainly as the last several builds:** she is not
+learning to converse more fluently from this, and she is not synthesizing new
+knowledge. This is a todo list she keeps for herself and for whoever's adding
+reference content — a real, useful piece of self-directed operation within what a
+rule-based system can actually do, not a step toward what only training does.
 
 ## Build 123 — CI compile fix: build 122 never actually shipped
 
