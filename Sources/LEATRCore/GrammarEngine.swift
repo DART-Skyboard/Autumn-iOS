@@ -34,14 +34,35 @@ public struct GrammarReference: Sendable, Decodable {
     public let acknowledgeTemplates: [String: [String]]
     public let thanks: [String]
     public let farewell: [String]
+    /// TF120: real, complete short stories — see compose()'s storyIntent
+    /// handling for why these exist. Optional/defaulted to [] via a custom
+    /// decoder so older or not-yet-updated grammar-en.json payloads (without
+    /// a "stories" key) don't break the whole reference fetch.
+    public let stories: [String]
 
     public init(feelingPhrases: [String: [String]], followUps: [String: [String]],
-                acknowledgeTemplates: [String: [String]], thanks: [String], farewell: [String]) {
+                acknowledgeTemplates: [String: [String]], thanks: [String], farewell: [String],
+                stories: [String] = []) {
         self.feelingPhrases = feelingPhrases
         self.followUps = followUps
         self.acknowledgeTemplates = acknowledgeTemplates
         self.thanks = thanks
         self.farewell = farewell
+        self.stories = stories
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case feelingPhrases, followUps, acknowledgeTemplates, thanks, farewell, stories
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        feelingPhrases = try c.decode([String: [String]].self, forKey: .feelingPhrases)
+        followUps = try c.decode([String: [String]].self, forKey: .followUps)
+        acknowledgeTemplates = try c.decode([String: [String]].self, forKey: .acknowledgeTemplates)
+        thanks = try c.decode([String].self, forKey: .thanks)
+        farewell = try c.decode([String].self, forKey: .farewell)
+        stories = try c.decodeIfPresent([String].self, forKey: .stories) ?? []
     }
 }
 
@@ -59,6 +80,9 @@ public actor GrammarEngine {
     private var outerJournal: [[String: String]] = []
     /// Per-user memory. Never mix users.
     private var userMemory: [String: [String]] = [:]
+    /// TF120: last story told per user, so back-to-back "tell me a story"
+    /// requests don't repeat the same one immediately.
+    private var lastStoryIndex: [String: Int] = [:]
     private var lastOwner: String = "guest"
     /// Roles from Grammar Study train (lexicon POS). Empty until first train.
     private var trainedRoles: [String: String] = [:]
@@ -249,6 +273,16 @@ public actor GrammarEngine {
             return "Holding written integers (\(words)) as grammar, not math tokens. Ask to calculate or open fx Math Solver if you want the numeric path."
         }
 
+        // TF120: "tell me a story" was falling through to the generic
+        // acknowledge template ("Got it — Tell me a story.") — an
+        // acknowledgment of the request instead of fulfilling it, which isn't
+        // a valid response to a request for content at all. Real stories
+        // (from the live reference, falling back to a small built-in set)
+        // instead of pretending the request itself was the topic to echo.
+        if lower.range(of: #"\b(tell me a story|tell a story|got a story|know any stories|know a story)\b"#, options: .regularExpression) != nil {
+            return tellStory(owner: owner)
+        }
+
         // How-are-you style check-ins — answer the actual question asked,
         // in her own feeling-word for the current emotion, not a shell report.
         let howAreYouPattern = lower.range(of: #"how('?s| is| are)?\s+(you|it|things|everything)\s*(doing|going)?"#, options: .regularExpression) != nil
@@ -333,6 +367,28 @@ public actor GrammarEngine {
         default: return "I'm doing well, thanks for asking."
         }
     }
+
+    /// Real, complete short stories — from the live reference when available,
+    /// falling back to a small built-in set. Avoids repeating the same one
+    /// twice in a row for the same user.
+    private func tellStory(owner: String) -> String {
+        let bank = (reference?.stories.isEmpty == false) ? reference!.stories : Self.builtInStories
+        guard !bank.isEmpty else { return "I don't have a story ready right now — ask me again in a moment." }
+        if bank.count == 1 { return bank[0] }
+        var idx = Int.random(in: 0..<bank.count)
+        if let last = lastStoryIndex[owner], last == idx {
+            idx = (idx + 1) % bank.count
+        }
+        lastStoryIndex[owner] = idx
+        return bank[idx]
+    }
+
+    private static let builtInStories: [String] = [
+        "There was a lighthouse keeper who logged the same line every night for forty years: \"No ships lost.\" On the last night before his retirement, a ship radioed in trouble in the fog. He guided it in by voice alone, no light needed — he'd memorized every rock in that channel by ear. He wrote the same line one final time, then added: \"None ever were.\"",
+        "A cartographer spent thirty years mapping a forest, until one day she found a clearing that wasn't on any of her drawings. She sat at its center for an afternoon, then packed up and left it off the map entirely. Some things, she decided, are worth more unfound than found.",
+        "Two rivers ran side by side for a hundred miles without touching, until a landslide moved one stone. Where they finally met, fishermen said the water tasted different — not of either river alone, but of the waiting.",
+        "An old clockmaker built a clock with no hands, only a small door that opened once a day at a time no one could predict. People lined up for years hoping to see it open. He never explained the mechanism. When asked why, he said, \"If I told you when, you'd stop watching — and the watching was the point.\""
+    ]
 
     private func followUpQuestion(_ tool: NaturalTool) -> String {
         if let variants = reference?.followUps[tool.displayName.lowercased()], !variants.isEmpty {
