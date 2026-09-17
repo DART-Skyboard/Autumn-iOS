@@ -2,9 +2,40 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 121 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 122 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 122 — real dictionary lookup for the "unknown topic" case (~66K words, found already built, wired wrong)
+
+The concrete answer to "she should be able to look up what a word means for anything
+unknown": `WordNetStore.swift` already existed — a full Princeton WordNet dictionary,
+~66K real word definitions, split into three real data files already sitting on
+`leatr-ash` (`wordnet_a_h/i_r/s_z.json`, ~23MB total, verified as real content, not
+stubs). It was only ever wired into `LexicalAnalyzer`, a second analysis pipeline that
+was already known to be unused (`ChatViewModel.send()` calls `GrammarEngine`
+directly) — same disconnected-capability pattern as MusicKit and Weather before it.
+
+**Also found a real bug while connecting it:** the Swift struct expected one
+definition object per word; the actual data has an *array* of sense objects per word
+(a word can have multiple parts of speech/meanings — "volcano" has two noun senses).
+That mismatch meant every single lookup would have silently failed to decode, even
+once wired up. Fixed the struct to match the real schema, verified against actual
+entries (`volcano` → "a fissure in the earth's crust... through which molten lava and
+gases erupt").
+
+**Now wired into `GrammarEngine.compose()`** as the general-purpose version of build
+121's curated topics: checked after the curated topic list (so a real hand-written
+summary still wins when one exists), matching "what is/what's/define X" explicitly,
+or the most prominent noun in a genuine question as a broader fallback. Real,
+substantial coverage — tens of thousands of ordinary English nouns now get an actual
+definition instead of falling through to a generic template.
+
+**Same honest boundary as build 121, stated again because it's still true:** a
+definition is retrieval, not discussion — she'll tell you what a volcano *is*, not
+discuss volcanoes, hold an opinion on one, or handle a proper noun/personal topic that
+isn't in a dictionary. That gap is real and still needs either more curated topic
+content or the isolated Claude path to close for genuinely open conversation.
 
 ## Build 121 — real topic knowledge (retrieval, not training) — history to start
 
