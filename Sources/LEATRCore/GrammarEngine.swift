@@ -124,6 +124,36 @@ public actor GrammarEngine {
     private let interrogatives: Set<String> = ["who", "what", "when", "where", "why", "how", "which"]
     private let greetings: Set<String> = ["hi", "hello", "hey", "yo", "sup", "howdy", "hiya"]
 
+    /// TF125: a topic held open across turns rather than classified from one
+    /// message in isolation — the buildable piece of "keep it moving as
+    /// groups of data points until the whole pattern resolves." Bounded (see
+    /// mergedTokens) so it can't grow without limit if someone never
+    /// resolves a thread.
+    private struct OpenTopic {
+        var tokens: [Tok]
+        var turnsOpen: Int
+    }
+    private var openTopics: [String: OpenTopic] = [:]
+
+    private let continuationCues: Set<String> = [
+        "and", "also", "then", "plus", "another", "additionally", "furthermore",
+        "moreover", "besides", "too", "next", "after that", "on top of that"
+    ]
+
+    /// Heuristic, not certainty — a signal that this message is probably the
+    /// next piece of an unfinished thought rather than a fresh, standalone
+    /// one: it opens with a continuation cue, or it's short and leans on a
+    /// referential pronoun ("it", "that") without introducing its own new
+    /// subject noun.
+    private func looksLikeContinuation(raw: String, tokens: [Tok]) -> Bool {
+        let lower = raw.lowercased().trimmingCharacters(in: .whitespaces)
+        if continuationCues.contains(where: { lower.hasPrefix($0 + " ") }) { return true }
+        let wordCount = tokens.count
+        let hasReferential = tokens.prefix(3).contains { ["it", "that", "this", "those", "these"].contains($0.word.lowercased()) }
+        let hasFreshNoun = tokens.contains { $0.role == "noun" }
+        return wordCount <= 6 && hasReferential && !hasFreshNoun
+    }
+
     public func processForChat(_ text: String, facts: [String: String] = [:]) async -> GrammarTurn {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let owner = facts["_memoryOwner"] ?? facts["user"] ?? lastOwner
@@ -142,6 +172,17 @@ public actor GrammarEngine {
         let reflex = leatrReflex(raw)
         let tokens = reflex.tokens
         let lower = raw.lowercased()
+
+        // TF125: open-topic continuation — if this message reads as the next
+        // piece of an unfinished thought, merge it with whatever's still
+        // held open for this user before topic/dictionary lookups, so a
+        // thought split across several short messages ("the constraint is
+        // X" / "and it happens after Y") can still resolve as one topic
+        // instead of two separate, under-informative fragments. Capped at
+        // 60 tokens so an unresolved thread can't grow without bound.
+        let isContinuation = looksLikeContinuation(raw: raw, tokens: tokens) && openTopics[owner] != nil
+        let mergedTokens: [Tok] = isContinuation ? (openTopics[owner]!.tokens + tokens) : tokens
+        let mergedLower = mergedTokens.map(\.word).joined(separator: " ").lowercased()
 
         // 2. Glossary / math OOO before compose — geometry first
         // Grammar integers ("two thoughts") stay language; numeric tokens are math.
@@ -171,9 +212,26 @@ public actor GrammarEngine {
         } else if let spoken = mathSpeak, !spoken.isEmpty {
             reply = spoken
         } else {
-            let composed = await compose(raw: raw, lower: lower, tokens: tokens, owner: owner, emotion: emotion, tool: tool)
+            let composed = await compose(raw: raw, lower: lower, tokens: tokens, contextTokens: mergedTokens, owner: owner, emotion: emotion, tool: tool)
             reply = composed
-            studyGap = await detectStudyGap(lower: lower, tokens: tokens)
+            studyGap = await detectStudyGap(lower: mergedLower, tokens: mergedTokens)
+        }
+
+        // TF125: keep the topic open for next turn if this message itself
+        // reads as an unfinished fragment, or if we explicitly couldn't
+        // answer it (studyGap set) — either way, more from the same person
+        // might complete it. Otherwise treat it as resolved and clear the
+        // buffer. Capped at 3 turns and 60 tokens either way.
+        let shouldKeepOpen = (studyGap != nil || looksLikeContinuation(raw: raw, tokens: tokens)) && gbv.ok
+        if !shouldKeepOpen {
+            openTopics[owner] = nil
+        } else {
+            let prior = openTopics[owner]?.turnsOpen ?? 0
+            if prior < 3 {
+                openTopics[owner] = OpenTopic(tokens: Array(mergedTokens.suffix(60)), turnsOpen: prior + 1)
+            } else {
+                openTopics[owner] = nil
+            }
         }
 
         let inner = "FRP \(String(format: "%.3f", frp.score)) · \(tool.displayName) · \(reflex.sig) · \(reflex.sentenceType) · owner=\(owner)"
@@ -279,7 +337,7 @@ public actor GrammarEngine {
         EmotionClassifier.classify(buoyancy: buoyancy, expression: raw.contains("?") ? .question : (raw.contains("!") ? .exclamation : .contextualStatement), text: raw)
     }
 
-    private func compose(raw: String, lower: String, tokens: [Tok], owner: String, emotion: EmotionType, tool: NaturalTool) async -> String {
+    private func compose(raw: String, lower: String, tokens: [Tok], contextTokens: [Tok], owner: String, emotion: EmotionType, tool: NaturalTool) async -> String {
         // TF116: compose() previously always fell through to a mechanical
         // "Noted: X. Buoyancy reflexed on Y. Z on the outer shell. Journal will
         // write this turn into leatr-ash via GAS." template for anything that
@@ -309,7 +367,13 @@ public actor GrammarEngine {
         // TF121: real topic knowledge — see GrammarReference.topics' own doc
         // comment. Checked before the generic fallback so a genuine content
         // match wins over "tell me a bit more" every time.
-        if let hit = matchTopic(lower) {
+        // TF125: use the merged (possibly multi-turn) context for topic and
+        // dictionary lookups specifically — richer signal when this message
+        // continues an open thought — while everything else about this
+        // turn's reply (emotion, tool routing, the reply's own wording)
+        // still reflects what was actually just said.
+        let contextLower = contextTokens.map(\.word).joined(separator: " ").lowercased()
+        if let hit = matchTopic(contextLower) {
             return hit
         }
 
@@ -322,7 +386,7 @@ public actor GrammarEngine {
         // is still retrieval — a real definition that already exists,
         // looked up — not generation; it won't discuss, explain further, or
         // hold an opinion on the word, only define it.
-        if let wordHit = await defineFromMessage(tokens: tokens) {
+        if let wordHit = await defineFromMessage(tokens: contextTokens) {
             return wordHit
         }
 

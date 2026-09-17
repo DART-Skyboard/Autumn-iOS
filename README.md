@@ -2,9 +2,37 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 124 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 125 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 125 — open-topic buffer: a thought split across messages doesn't reset each turn
+
+The real, scoped piece of "hold a pattern as a placeholder and refine it as more data
+arrives instead of classifying from one message in isolation." Every message was
+previously classified completely independently — no way to say "this is the second
+half of what they were just describing." Added `OpenTopic`: a per-user buffer that
+holds recent tokens when a message looks like an unfinished fragment (starts with a
+continuation cue — "and," "also," "then" — or leans on a referential pronoun without
+introducing its own subject), and merges it with the next message before topic
+matching, WordNet lookup, and study-gap detection run. A thought split across two
+short messages ("the constraint is buoyancy drift" / "and it shows up after the third
+cycle") now has a real chance to resolve as one topic instead of two separate,
+under-informative fragments.
+
+Bounded on purpose: caps at 3 turns held open and 60 tokens merged, and closes as soon
+as a real answer is found or the fragment signal stops appearing, so an unresolved
+thread can't grow without limit or silently outlive the conversation it belonged to.
+Only the topic/dictionary/gap-detection lookups use the merged context — the actual
+reply's wording, emotion, and tool routing still reflect what was just said in this
+specific message.
+
+**Scope, stated as plainly as every build before it:** this is real, incremental
+progress on multi-turn context — it is not the full multi-level reflexive parser
+described (character → pattern → sequence-of-patterns → topic, each independently
+revisable at every level). That's a much larger architecture change; this is the
+single most valuable, containable piece of it, built and verified rather than
+attempted whole and unverified.
 
 ## Build 124 — the study queue: she records what she doesn't know, without any training
 
