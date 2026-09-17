@@ -169,6 +169,16 @@ public actor AutumnGASClient {
 
     // MARK: — HTTP
     @discardableResult
+    /// TF120: was only checking the HTTP status code (200-299 = "success"),
+    /// but GAS webapps almost always return HTTP 200 even when the operation
+    /// failed internally — the script catches its own errors and still
+    /// responds normally at the HTTP level. Confirmed by reading the web
+    /// app's own equivalent (`viaGas` in index.html): it parses the response
+    /// BODY and looks for a real success indicator (`ok`/`commit`/`sha`) or an
+    /// explicit `error` field, never trusting the status code alone. This is
+    /// exactly why feedback submission could show "SUBMITTED" in the UI while
+    /// silently never writing anything — postPlain reported success on any
+    /// 200 response regardless of what GAS actually did with the write.
     private func postPlain(_ payload: [String: Any]) async -> Bool {
         guard let url = URL(string: gasURL),
               let body = try? JSONSerialization.data(withJSONObject: payload)
@@ -179,9 +189,20 @@ public actor AutumnGASClient {
         req.httpBody = body
         req.timeoutInterval = 12
         do {
-            let (_, resp) = try await session.data(for: req)
+            let (data, resp) = try await session.data(for: req)
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-            return (200...299).contains(code)
+            let httpOK = (200...299).contains(code)
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                // No parseable body — fall back to the HTTP-level signal, same
+                // as before, rather than failing writes for endpoints that
+                // genuinely don't return a body.
+                return httpOK
+            }
+            let hasError = json["error"] != nil
+            let hasSuccessField = (json["ok"] as? Bool) == true || json["commit"] != nil || json["sha"] != nil
+            if hasError && !hasSuccessField { return false }
+            if !httpOK && !hasSuccessField { return false }
+            return true
         } catch {
             return false
         }

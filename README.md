@@ -2,9 +2,36 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 119 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 120 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 120 — real story-telling + the actual reason writes could silently fail
+
+**Feedback submission showing "SUBMITTED" but never appearing in MESSAGES:** found a
+real, significant bug by comparing directly against the web app's own write code.
+`postPlain` (used by every GAS write — feedback, journal, sessions) only checked the
+HTTP status code, treating any 200 response as success. But GAS webapps almost always
+return HTTP 200 even when the operation failed internally — the script catches its
+own errors and still responds normally at the HTTP level. Web's own `viaGas` function
+parses the response *body* and checks for a real success indicator (`ok`/`commit`/
+`sha`) or an explicit `error` field — it never trusts the status code alone. iOS never
+did this check at all. Fixed `postPlain` to match web's exact contract. This affects
+every write through this path, not just feedback — journal entries and session writes
+were exposed to the same silent-failure risk.
+
+**"Tell me a story" → "Got it — Tell me a story.":** a fair, glaring catch — an
+acknowledgment isn't a story. Added real story-telling: `GrammarEngine` now recognizes
+story requests and returns one of five actual complete short stories, live from
+`ashtree/reference/grammar-en.json`'s new `stories` array (same dynamic-sync mechanism
+from build 117 — add more there anytime, no rebuild needed) with a small built-in
+fallback set if the reference hasn't loaded. Won't repeat the same story twice in a
+row for the same person.
+
+**Not done this build, stated plainly again:** Ash Star's per-user "Autumn Ash"
+library save (folder picker, Save All) is real, substantial new feature work that
+still hasn't been started — it needs its own dedicated pass, not another turn where
+it competes with verified bug fixes for the same build's attention.
 
 ## Build 119 — repetition bug, mailbox hang, and button layout — three confirmed, fixed
 
