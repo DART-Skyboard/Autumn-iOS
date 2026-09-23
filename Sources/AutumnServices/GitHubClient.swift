@@ -226,6 +226,15 @@ public actor GitHubClient {
     // MARK: — HTTP helpers
     private func get(_ path: String) async throws -> Data {
         var req = URLRequest(url: URL(string: base + path)!)
+        // TF137: GitHub Contents API responses can carry cache-control
+        // headers that let URLSession's default cache policy
+        // (.useProtocolCachePolicy) serve a STALE cached response
+        // indefinitely — confirmed the real, current content decodes
+        // perfectly with this exact algorithm (verified independently), so
+        // a stale cache entry from an earlier, possibly-empty version of
+        // the file is the only remaining explanation for "read succeeded,
+        // decoded to zero" on real, present data. Force a fresh fetch.
+        req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         headers().forEach { req.setValue($1, forHTTPHeaderField: $0) }
         let (data, resp) = try await session.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {

@@ -2,9 +2,31 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 136 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 137 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 137 — the actual mailbox root cause: stale HTTP cache, verified independently before shipping
+
+Fetched `feedback/inbox.json`'s real, current content directly and ran iOS's exact
+decode algorithm (base64 → UTF-8 → JSON) against it outside the app entirely: **it
+decodes perfectly — 4 valid entries**, matching exactly what the web screenshots
+showed, including a submission from today. So the content and the decode logic were
+both already correct; the bug was never there.
+
+`GitHubClient`'s requests use `URLSession.shared`, which carries iOS's app-wide shared
+HTTP cache, and no request in `GitHubClient.get()` ever set a cache policy — meaning
+GitHub's Contents API response for this file could be served from a **stale cached
+copy indefinitely** (`.useProtocolCachePolicy`, the default, respects GitHub's own
+caching headers). If iOS cached a response from before these entries existed — or
+from any earlier, different state of the file — it would keep serving that exact
+stale snapshot forever, which reads as "read succeeded, decoded to zero" even though
+the real file has real content. Set `req.cachePolicy =
+.reloadIgnoringLocalAndRemoteCacheData` so every GitHub read is always genuinely
+fresh.
+
+This is iOS client code only — no backend changes, matches exactly what web's own
+logic already does (a normal, uncached fetch), ported over as asked.
 
 ## Build 136 — undid the shared GAS change, iOS-only fix, final diagnostic layer
 
