@@ -125,6 +125,8 @@ public struct SettingsView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var chatVM: ChatViewModel
     @State private var apiKeyInput = ""
+    @State private var aisKeyInput = ""
+    @State private var showAISKey = false
     @State private var showAPIKey = false
     @State private var dataConsent = true
     @State private var showGitHubSheet = false
@@ -269,6 +271,46 @@ public struct SettingsView: View {
                 }
                 .listRowBackground(themeVM.current.surface)
 
+                // TF128: Mantis Radar's 3D Maritime tab — real-time global
+                // vessel tracking via AISStream.io, a free (self-serve
+                // signup) AIS WebSocket. No keyless tier exists for this
+                // kind of service, same as most "free" APIs that still
+                // require an account.
+                Section {
+                    HStack {
+                        Text("AISStream API Key (optional)")
+                            .foregroundColor(themeVM.current.textSecondary)
+                            .font(.system(size: 13))
+                        Spacer()
+                    }
+                    HStack {
+                        if showAISKey {
+                            TextField("paste key…", text: $aisKeyInput)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                        } else {
+                            SecureField("paste key…", text: $aisKeyInput)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                        }
+                        Button { showAISKey.toggle() } label: {
+                            Image(systemName: showAISKey ? "eye.slash" : "eye")
+                                .foregroundColor(themeVM.current.accent)
+                        }
+                    }
+                    Button("Save API Key") {
+                        KeychainService.shared.save(key: "aisstream_api_key", value: aisKeyInput)
+                        MaritimeFeed.shared.start()
+                    }
+                    .foregroundColor(themeVM.current.accent)
+                    Link("Get a free key at aisstream.io →", destination: URL(string: "https://aisstream.io")!)
+                        .font(.system(size: 12))
+                        .foregroundColor(themeVM.current.accent.opacity(0.8))
+                } header: {
+                    Text("MANTIS RADAR — MARITIME").settingsHeader(theme: themeVM.current)
+                }
+                .listRowBackground(themeVM.current.surface)
+
                 // Data sharing
                 Section {
                     Toggle("Share usage analytics (Sigma)", isOn: $dataConsent)
@@ -301,6 +343,8 @@ public struct SettingsView: View {
                 apiKeyInput = saved
                 chatVM.configure(apiKey: saved)
             }
+            let savedAIS = KeychainService.shared.load(key: "aisstream_api_key") ?? ""
+            if !savedAIS.isEmpty { aisKeyInput = savedAIS }
         }
         // Keep device-flow poll alive on swipe-dismiss; Cancel/✕ calls cancelGitHubAuth.
         .sheet(isPresented: $showGitHubSheet) {

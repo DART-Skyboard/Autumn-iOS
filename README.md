@@ -2,9 +2,35 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 127 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 128 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 128 — Mantis Radar's third tab: real-time 3D maritime vessel tracking
+
+New "3D MARITIME" tab alongside 2D Aerial and 3D Orbital, same globe framework
+(SceneKit + lat/lon→3D math shared with satellites/aircraft) rather than a separate
+scene. Real data: `MaritimeFeed` connects to AISStream.io's free global AIS WebSocket
+(genuine real-time vessel positions, self-serve free signup — there's no keyless tier
+for this kind of service, flagged clearly in Settings with a link to get one), decodes
+PositionReport messages (lat/lon/speed/course/MMSI), auto-reconnects with backoff, and
+caps at 300 rendered vessels so a global feed doesn't overwhelm the scene or the
+screen.
+
+Each vessel renders as a small boat silhouette (bow point, flat stern, extruded via
+SCNShape — a primitive shape, not an imported 3D model; there's no asset pipeline here
+for that) that rotates to its heading and glides to each new position over ~4 seconds
+rather than snapping, since real AIS reports arrive periodically rather than
+continuously — the honest approximation of "watch it move" a real-world feed supports.
+Tapping a vessel shows an info card (name, MMSI, speed, heading, position, last
+update), same visual style as the existing satellite card.
+
+**Scope, stated plainly:** this is the iOS piece, as asked for first. The web port
+(leatr.xyz's Mantis Radar module) is a deliberate, separate next step, not done here.
+Also worth knowing: this is new, sizable SceneKit/WebSocket code that hasn't been
+verified on a real device yet — please try all three tabs once this lands in
+TestFlight and let me know if anything about the maritime view looks or behaves
+wrong.
 
 ## Build 127 — training catalog now shows the real reconnect flow instead of a raw error
 

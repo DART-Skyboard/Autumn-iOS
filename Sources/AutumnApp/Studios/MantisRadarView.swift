@@ -12,7 +12,14 @@ struct MantisRadarView: View {
     @EnvironmentObject var appNav: AppNavigation
     @EnvironmentObject var authVM: AuthViewModel
     @ObservedObject private var feed = RadarFeed.shared
+    @ObservedObject private var maritimeFeed = MaritimeFeed.shared
+    /// TF128: kept as the pre-existing `aerial` boolean plus a new
+    /// `maritime` flag rather than replacing it with a 3-case enum — smaller
+    /// diff against the existing `if aerial { } else { }` branches below,
+    /// same effective behavior (aerial / orbital / maritime are still
+    /// mutually exclusive, enforced in the tab buttons).
     @State private var aerial = true
+    @State private var maritime = false
 
     private var displayName: String {
         if !authVM.githubUsername.isEmpty { return authVM.githubUsername }
@@ -30,8 +37,12 @@ struct MantisRadarView: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {
-                    tab("2D AERIAL", on: aerial) { aerial = true }
-                    tab("3D ORBIT", on: !aerial) { aerial = false }
+                    tab("2D AERIAL", on: aerial) { aerial = true; maritime = false }
+                    tab("3D ORBIT", on: !aerial && !maritime) { aerial = false; maritime = false }
+                    tab("3D MARITIME", on: maritime) {
+                        aerial = false; maritime = true
+                        maritimeFeed.start()
+                    }
                 }
                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(cyan.opacity(0.25), lineWidth: 1))
                 Button { appNav.showRadar = false } label: {
@@ -50,8 +61,24 @@ struct MantisRadarView: View {
             ZStack(alignment: .topLeading) {
                 if aerial {
                     RadarMapView(feed: feed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName)
+                } else if maritime {
+                    RadarGlobeView(feed: feed, maritimeFeed: maritimeFeed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName, showVessels: true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("AISSTREAM.IO")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(cyan)
+                        Text(maritimeFeed.status)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("\(maritimeFeed.vessels.count) VESSELS")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(cyan)
+                    }
+                    .padding(10)
+                    .background(Color.black.opacity(0.55))
+                    .padding(8)
                 } else {
-                    RadarGlobeView(feed: feed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName)
+                    RadarGlobeView(feed: feed, maritimeFeed: maritimeFeed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("CELESTRAK TLE")
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
@@ -75,7 +102,9 @@ struct MantisRadarView: View {
                         userInfoCard(cyan: cyan)
                     } else if aerial, let ac = feed.selectedAircraft {
                         aircraftInfoCard(ac, cyan: cyan)
-                    } else if !aerial, let sat = feed.selectedSat {
+                    } else if maritime, let ves = maritimeFeed.selectedVessel {
+                        vesselInfoCard(ves, cyan: cyan)
+                    } else if !aerial && !maritime, let sat = feed.selectedSat {
                         satInfoCard(sat, cyan: cyan)
                     }
                     rangeSlider(cyan: cyan)
@@ -85,14 +114,14 @@ struct MantisRadarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack {
-                Text(aerial ? "2D AERIAL  \(feed.adsbStatus)" : "3D ORBITAL  \(feed.orbitStatus)")
+                Text(aerial ? "2D AERIAL  \(feed.adsbStatus)" : (maritime ? "3D MARITIME  \(maritimeFeed.status)" : "3D ORBITAL  \(feed.orbitStatus)"))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(cyan)
                 Spacer()
                 Text(String(format: "%.4f  %.4f", feed.userLat, feed.userLon))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.white.opacity(0.55))
-                Text(aerial ? "\(feed.aircraft.count) AC" : "\(feed.satellites.count) SAT")
+                Text(aerial ? "\(feed.aircraft.count) AC" : (maritime ? "\(maritimeFeed.vessels.count) VES" : "\(feed.satellites.count) SAT"))
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(cyan)
             }
@@ -149,6 +178,48 @@ struct MantisRadarView: View {
         .frame(maxWidth: 280, alignment: .leading)
         .background(Color.black.opacity(0.72))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(cyan.opacity(0.35), lineWidth: 1))
+    }
+
+    /// TF128: vessel info card — matches satInfoCard's style exactly.
+    private func vesselInfoCard(_ ves: RadarVessel, cyan: Color) -> some View {
+        let amber = Color(hex: "#ffb833")
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(ves.displayName)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(amber)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Button { maritimeFeed.selectedVessel = nil } label: {
+                    Text("✕")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+            }
+            Text("MMSI \(ves.id)")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(.white.opacity(0.8))
+            HStack(spacing: 10) {
+                if let speed = ves.speedKn {
+                    Text(String(format: "%.1f kn", speed)).foregroundColor(.white.opacity(0.85))
+                }
+                if let course = ves.courseDeg {
+                    Text(String(format: "%.0f° hdg", course)).foregroundColor(.white.opacity(0.85))
+                }
+            }
+            .font(.system(size: 9, design: .monospaced))
+            Text(String(format: "LAT %.3f  LON %.3f", ves.lat, ves.lon))
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.white.opacity(0.55))
+            Text("Updated \(ves.lastUpdate.formatted(date: .omitted, time: .shortened))")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.white.opacity(0.4))
+        }
+        .padding(10)
+        .frame(maxWidth: 280, alignment: .leading)
+        .background(Color.black.opacity(0.72))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(amber.opacity(0.35), lineWidth: 1))
     }
 
     private func rangeSlider(cyan: Color) -> some View {
@@ -568,9 +639,14 @@ final class RadarTileOverlay: MKTileOverlay {
 // MARK: — 3D globe (SceneKit) + TLE sats
 struct RadarGlobeView: UIViewRepresentable {
     @ObservedObject var feed: RadarFeed
+    @ObservedObject var maritimeFeed: MaritimeFeed
     var avatarURL: URL?
     var avatarLetter: String
     var displayName: String
+    /// TF128: when true, only vessels render (Mantis Radar's new 3D
+    /// Maritime tab); satellites/debris still track in the background via
+    /// RadarFeed regardless, since that's shared plumbing, but aren't drawn.
+    var showVessels: Bool = false
 
     func makeUIView(context: Context) -> SCNView {
         let v = SCNView()
@@ -595,12 +671,15 @@ struct RadarGlobeView: UIViewRepresentable {
         context.coordinator.letter = avatarLetter
         context.coordinator.loadAvatar(avatarURL)
         context.coordinator.displayName = displayName
+        context.coordinator.showVessels = showVessels
         context.coordinator.sync(
-            sats: feed.satellites,
+            sats: showVessels ? [] : feed.satellites,
             aircraft: feed.aircraft,
+            vessels: showVessels ? maritimeFeed.vessels : [],
             userLat: feed.userLat,
             userLon: feed.userLon,
             selectedId: feed.selectedSat?.id,
+            selectedVesselId: maritimeFeed.selectedVessel?.id,
             selectedUser: feed.selectedUser
         )
     }
@@ -611,11 +690,13 @@ struct RadarGlobeView: UIViewRepresentable {
         let root = SCNNode()
         let satRoot = SCNNode()
         let acRoot = SCNNode()
+        let vesselRoot = SCNNode()
         let userNode = SCNNode()
         let earthR: Float = 1.0
         weak var scnView: SCNView?
         weak var sceneRoot: SCNNode?
         weak var feed: RadarFeed?
+        var showVessels = false
         var letter = "G"
         var displayName = ""
         var avatarImage: UIImage?
@@ -623,7 +704,9 @@ struct RadarGlobeView: UIViewRepresentable {
         private var avatarTask: URLSessionDataTask?
         private var satNodes: [String: SCNNode] = [:]
         private var acNodes: [String: SCNNode] = [:]
+        private var vesselNodes: [String: SCNNode] = [:]
         private var lastSats: [RadarSat] = []
+        private var lastVessels: [RadarVessel] = []
         private var orbitNode: SCNNode?
         private var tickNode: SCNNode?
         private var orbitSatId: String?
@@ -672,6 +755,7 @@ struct RadarGlobeView: UIViewRepresentable {
             scene.rootNode.addChildNode(userNode)
             scene.rootNode.addChildNode(satRoot)
             scene.rootNode.addChildNode(acRoot)
+            scene.rootNode.addChildNode(vesselRoot)
             scene.rootNode.addChildNode(amb)
             scene.rootNode.addChildNode(dir)
             scene.rootNode.addChildNode(cam)
@@ -720,7 +804,7 @@ struct RadarGlobeView: UIViewRepresentable {
             }
         }
 
-        func sync(sats: [RadarSat], aircraft: [RadarAircraft], userLat: Double, userLon: Double, selectedId: String?, selectedUser: Bool) {
+        func sync(sats: [RadarSat], aircraft: [RadarAircraft], vessels: [RadarVessel], userLat: Double, userLon: Double, selectedId: String?, selectedVesselId: String? = nil, selectedUser: Bool) {
             lastSats = Array(sats.prefix(220))
             userNode.position = xyz(lat: userLat, lon: userLon, altKm: 50)
             userNode.scale = selectedUser ? SCNVector3(1.7, 1.7, 1.7) : SCNVector3(1, 1, 1)
@@ -779,6 +863,41 @@ struct RadarGlobeView: UIViewRepresentable {
                     n.position = pos
                     acRoot.addChildNode(n)
                     acNodes[a.id] = n
+                }
+            }
+
+            // TF128: vessels — same lat/lon->xyz math as satellites/aircraft,
+            // but sitting essentially at the surface (altKm ~0) rather than
+            // orbiting above it. Position changes animate over ~4s
+            // (roughly the cadence of real AIS position reports) rather than
+            // snapping instantly, so a vessel visibly glides between fixes
+            // instead of teleporting — the closest honest approximation of
+            // "see it moving" a periodic real-world feed can give without
+            // fabricating intermediate positions that weren't reported.
+            let vesselLive = Set(vessels.map(\.id))
+            for (id, n) in vesselNodes where !vesselLive.contains(id) {
+                n.removeFromParentNode()
+                vesselNodes.removeValue(forKey: id)
+            }
+            lastVessels = vessels
+            for ves in vessels {
+                let pos = xyz(lat: ves.lat, lon: ves.lon, altKm: 3)
+                let selected = ves.id == selectedVesselId
+                let heading = ves.courseDeg.map { Float($0 * .pi / 180) } ?? 0
+                if let n = vesselNodes[ves.id] {
+                    n.removeAllActions()
+                    n.runAction(.move(to: pos, duration: 4.0))
+                    n.runAction(.rotateTo(x: 0, y: CGFloat(heading), z: 0, duration: 1.0, usesShortestUnitArc: true))
+                    n.scale = selected ? SCNVector3(2.2, 2.2, 2.2) : SCNVector3(1, 1, 1)
+                    n.geometry?.firstMaterial?.emission.contents = selected ? UIColor.white : UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1)
+                } else {
+                    let n = SCNNode(geometry: Self.boatGeometry())
+                    n.name = "vessel:\(ves.id)"
+                    n.position = pos
+                    n.eulerAngles = SCNVector3(0, heading, 0)
+                    n.scale = SCNVector3(0.014, 0.014, 0.014)
+                    vesselRoot.addChildNode(n)
+                    vesselNodes[ves.id] = n
                 }
             }
 
@@ -868,9 +987,17 @@ struct RadarGlobeView: UIViewRepresentable {
                 }
                 return
             }
+            if showVessels, let id = pickVessel(at: pt, in: view),
+               let ves = lastVessels.first(where: { $0.id == id }) {
+                Task { @MainActor in
+                    MaritimeFeed.shared.selectedVessel = ves
+                }
+                return
+            }
             Task { @MainActor in
                 self.feed?.selectedSat = nil
                 self.feed?.selectedUser = false
+                if showVessels { MaritimeFeed.shared.selectedVessel = nil }
             }
         }
 
@@ -917,9 +1044,55 @@ struct RadarGlobeView: UIViewRepresentable {
             return nil
         }
 
+        private func pickVessel(at point: CGPoint, in view: SCNView) -> String? {
+            var best: (String, CGFloat)?
+            for (id, node) in vesselNodes {
+                let p = view.projectPoint(node.worldPosition)
+                guard p.z > 0, p.z < 1 else { continue }
+                let d = hypot(CGFloat(p.x) - point.x, CGFloat(p.y) - point.y)
+                if d < 44, best == nil || d < best!.1 {
+                    best = (id, d)
+                }
+            }
+            if let best { return best.0 }
+            let hits = view.hitTest(point, options: [
+                .searchMode: SCNHitTestSearchMode.closest.rawValue,
+                .boundingBoxOnly: true
+            ])
+            for h in hits {
+                if let name = h.node.name, name.hasPrefix("vessel:") {
+                    return String(name.dropFirst(7))
+                }
+            }
+            return nil
+        }
+
         static func uiColor(_ s: RadarSat) -> UIColor {
             let c = s.markerColor()
             return UIColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: 1)
+        }
+
+        /// TF128: a simple boat silhouette — pointed bow, flat stern —
+        /// extruded to a small height via SCNShape. Not an imported 3D
+        /// model (no asset pipeline for that in this environment); a
+        /// primitive hull shape is the honest, achievable version that
+        /// still reads as "a little boat" at the scale it renders on the
+        /// globe, rather than a plain sphere/pin like the satellite markers.
+        static func boatGeometry() -> SCNGeometry {
+            let hull = UIBezierPath()
+            hull.move(to: CGPoint(x: 0, y: 14))       // bow (pointed, faces +Z after rotation)
+            hull.addLine(to: CGPoint(x: 4, y: 4))
+            hull.addLine(to: CGPoint(x: 4, y: -10))     // starboard stern corner
+            hull.addLine(to: CGPoint(x: -4, y: -10))    // port stern corner
+            hull.addLine(to: CGPoint(x: -4, y: 4))
+            hull.close()
+            let shape = SCNShape(path: hull, extrusionDepth: 3)
+            let m = SCNMaterial()
+            m.diffuse.contents = UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1)
+            m.emission.contents = UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1)
+            m.lightingModel = .constant
+            shape.firstMaterial = m
+            return shape
         }
 
         /// mr.html latLonToV3 — continents, sats, and the user mark must share this.
