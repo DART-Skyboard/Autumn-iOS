@@ -46,7 +46,7 @@ public struct AppShellView: View {
                 if appNav.showProfile { ProfileSheet().transition(.move(edge: .trailing)) }
                 if appNav.showFeedback { FeedbackSheet().transition(.opacity) }
                 if appNav.showAdmin, circuit.allows(authVM) { AdminDrawerView().transition(.move(edge: .leading)) }
-                if appNav.showMantis { studioWrap { MantisNavigationView() } }
+                if appNav.showMantis { studioWrap { MantisNavWebView() } }
                 if appNav.showRadar { MantisRadarView() }
                 if let studio = appNav.studio { StudioHostView(kind: studio) }
                 if appNav.showMathSolver { MathSolverOverlay() }

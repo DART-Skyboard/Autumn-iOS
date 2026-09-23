@@ -2,9 +2,34 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 137 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 138 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 138 — standalone MUSIC and NAV HUD buttons; Mantis Nav now loads the real external page
+
+**MUSIC and NAV get their own HUD buttons**, next to RADAR/ALC/ADMIN, instead of being
+buried inside the Tools panel. Both were already fully wired — this just gives them a
+proper, visible entry point matching how the other tools work.
+
+**Mantis Navigation now loads the actual external resource, not a native attempt.**
+Found `MantisNavigationView` was a native SceneKit reimplementation, but per direct
+instruction, Mantis Navigation belongs to the separate Arc Lake system, which isn't
+ready to be folded into Autumn's core program yet. Confirmed exactly how the web app
+itself treats it: `index.html` loads it in an `<iframe>` pointed at `/mn.html`, the
+same pattern as Mantis Radar's `mr.html`. New `MantisNavWebView` does the equivalent
+with `WKWebView`, loading `https://leatr.xyz/mn.html` directly — the iOS app treating
+it exactly like a browser would, matching web's own architecture instead of
+re-porting a half-finished native version.
+
+**On the Apple Music sign-in question:** confirmed `MusicPanel` already correctly uses
+`MusicAuthorization` — Apple's real, standard permission API. Worth being precise
+about the distinction asked about: this is genuinely separate from Sign-in-with-Apple
+by Apple's own design, not something that can be "carried over" from the app's profile
+sign-in. It's tied to whichever Apple ID is signed into Music on the device (Settings
+→ Music), and shows its own one-time system permission prompt the first time someone
+opens the Music tool, remembered by iOS afterward — the same as any other app
+requesting Music access. That's already implemented correctly; no fix needed there.
 
 ## Build 137 — the actual mailbox root cause: stale HTTP cache, verified independently before shipping
 

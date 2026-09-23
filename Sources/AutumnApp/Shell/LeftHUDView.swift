@@ -40,6 +40,27 @@ public struct LeftHUDView: View {
                 .padding(.horizontal, 8).padding(.vertical, 7)
                 .moduleFrost(stroke: Color(hex: "#00ff88").opacity(appNav.showRadar ? 0.7 : 0.35), fill: appNav.showRadar ? 0.14 : 0.08)
             }
+            // TF138: standalone NAV button — was only reachable buried inside
+            // the Tools panel before. Loads the same external mn.html the web
+            // app treats as an iframe, not the native MantisNavigationView
+            // attempt (see MantisNavWebView's own doc comment for why).
+            Button {
+                appNav.showRadar = false
+                appNav.studio = nil
+                appNav.showHUDTools = false
+                appNav.showMantis = true
+            } label: {
+                HStack(spacing: 4) {
+                    Text("🧭").font(.system(size: 10))
+                    Text("NAV")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .foregroundColor(Color(hex: "#00e5ff"))
+                .padding(.horizontal, 8).padding(.vertical, 7)
+                .moduleFrost(stroke: Color(hex: "#00e5ff").opacity(appNav.showMantis ? 0.7 : 0.35), fill: appNav.showMantis ? 0.14 : 0.08)
+            }
             Button {
                 appNav.showRadar = false
                 appNav.studio = .alc
@@ -54,6 +75,25 @@ public struct LeftHUDView: View {
                 .foregroundColor(Color(hex: "#a050ff"))
                 .padding(.horizontal, 8).padding(.vertical, 7)
                 .moduleFrost(stroke: Color(hex: "#a050ff").opacity(appNav.studio == .alc ? 0.7 : 0.35), fill: appNav.studio == .alc ? 0.14 : 0.08)
+            }
+            // TF138: standalone MUSIC button — was also only reachable buried
+            // inside the Tools panel before, same as NAV. Presents the
+            // existing MusicPanel (StudioKind.music) directly.
+            Button {
+                appNav.showRadar = false
+                appNav.showMantis = false
+                appNav.studio = .music
+            } label: {
+                HStack(spacing: 4) {
+                    Text("🎵").font(.system(size: 10))
+                    Text("MUSIC")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .foregroundColor(Color(hex: "#ff5fa8"))
+                .padding(.horizontal, 8).padding(.vertical, 7)
+                .moduleFrost(stroke: Color(hex: "#ff5fa8").opacity(appNav.studio == .music ? 0.7 : 0.35), fill: appNav.studio == .music ? 0.14 : 0.08)
             }
             if circuit.allows(authVM) {
                 Button {
