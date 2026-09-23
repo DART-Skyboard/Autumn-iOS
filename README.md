@@ -2,9 +2,35 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 129 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 130 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 130 — maritime tracking is now genuinely public: no user needs a key, matching the other radar modules
+
+AISStream's own terms say direct client connections aren't permitted ("connect from
+your own server and proxy only the information your clients need"), which meant a
+shared personal key baked into every app instance would have violated their terms and
+gotten rate-limited fast under real multi-user load. Fixed properly: added
+`leatr-ash/services/ais-relay`, a small always-on relay server — holds the one
+AISStream connection using the API key as a server-side environment variable (never
+in the app, never in any client, never in a public repo in plain text), and re-serves
+global vessel positions over a plain public REST endpoint that needs no key at all.
+
+**iOS side:** `MaritimeFeed` no longer touches AISStream or asks for a personal key —
+removed that Settings field entirely. It now just polls the relay's `/vessels`
+endpoint every 5 seconds, the same way any other public radar data source works in
+this app. Once the relay is actually deployed (see its README — needs a small
+always-on host like Render/Fly.io's free tier, since neither GitHub nor Google Apps
+Script can hold a persistent connection) and `AutumnConfig.maritimeRelayURL` is
+updated to point at it, every single app user gets real global vessel tracking with
+zero setup, exactly like the satellite and aircraft tabs already work.
+
+**Not done yet, stated plainly:** the relay's code is written and pushed, but it
+isn't running anywhere yet — that's a real deployment step (creating a free account
+on a host, connecting the repo, setting one environment variable) that needs doing
+once, by whoever holds the AISStream key. Until then, the Maritime tab will show "AIS
+relay not deployed yet" instead of silently failing.
 
 ## Build 129 — found it: real aircraft data was leaking into the 3D Maritime view
 

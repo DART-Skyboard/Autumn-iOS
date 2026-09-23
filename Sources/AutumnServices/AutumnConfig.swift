@@ -5,6 +5,14 @@ import Foundation
 public enum AutumnConfig {
     /// Live GAS Web App — source of truth: `/workspace/Autumn/index.html` `AUTUMN_GAS_URL`.
     public static let gasURL = "https://script.google.com/macros/s/AKfycbyzkQxLR5miUXP6oDw-1AR1GIjgpzlw9iLw0gO_ZTeLfL849LWbNX7WVz_kf7yLWBKA_w/exec"
+    /// TF130: the maritime relay (leatr-ash/services/ais-relay) — holds the
+    /// one AISStream connection server-side and mirrors vessel data out
+    /// publicly, so no app user needs their own key. This placeholder needs
+    /// to become the real deployed URL (e.g. https://leatr-ais-relay.onrender.com)
+    /// once the relay is actually hosted somewhere — see that service's
+    /// README for deploy steps. Left as a placeholder, MaritimeFeed shows a
+    /// clear "not deployed yet" status rather than silently failing.
+    public static let maritimeRelayURL = "https://REPLACE-WITH-DEPLOYED-RELAY-URL"
 
     /// Public GitHub OAuth App client id (same as web `GH_CLIENT_ID`). No client secret in the app.
     public static let githubClientId = "Ov23li2K0njEqO1WTSdD"
