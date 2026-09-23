@@ -360,6 +360,9 @@ public struct AdminMailboxView: View {
             entries = snap.entries
             selected = []
             status = "\(entries.count) entries in \(folder.rawValue.uppercased()) (\(folder.path))"
+            if entries.isEmpty, let diag = FeedbackService.lastReadDiagnostic {
+                status += " — \(diag)"
+            }
         } catch {
             entries = []
             status = "Error: \(error.localizedDescription)"
