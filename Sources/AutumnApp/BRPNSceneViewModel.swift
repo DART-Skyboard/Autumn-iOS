@@ -547,7 +547,7 @@ public final class BRPNSceneViewModel: ObservableObject {
             mesh.name = c.type
             scene.rootNode.addChildNode(mesh)
             mantisNodes.append(mesh)
-            animator.mantis.append(BRPNAnimator.MantisInst(
+            animator.addMantis(BRPNAnimator.MantisInst(
                 node: mesh,
                 spawn: animator.orbFrame,
                 type: c.type,
@@ -793,6 +793,30 @@ public final class BRPNSceneViewModel: ObservableObject {
 
 // MARK: — Per-frame animator (JS animate())  not MainActor — called from SCN renderer
 final class BRPNAnimator {
+    /// TF135: protects `mantis` — read/mutated on the render thread inside
+    /// tick(), and appended to on the main thread by
+    /// BRPNSceneViewModel.injectMantisContacts. See tick()'s comment above
+    /// the mantis loop for why this exists.
+    private let mantisLock = NSLock()
+
+    /// Thread-safe append — use this from anywhere outside tick() rather
+    /// than mutating `mantis` directly.
+    func addMantis(_ inst: MantisInst) {
+        mantisLock.lock()
+        mantis.append(inst)
+        mantisLock.unlock()
+    }
+
+    /// Thread-safe removal by index, used by injectMantisContacts' eviction
+    /// logic (removeFirst / remove(at:) equivalents) — returns the removed
+    /// instance so the caller can still detach its node from the scene.
+    func removeMantis(at index: Int) -> MantisInst? {
+        mantisLock.lock()
+        defer { mantisLock.unlock() }
+        guard mantis.indices.contains(index) else { return nil }
+        return mantis.remove(at: index)
+    }
+
     struct ToolInst {
         var pivot: SCNNode?
         var mesh: SCNNode?
@@ -1015,6 +1039,16 @@ final class BRPNAnimator {
         }
 
         // Mantis drift — JS _brpnTickMantisNodes
+        // TF135: locked — this runs on the render thread (see the "Do not
+        // hop to main" comment on the delegate callback that calls tick()),
+        // while injectMantisContacts appends to this same array from the
+        // main thread via BRPNSceneViewModel's new periodic sync (build
+        // 134). An unsynchronized array mutated on one thread while
+        // iterated on another is a real, intermittent crash — exactly
+        // "every so often" — not a hypothetical one; this array was never
+        // touched from outside tick() before build 134 activated
+        // injectMantisContacts for the first time.
+        mantisLock.lock()
         var keep: [MantisInst] = []
         for m in mantis {
             let age = orbFrame - m.spawn
@@ -1031,6 +1065,7 @@ final class BRPNAnimator {
             keep.append(m)
         }
         mantis = keep
+        mantisLock.unlock()
 
         shellPulse *= 0.994
 

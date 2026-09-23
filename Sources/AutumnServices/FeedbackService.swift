@@ -129,24 +129,37 @@ public actor FeedbackService {
         // certainly why analysis.json showed "0 entries" for real, present
         // data: GAS's response reached coerce in a shape that decoded to
         // [] rather than nil, and the working fallback path never ran.
-        // Now: only accept a GAS result outright if it's non-empty: an
-        // empty result also tries GitHub directly before being believed.
-        if let parsed = await readViaGAS(path), !parsed.isEmpty { return parsed }
-        do {
-            let file = try await GitHubClient.shared.readFile(
-                owner: AutumnConfig.ashOwner,
-                repo: AutumnConfig.ashRepo,
-                path: path
-            )
-            let entries = Self.decodeEntries(file.decodedContent)
-            if entries.isEmpty {
-                Self.lastReadDiagnostic = "Both paths empty for \(path): GAS coerced to [] (\(Self.lastReadDiagnostic ?? "?")); GitHub fallback read OK but also decoded to 0 (content length \(file.decodedContent?.count ?? 0))"
+        //
+        // TF135: build 133's fix ran the two attempts sequentially — try
+        // GAS (up to its own ~12s timeout), and only if that comes back
+        // empty, then try GitHub (up to another ~12s). Two sequential ~12s
+        // attempts can easily exceed the mailbox's overall 15s timeout
+        // (AdminDrawerView's withTimeout), which would make the timeout
+        // MORE likely after 133, not less — worth being upfront that my own
+        // fix probably made this specific symptom worse before this build
+        // made it better. Now genuinely concurrent: both attempts start at
+        // once: total wait is whichever finishes first, roughly halving
+        // worst-case latency, and GAS is still preferred when both succeed.
+        async let gasResult = readViaGAS(path)
+        async let githubResult: [FeedbackEntry] = {
+            do {
+                let file = try await GitHubClient.shared.readFile(
+                    owner: AutumnConfig.ashOwner,
+                    repo: AutumnConfig.ashRepo,
+                    path: path
+                )
+                return Self.decodeEntries(file.decodedContent)
+            } catch {
+                return []
             }
-            return entries
-        } catch {
-            Self.lastReadDiagnostic = "GAS empty, GitHub fallback for \(path) failed: \(error.localizedDescription)"
-            return []
+        }()
+        let gas = await gasResult
+        if let gas, !gas.isEmpty { return gas }
+        let github = await githubResult
+        if github.isEmpty {
+            Self.lastReadDiagnostic = "Both paths empty for \(path): GAS \(gas == nil ? "returned nil" : "coerced to []") (\(Self.lastReadDiagnostic ?? "?")); GitHub also decoded to 0"
         }
+        return github
     }
 
     public func replaceFolder(_ folder: MailboxFolder, entries: [FeedbackEntry], uid: String, message: String) async throws {

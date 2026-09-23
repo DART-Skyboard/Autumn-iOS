@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 134 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 135 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 135 — the real crash source, and why the mailbox timeout was probably worse after 133
+
+**The crash.** Real, confirmed cause: `animator.mantis` — the array SceneKit's render
+thread reads and mutates every frame inside `tick()` (the code has its own comment:
+*"Tick on the render thread... Do not hop to main"*) — started also being appended to
+from the **main thread** the moment build 134 activated `injectMantisContacts` for
+the first time via the new periodic sync. An unsynchronized Swift array mutated on
+one thread while iterated on another is a textbook intermittent crash — this array
+was never touched from outside `tick()` before build 134, so the race never existed
+until then. Fixed with a lock (`BRPNAnimator.mantisLock`) around every read and write
+of `mantis`, via new `addMantis`/`removeMantis` methods instead of direct array
+access.
+
+**The timeout — and an honest note about my own fix from build 133.** That build
+correctly found the "0 entries despite real data" bug, but implemented the retry as
+two *sequential* network attempts (GAS, then GitHub if empty), each with its own
+~12s timeout. Two sequential ~12s attempts can easily exceed the mailbox's overall
+15s ceiling — meaning 133 likely made this specific timeout *more* likely to trigger,
+not less, for exactly the cases it was trying to fix. Restructured to run both
+attempts concurrently (`async let`) instead: total wait is whichever finishes first,
+roughly halving worst-case latency, GAS still preferred when both succeed. Also gave
+the overall ceiling a bit more headroom (15s → 20s) for real network variability.
 
 ## Build 134 — real traffic finally reaches the BRPN neural network scene, aircraft and satellites included
 

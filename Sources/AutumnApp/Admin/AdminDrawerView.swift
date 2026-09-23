@@ -354,7 +354,10 @@ public struct AdminMailboxView: View {
             // nothing bounded the total. A hard overall timeout means the UI
             // always recovers to a real error + Retry instead of sitting on
             // "LOADING..." with no way to tell if it's still working or stuck.
-            let snap = try await withTimeout(seconds: 15) {
+            // TF135: 20s, up from 15 — modest extra headroom now that
+            // loadPath runs its two attempts concurrently (build 135)
+            // rather than sequentially, for real network variability.
+            let snap = try await withTimeout(seconds: 20) {
                 try await FeedbackService.shared.loadFolder(folder)
             }
             entries = snap.entries
