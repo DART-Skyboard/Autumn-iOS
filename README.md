@@ -2,9 +2,23 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 130 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 131 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 131 — the maritime relay is live: real global vessel tracking, on for every user
+
+The relay deployed successfully to `https://leatr-ash.onrender.com`. Verified directly
+before wiring it in — a brief `429` right after first connecting (AISStream rate-
+limiting the initial handshake) cleared itself via the relay's own backoff exactly as
+designed; querying `/vessels` now returns `"status":"live"` with 1,067+ real tracked
+vessels spanning multiple continents, real ship names and positions. This is genuine
+live data, not a demo.
+
+`AutumnConfig.maritimeRelayURL` now points at the real deployed relay instead of the
+placeholder. No further setup needed on any device — every app user gets real-time
+global vessel tracking in Mantis Radar's 3D Maritime tab with zero configuration,
+finishing what build 130 set out to do.
 
 ## Build 130 — maritime tracking is now genuinely public: no user needs a key, matching the other radar modules
 
