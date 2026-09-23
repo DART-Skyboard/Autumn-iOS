@@ -2,9 +2,28 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 132 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 133 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 133 — the real "0 entries despite real data" bug from build 118, actually found this time
+
+Re-confirmed the file itself is genuinely fine: `feedback/analysis.json` on `main`
+still has 5 real, valid entries — verified again directly. The actual bug was in
+`loadPath`'s control flow: `readViaGAS` returns non-nil whenever `coerce` produces
+*any* array, including an empty one from a silently swallowed `JSONDecoder` failure
+(`decodeJSONArray` uses `try?` internally, so a genuine decode mismatch quietly
+becomes `[]` rather than throwing). Because the check was `if let parsed = ... {
+return parsed }`, a non-nil-but-empty result from GAS was accepted as final and never
+fell through to the GitHub direct-read fallback — even though that fallback works
+correctly and the file genuinely has entries. Fixed: an empty GAS result now still
+tries GitHub directly before being believed, only accepting empty as real when both
+paths agree.
+
+Also added real diagnostics (`FeedbackService.lastReadDiagnostic`) so if any mailbox
+folder does come back empty in the future, the status line shows what each path
+actually returned instead of a silent "0 entries" — the exact gap that made this bug
+take two sessions to actually find.
 
 ## Build 132 — the solid yellow screen: two compounding bugs, both fixed
 

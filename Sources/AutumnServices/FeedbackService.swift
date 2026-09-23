@@ -118,15 +118,33 @@ public actor FeedbackService {
 
     /// Reads one exact path — GAS first, then a direct GitHub read as fallback.
     private func loadPath(_ path: String) async -> [FeedbackEntry] {
-        if let parsed = await readViaGAS(path) { return parsed }
+        // TF133: the real bug. readViaGAS returns non-nil whenever coerce
+        // produces *any* array, including an empty one from a swallowed
+        // JSONDecoder failure (decodeJSONArray uses `try?` internally,
+        // turning a genuine decode mismatch into a silent []). Because this
+        // was `if let parsed = ... { return parsed }`, a non-nil-but-empty
+        // result was accepted as final and NEVER fell through to the
+        // GitHub direct-read fallback — even though that fallback works
+        // fine and the file genuinely has real entries. This is almost
+        // certainly why analysis.json showed "0 entries" for real, present
+        // data: GAS's response reached coerce in a shape that decoded to
+        // [] rather than nil, and the working fallback path never ran.
+        // Now: only accept a GAS result outright if it's non-empty: an
+        // empty result also tries GitHub directly before being believed.
+        if let parsed = await readViaGAS(path), !parsed.isEmpty { return parsed }
         do {
             let file = try await GitHubClient.shared.readFile(
                 owner: AutumnConfig.ashOwner,
                 repo: AutumnConfig.ashRepo,
                 path: path
             )
-            return Self.decodeEntries(file.decodedContent)
+            let entries = Self.decodeEntries(file.decodedContent)
+            if entries.isEmpty {
+                Self.lastReadDiagnostic = "Both paths empty for \(path): GAS coerced to [] (\(Self.lastReadDiagnostic ?? "?")); GitHub fallback read OK but also decoded to 0 (content length \(file.decodedContent?.count ?? 0))"
+            }
+            return entries
         } catch {
+            Self.lastReadDiagnostic = "GAS empty, GitHub fallback for \(path) failed: \(error.localizedDescription)"
             return []
         }
     }
@@ -162,9 +180,34 @@ public actor FeedbackService {
         try await replaceFolder(folder, entries: remaining, uid: uid, message: "feedback: delete \(count) entry")
     }
 
+    /// TF133: diagnostic breadcrumb for the "shows 0 entries despite real
+    /// data existing" mystery from build 118 — never actually root-caused
+    /// there, because the failure was silent: coerce() returning nil/empty
+    /// looked identical whether GAS returned an error, an unrecognized
+    /// shape, or genuinely nothing. This captures what actually came back
+    /// so the next occurrence is diagnosable instead of another guess.
+    public static var lastReadDiagnostic: String?
+
     private func readViaGAS(_ path: String) async -> [FeedbackEntry]? {
-        guard let any = await AutumnGASClient.shared.ashread(path: path) else { return nil }
-        return Self.coerce(any)
+        guard let any = await AutumnGASClient.shared.ashread(path: path) else {
+            Self.lastReadDiagnostic = "ashread(\(path)) returned nil — no response or request failed"
+            return nil
+        }
+        let result = Self.coerce(any)
+        if result?.isEmpty ?? true {
+            Self.lastReadDiagnostic = "ashread(\(path)) returned \(Self.describeShape(any))"
+        }
+        return result
+    }
+
+    private static func describeShape(_ any: Any) -> String {
+        if let dict = any as? [String: Any] {
+            let keys = dict.keys.sorted().joined(separator: ",")
+            if let err = dict["error"] { return "error dict: \(err)" }
+            return "dict with keys [\(keys)]"
+        }
+        if let arr = any as? [Any] { return "array of \(arr.count) items, first: \(arr.first.map { "\($0)".prefix(80) } ?? "n/a")" }
+        return "unrecognized type: \(type(of: any))"
     }
 
     static func coerce(_ any: Any) -> [FeedbackEntry]? {
