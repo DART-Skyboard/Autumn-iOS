@@ -2,9 +2,31 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 128 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 129 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 129 — found it: real aircraft data was leaking into the 3D Maritime view
+
+Confirmed the exact bug behind "looks the same as air traffic tracking": in build
+128's `updateUIView`, satellites were correctly hidden in maritime mode
+(`showVessels ? [] : feed.satellites`) but aircraft were passed unconditionally —
+`aircraft: feed.aircraft`, no gate at all. Real ADS-B aircraft positions were
+rendering on the maritime globe the whole time, which is exactly why it looked like
+the aviation tab — because part of it genuinely was. This also explains the dot
+cluster near your own location in the earlier screenshot: not a calibration issue,
+not ships on land, actual nearby aircraft rendering where they shouldn't have been.
+Fixed: aircraft are now gated by `showVessels` exactly like satellites are.
+
+Also removed the range slider for maritime specifically — it never actually filtered
+vessel data (the AIS subscription was already a global bounding box from the start),
+so showing it implied a limit that didn't exist. Maritime now shows only what it's
+meant to: every tracked vessel, everywhere there's water, full stop.
+
+Global coverage itself needs no further change — `MaritimeFeed`'s subscription
+already requests the whole planet in one bounding box. This build fixes what was
+incorrectly showing alongside it, not the vessel data itself, which still needs a
+real AISStream API key in Settings to actually populate.
 
 ## Build 128 — Mantis Radar's third tab: real-time 3D maritime vessel tracking
 
