@@ -107,7 +107,12 @@ struct MantisRadarView: View {
                     } else if !aerial && !maritime, let sat = feed.selectedSat {
                         satInfoCard(sat, cyan: cyan)
                     }
-                    rangeSlider(cyan: cyan)
+                    // TF129: range doesn't apply to maritime — the whole
+                    // point is global coverage of every tracked vessel, not
+                    // a radius filtered from the user's own position.
+                    if !maritime {
+                        rangeSlider(cyan: cyan)
+                    }
                 }
                 .padding(8)
             }
@@ -674,7 +679,14 @@ struct RadarGlobeView: UIViewRepresentable {
         context.coordinator.showVessels = showVessels
         context.coordinator.sync(
             sats: showVessels ? [] : feed.satellites,
-            aircraft: feed.aircraft,
+            // TF129: this was the actual bug behind "3D Maritime looks
+            // identical to air traffic" — aircraft were being passed
+            // unconditionally regardless of mode. Satellites were correctly
+            // gated by showVessels; aircraft were not. Real ADS-B aircraft
+            // positions were rendering on the maritime globe the whole time,
+            // which is exactly why it looked like the same pattern as the
+            // aviation tracking — because it partly was.
+            aircraft: showVessels ? [] : feed.aircraft,
             vessels: showVessels ? maritimeFeed.vessels : [],
             userLat: feed.userLat,
             userLon: feed.userLon,
