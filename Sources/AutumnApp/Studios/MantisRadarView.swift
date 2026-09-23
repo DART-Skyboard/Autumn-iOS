@@ -878,7 +878,7 @@ struct RadarGlobeView: UIViewRepresentable {
                 }
             }
 
-            // TF128: vessels — same lat/lon->xyz math as satellites/aircraft,
+            // TF132: vessels — same lat/lon->xyz math as satellites/aircraft,
             // but sitting essentially at the surface (altKm ~0) rather than
             // orbiting above it. Position changes animate over ~4s
             // (roughly the cadence of real AIS position reports) rather than
@@ -886,13 +886,30 @@ struct RadarGlobeView: UIViewRepresentable {
             // instead of teleporting — the closest honest approximation of
             // "see it moving" a periodic real-world feed can give without
             // fabricating intermediate positions that weren't reported.
-            let vesselLive = Set(vessels.map(\.id))
+            //
+            // TF132 fix: with the relay live and returning up to 2000 real
+            // vessels, two bugs compounded into a solid-color screen: (1) no
+            // count cap at all (aircraft caps at .prefix(80); vessels had
+            // nothing), so up to 2000 individual extruded-shape nodes were
+            // being created every sync, and (2) the per-node scale (0.014)
+            // was roughly 10x too large relative to the globe (radius 1.0) —
+            // satellites use an explicit radius of 0.018-0.026 in these same
+            // units, so a boat's longest dimension (~24 units in its raw
+            // path) needed a scale near 0.0012, not 0.014, to land in that
+            // same visual range. Together, thousands of oversized boats
+            // fully overlapped and covered the camera. Capped to the same
+            // shape as aircraft's .prefix(80) — a bit higher, 250, since a
+            // sparse ocean view reads better with more markers than the sky
+            // view needs — and fixed the scale to actually match how every
+            // other marker on this globe is sized.
+            let cappedVessels = Array(vessels.prefix(250))
+            let vesselLive = Set(cappedVessels.map(\.id))
             for (id, n) in vesselNodes where !vesselLive.contains(id) {
                 n.removeFromParentNode()
                 vesselNodes.removeValue(forKey: id)
             }
-            lastVessels = vessels
-            for ves in vessels {
+            lastVessels = cappedVessels
+            for ves in cappedVessels {
                 let pos = xyz(lat: ves.lat, lon: ves.lon, altKm: 3)
                 let selected = ves.id == selectedVesselId
                 let heading = ves.courseDeg.map { Float($0 * .pi / 180) } ?? 0
@@ -900,14 +917,14 @@ struct RadarGlobeView: UIViewRepresentable {
                     n.removeAllActions()
                     n.runAction(.move(to: pos, duration: 4.0))
                     n.runAction(.rotateTo(x: 0, y: CGFloat(heading), z: 0, duration: 1.0, usesShortestUnitArc: true))
-                    n.scale = selected ? SCNVector3(2.2, 2.2, 2.2) : SCNVector3(1, 1, 1)
+                    n.scale = selected ? SCNVector3(0.0026, 0.0026, 0.0026) : SCNVector3(0.0012, 0.0012, 0.0012)
                     n.geometry?.firstMaterial?.emission.contents = selected ? UIColor.white : UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1)
                 } else {
                     let n = SCNNode(geometry: Self.boatGeometry())
                     n.name = "vessel:\(ves.id)"
                     n.position = pos
                     n.eulerAngles = SCNVector3(0, heading, 0)
-                    n.scale = SCNVector3(0.014, 0.014, 0.014)
+                    n.scale = SCNVector3(0.0012, 0.0012, 0.0012)
                     vesselRoot.addChildNode(n)
                     vesselNodes[ves.id] = n
                 }

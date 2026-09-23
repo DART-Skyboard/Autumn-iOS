@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 131 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 132 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 132 — the solid yellow screen: two compounding bugs, both fixed
+
+With the relay live and returning up to 2000 real vessels, two bugs stacked into a
+completely covered screen: **(1) no count cap at all** — aircraft already cap at
+`.prefix(80)`, vessels had nothing, so up to 2000 individual boat nodes were being
+created every sync. **(2) the per-node scale (0.014) was roughly 10x too large** —
+satellites use an explicit radius of 0.018–0.026 in the same units as the globe's own
+radius (1.0); a boat's longest raw dimension (~24 units) needed a scale near 0.0012 to
+land in that same visual range, not 0.014. Thousands of oversized boats fully
+overlapping is exactly a solid color fill.
+
+**Found and fixed a third, related bug while in there:** existing vessels that
+received a position update (not newly created) were having their scale *reset to
+1.0* — full, completely un-scaled geometry — because the update path set scale as if
+it were a multiplier on top of the creation scale, when the creation path was setting
+an absolute value. Any vessel that had been alive for more than one sync cycle would
+balloon back to full size. Fixed by using the same consistent absolute scale in both
+the creation and update paths.
+
+Capped vessel rendering to 250 (a bit above aircraft's 80, since a sparse ocean view
+reads well with more markers than a sky view needs) and corrected the scale to
+actually match how every other marker on this globe is sized.
 
 ## Build 131 — the maritime relay is live: real global vessel tracking, on for every user
 
