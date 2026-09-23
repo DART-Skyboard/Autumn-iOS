@@ -12,7 +12,7 @@ public enum AutumnConfig {
     /// once the relay is actually hosted somewhere — see that service's
     /// README for deploy steps. Left as a placeholder, MaritimeFeed shows a
     /// clear "not deployed yet" status rather than silently failing.
-    public static let maritimeRelayURL = "https://REPLACE-WITH-DEPLOYED-RELAY-URL"
+    public static let maritimeRelayURL = "https://leatr-ash.onrender.com"
 
     /// Public GitHub OAuth App client id (same as web `GH_CLIENT_ID`). No client secret in the app.
     public static let githubClientId = "Ov23li2K0njEqO1WTSdD"
