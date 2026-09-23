@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 135 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 136 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 136 — undid the shared GAS change, iOS-only fix, final diagnostic layer
+
+**Reverted the `presence.gs` edit from build 135's investigation** — pushed to
+`leatr-ash` and confirmed removed. That change was additive (only added a missing
+handler, didn't touch anything working), but it touched the shared backend both apps
+use, and web is confirmed working right now — not worth the risk on a shared file
+when the actual gap is iOS-specific.
+
+**Re-traced with the correction in mind.** Web's own admin mailbox code races GAS
+against a direct GitHub read too — the exact same fallback pattern already built into
+iOS. So the real difference isn't the backend; it's that iOS's GitHub fallback is
+coming back with a *successful* read that decodes to zero entries, per the exact
+diagnostic text from your screenshots ("GitHub also decoded to 0") — not an auth
+failure, which the mailbox already has a "Reconnect GitHub" flow for and wasn't
+triggering.
+
+Traced `GitHubFile.decodedContent` and `decodeEntries` as far as static analysis
+allows — the decode logic looks structurally correct for the real data shape, so
+rather than guess a fourth hypothesis, added a final, precise diagnostic: on a decode
+failure, it now captures the actual raw content length and a 200-character preview of
+what was received. Whatever happens next time will be conclusively diagnosable
+instead of another guess — no backend changes, iOS client code only.
 
 ## Build 135 — the real crash source, and why the mailbox timeout was probably worse after 133
 

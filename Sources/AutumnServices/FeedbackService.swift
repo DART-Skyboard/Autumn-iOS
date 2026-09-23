@@ -242,10 +242,20 @@ public actor FeedbackService {
     }
 
     static func decodeEntries(_ raw: String?) -> [FeedbackEntry] {
-        guard let raw, let data = raw.data(using: .utf8) else { return [] }
+        guard let raw, let data = raw.data(using: .utf8) else {
+            lastReadDiagnostic = (lastReadDiagnostic ?? "") + " | decodeEntries: raw content was \(raw == nil ? "nil" : "non-nil but couldn't UTF8-encode (len \(raw?.count ?? -1))")"
+            return []
+        }
         if let arr = try? JSONDecoder().decode([FeedbackEntry].self, from: data) { return arr }
         struct Wrap: Decodable { let entries: [FeedbackEntry]? }
-        return (try? JSONDecoder().decode(Wrap.self, from: data))?.entries ?? []
+        if let wrapped = (try? JSONDecoder().decode(Wrap.self, from: data))?.entries { return wrapped }
+        // TF136: both decode attempts failed — capture exactly what was
+        // received so the next occurrence is conclusively diagnosable
+        // instead of another guess. This is iOS-only, doesn't touch the
+        // shared GAS backend at all.
+        let preview = String(raw.prefix(200))
+        lastReadDiagnostic = (lastReadDiagnostic ?? "") + " | decodeEntries: got \(raw.count) chars, both [FeedbackEntry] and {entries:[...]} decode failed. First 200 chars: \(preview)"
+        return []
     }
 
     static func base64Loose(_ c: String) -> String? {
