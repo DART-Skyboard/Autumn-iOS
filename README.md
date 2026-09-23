@@ -2,9 +2,34 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 133 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 134 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 134 — real traffic finally reaches the BRPN neural network scene, aircraft and satellites included
+
+Investigating the maritime request surfaced something bigger: `injectMantisContacts` —
+the function that represents aircraft (cyan tetrahedron) and satellite (magenta
+octahedron) activity in the BRPN scene — was fully built, correctly, and **never
+called from anywhere**. Confirmed with a direct search across the whole codebase.
+Aircraft and satellite traffic weren't being represented in that scene either, before
+this build.
+
+Added the actual wiring for the first time: `startMantisLiveSync()` subscribes to
+`RadarFeed`'s aircraft/satellites and the new `MaritimeFeed`'s vessels, starts both
+feeds if they aren't already running (they don't fetch on their own — a scene shown
+without Mantis Radar ever being opened would otherwise just sit idle), and injects a
+bounded live sample of each into the scene every 8 seconds.
+
+**Vessels got their own representation, not reused geometry:** amber icosahedron,
+matching the boat marker color already used on Mantis Radar's own globe, sitting at
+the surface (no orbit-altitude term) rather than orbiting outward like satellites do
+with real altitude, or aircraft with a mid-altitude band — the physically accurate
+placement for something that only ever travels on water.
+
+**Scope, stated plainly:** this is iOS only. The equivalent web-side wiring (both
+Mantis Radar's maritime tab and this same BRPN scene integration) is real, separate,
+substantial work — not done here.
 
 ## Build 133 — the real "0 entries despite real data" bug from build 118, actually found this time
 

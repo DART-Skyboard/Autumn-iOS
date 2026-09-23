@@ -118,7 +118,10 @@ public struct BRPNSceneView: View {
                 .padding(.bottom, 8)
             }
         }
-        .onAppear { sceneVM.setupScene() }
+        .onAppear {
+            sceneVM.setupScene()
+            sceneVM.startMantisLiveSync()
+        }
         .onDisappear { sceneVM.teardown() }
         .onChange(of: chatVM.isThinking) { thinking in
             sceneVM.setOrbThinking(thinking)

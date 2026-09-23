@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import Combine
 import LEATRCore
 import AutumnServices
 
@@ -54,6 +55,11 @@ public final class BRPNSceneViewModel: ObservableObject {
     private var splineSamples: [[SCNVector3]] = []
     private var presenceTimer: Timer?
     private var mantisNodes: [SCNNode] = []
+    /// TF134: holds the live-data subscriptions that actually feed
+    /// injectMantisContacts — see startMantisLiveSync()'s doc comment for
+    /// why this was necessary at all (short answer: nothing was calling
+    /// injectMantisContacts, for any traffic type, until now).
+    private var mantisCancellables = Set<AnyCancellable>()
     private var toolPivots: [SCNNode] = []
 
     // JS: shellColors=[0x00ffcc,0x0088ff,0xff4466]; shellRadii=[1.9,1.4,0.9]
@@ -451,7 +457,54 @@ public final class BRPNSceneViewModel: ObservableObject {
         activeNodes = max(1, liveFeedEnabled ? 1 + sessionGroupNodes.count : 1)
     }
 
+    /// TF134: the actual first-time wiring for injectMantisContacts —
+    /// confirmed via direct search that nothing called it before this,
+    /// for aircraft or satellites either, despite both having been fully
+    /// built out. Subscribes to RadarFeed's aircraft/satellites and
+    /// MaritimeFeed's vessels, and periodically injects a bounded sample of
+    /// each into the scene as real activity — not a full 1:1 synced
+    /// replica (injectMantisContacts is an add-and-evict-oldest model, not
+    /// an update-by-id one), which is why this samples rather than dumping
+    /// every live contact in on every tick.
+    public func startMantisLiveSync() {
+        guard mantisCancellables.isEmpty else { return } // already running
+        // Ensure the underlying feeds are actually running — both RadarFeed
+        // and MaritimeFeed require an explicit start() and don't fetch on
+        // their own, so if this scene is shown without Mantis Radar ever
+        // having been opened, the feeds would otherwise sit idle and this
+        // sync would just find empty arrays forever.
+        RadarFeed.shared.start()
+        MaritimeFeed.shared.start()
+        Timer.publish(every: 8.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.syncMantisContactsNow() }
+            .store(in: &mantisCancellables)
+        syncMantisContactsNow()
+    }
+
+    private func syncMantisContactsNow() {
+        var contacts: [(type: String, lat: Double, lon: Double, alt: Double)] = []
+        let feed = RadarFeed.shared
+        for a in feed.aircraft.prefix(15) {
+            contacts.append((type: "aircraft", lat: a.lat, lon: a.lon, alt: a.altitude ?? 30000))
+        }
+        for s in feed.satellites.prefix(15) {
+            contacts.append((type: "satellite", lat: s.lat, lon: s.lon, alt: 550))
+        }
+        for v in MaritimeFeed.shared.vessels.prefix(15) {
+            contacts.append((type: "vessel", lat: v.lat, lon: v.lon, alt: 0))
+        }
+        guard !contacts.isEmpty else { return }
+        injectMantisContacts(contacts)
+    }
+
     /// JS: _brpnInjectMantisContacts — aircraft TetrahedronGeometry(0.032,0), satellite OctahedronGeometry(0.045,0)
+    /// TF134: added "vessel" — IcosahedronGeometry(0.038,0), amber, matching
+    /// the boat marker color already used on Mantis Radar's own globe.
+    /// Vessels sit essentially at the surface (no orbit altitude term),
+    /// unlike satellites (which scale outward with real altitude) and
+    /// aircraft (which get a randomized mid-altitude band) — the accurate
+    /// representation for something that only ever travels on water.
     public func injectMantisContacts(_ contacts: [(type: String, lat: Double, lon: Double, alt: Double)]) {
         while mantisNodes.count + contacts.count > mantisNodeMax && !mantisNodes.isEmpty {
             let incoming = contacts.first?.type
@@ -465,19 +518,26 @@ public final class BRPNSceneViewModel: ObservableObject {
         for c in contacts {
             let phi = (90 - c.lat) * (.pi / 180)
             let theta = (c.lon + 180) * (.pi / 180)
-            var r = c.type == "satellite"
-                ? 1.6 + (c.alt) / 50000 * 0.6
-                : 0.9 + Double.random(in: 0..<0.5)
+            var r: Double
+            switch c.type {
+            case "satellite": r = 1.6 + (c.alt) / 50000 * 0.6
+            case "vessel": r = 1.02
+            default: r = 0.9 + Double.random(in: 0..<0.5)
+            }
             r = min(r, 2.4)
             let x = r * sin(phi) * cos(theta)
             let y = r * cos(phi)
             let z = r * sin(phi) * sin(theta)
             let geo: SCNGeometry
             let color: UIColor
-            if c.type == "satellite" {
+            switch c.type {
+            case "satellite":
                 geo = ThreeJSGeometry.octahedron(radius: 0.045, detail: 0)
                 color = ThreeJSGeometry.hex(0xff2d78)
-            } else {
+            case "vessel":
+                geo = ThreeJSGeometry.icosahedron(radius: 0.038, detail: 0)
+                color = ThreeJSGeometry.hex(0xffb833)
+            default:
                 geo = ThreeJSGeometry.tetrahedron(radius: 0.032, detail: 0)
                 color = ThreeJSGeometry.hex(0x00e5ff)
             }
@@ -492,7 +552,7 @@ public final class BRPNSceneViewModel: ObservableObject {
                 spawn: animator.orbFrame,
                 type: c.type,
                 orbitR: Float(r),
-                orbitSpd: Float((c.type == "satellite" ? 0.0008 : 0.0022) + Double.random(in: 0..<0.001)),
+                orbitSpd: Float((c.type == "satellite" ? 0.0008 : (c.type == "vessel" ? 0.0002 : 0.0022)) + Double.random(in: 0..<0.001)),
                 orbitOff: Float.random(in: 0..<(Float.pi * 2)),
                 alt: Float(y)
             ))
