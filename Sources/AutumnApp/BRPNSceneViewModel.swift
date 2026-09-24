@@ -44,6 +44,49 @@ public final class BRPNSceneViewModel: ObservableObject {
     public var pathMeshNodes: [SCNNode] = []
     public static weak var shared: BRPNSceneViewModel?
 
+    // MARK: — LEATR mind map — alternate 3D view, toggled from the HUD
+    // (see BRPNSceneView's toggle next to LIVE FEED). Everything from the
+    // buoyancy shell scene stays exactly as it was; this is purely an
+    // additional, swappable layer built once and hidden by default.
+    @Published public var showMindMapView: Bool = false {
+        didSet { applyMindMapVisibility() }
+    }
+    private var mindMapScene: LeatrMindMapScene?
+
+    private func applyMindMapVisibility() {
+        if mindMapScene == nil, showMindMapView {
+            let built = LeatrMindMapScene()
+            mindMapScene = built
+            if let built { scene.rootNode.addChildNode(built.rootGroup) }
+        }
+        mindMapScene?.rootGroup.isHidden = !showMindMapView
+        if showMindMapView { mindMapScene?.startThinking() } else { mindMapScene?.stopThinking() }
+        // Hide every existing top-level buoyancy-scene node while the mind
+        // map is showing, and restore them when it's switched off — rather
+        // than restructuring the many call sites elsewhere in this file
+        // that add nodes directly under scene.rootNode (shells, particles,
+        // mantis contacts, session groups, tool shapes, path meshes), which
+        // would have meant touching working code across the whole view
+        // model just to make room for an alternate view. The camera and
+        // lights are left alone since both views share them.
+        for child in scene.rootNode.childNodes {
+            guard child !== mindMapScene?.rootGroup,
+                  child.camera == nil,
+                  child.light == nil
+            else { continue }
+            child.isHidden = showMindMapView
+        }
+    }
+
+    /// Called at the end of every function elsewhere in this file that adds
+    /// a new node directly to scene.rootNode after setup (mantis contacts,
+    /// session groups, tool shapes) — so nodes created *while* the mind map
+    /// is showing don't leak through as visible. Safe to call unconditionally;
+    /// it's a no-op when the mind map isn't active.
+    func applyMindMapVisibility(to node: SCNNode) {
+        if showMindMapView { node.isHidden = true }
+    }
+
     let animator = BRPNAnimator()
     var cameraNode: SCNNode?
     private var coreNode: SCNNode!
@@ -440,6 +483,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         group.position = SCNVector3(pos.x, pos.y, pos.z)
         group.isHidden = !liveFeedEnabled
         scene.rootNode.addChildNode(group)
+        applyMindMapVisibility(to: group)
         sessionGroupNodes[sid] = group
         sessionOrder.append(sid)
         if liveFeedEnabled { activeNodes += 1 }
@@ -546,6 +590,7 @@ public final class BRPNSceneViewModel: ObservableObject {
             mesh.position = SCNVector3(Float(x), Float(y), Float(z))
             mesh.name = c.type
             scene.rootNode.addChildNode(mesh)
+            applyMindMapVisibility(to: mesh)
             mantisNodes.append(mesh)
             animator.addMantis(BRPNAnimator.MantisInst(
                 node: mesh,
@@ -614,6 +659,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         let node = SCNNode(geometry: geo)
         node.name = "shard"
         scene.rootNode.addChildNode(node)
+        applyMindMapVisibility(to: node)
         let dest: SCNVector3
         if let last = sessionGroupNodes.values.first { dest = last.position }
         else { dest = SCNVector3(1.6, 0.9, -1.1) }

@@ -2,9 +2,38 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 140 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 141 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 141 — the LEATR mind map, as a real 3D wireframe toggle in the BRPN scene
+
+Parsed `lead-edge-ash-tree-reflex.mm` (FreeMind XML) fully: 246 nodes, 245 edges, depth
+0–6. Exported once as `Resources/leatr-mindmap.json` with a short acronym/initials label
+generated per node (e.g. "Buoyancy Reflex Pendulum Logic Node" → "BRPL") — a static
+asset, same as `elements.json` or the NLP wordnet files, not regenerated at runtime.
+
+New `LeatrMindMapScene` builds it as real SceneKit geometry: one concentric shell per
+depth level (root at the center, each deeper level a larger sphere), nodes spread evenly
+per shell with a Fibonacci sphere distribution — the same even-spacing technique used
+for satellite constellations — so it reads as deliberate structure, not noise. All 245
+edges draw as straight lines in a single combined line-geometry (one draw call, same
+performance reasoning as the vessel/satellite Points systems elsewhere), and every node
+gets its short label as a small billboarded 3D text that always faces the camera.
+
+**The "thinking" animation is explicitly not tied to real data or live user activity** —
+three signals start at the root and randomly walk outward along the mind map's real
+edges, brightening each node they pass and fading behind them, meant to read as
+Autumn's own internal reflexes turning over rather than anything happening in the world.
+
+**Toggle**: new "REFLEX MAP" button right next to LIVE FEED in the BRPN scene HUD.
+Everything from the existing buoyancy shell scene — shells, particles, the maze,
+mantis contacts, session groups — is left completely intact; the toggle just hides all
+of it as one pass and shows the mind map group instead (and vice versa), rather than
+restructuring any of the existing node-creation code across the view model. The handful
+of places that add nodes dynamically at runtime (mantis contacts, session joins, ash
+star shards) got a one-line guard so anything created while the mind map is showing
+doesn't leak through as visible.
 
 ## Build 140 — the actual landscape bug found and fixed; Music is now a real frosted overlay with skip
 

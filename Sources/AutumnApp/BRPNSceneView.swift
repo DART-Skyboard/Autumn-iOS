@@ -24,22 +24,47 @@ public struct BRPNSceneView: View {
                 Spacer()
                 VStack(spacing: 6) {
                     // LIVE FEED — hide remotes / keep local orb + tool FX
-                    Button { sceneVM.liveFeedEnabled.toggle() } label: {
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white.opacity(0.28))
-                                .frame(width: 6, height: 6)
-                            Text(sceneVM.liveFeedEnabled ? "LIVE FEED ON" : "LIVE FEED OFF")
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                .tracking(1.2)
-                                .foregroundColor(sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white.opacity(0.45))
-                            Text(sceneVM.liveFeedEnabled ? "· \(max(1, sceneVM.activeNodes)) LIVE" : "· LOCAL ONLY")
-                                .font(.system(size: 8, design: .monospaced))
-                                .foregroundColor(Color.cyan.opacity(0.45))
+                    HStack(spacing: 6) {
+                        Button { sceneVM.liveFeedEnabled.toggle() } label: {
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white.opacity(0.28))
+                                    .frame(width: 6, height: 6)
+                                Text(sceneVM.liveFeedEnabled ? "LIVE FEED ON" : "LIVE FEED OFF")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .tracking(1.2)
+                                    .foregroundColor(sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white.opacity(0.45))
+                                Text(sceneVM.liveFeedEnabled ? "· \(max(1, sceneVM.activeNodes)) LIVE" : "· LOCAL ONLY")
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(Color.cyan.opacity(0.45))
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background((sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white).opacity(0.06))
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke((sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white).opacity(0.22), lineWidth: 1))
                         }
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background((sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white).opacity(0.06))
-                        .overlay(RoundedRectangle(cornerRadius: 3).stroke((sceneVM.liveFeedEnabled ? Color(hex: "#00ff88") : Color.white).opacity(0.22), lineWidth: 1))
+
+                        // TF141: LEATR mind map toggle — swaps the buoyancy
+                        // shell scene for a labeled 3D wireframe of the Lead
+                        // Edge Ash Tree Reflex mind map (246 nodes / 245
+                        // edges), with a self-referential "thinking"
+                        // animation. Everything else in the scene stays
+                        // exactly as it was; see BRPNSceneViewModel's
+                        // showMindMapView and LeatrMindMapScene for how the
+                        // swap is done without touching the existing shells.
+                        Button { sceneVM.showMindMapView.toggle() } label: {
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(sceneVM.showMindMapView ? Color(hex: "#ff9df0") : Color.white.opacity(0.28))
+                                    .frame(width: 6, height: 6)
+                                Text("REFLEX MAP")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .tracking(1.2)
+                                    .foregroundColor(sceneVM.showMindMapView ? Color(hex: "#ff9df0") : Color.white.opacity(0.45))
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background((sceneVM.showMindMapView ? Color(hex: "#ff9df0") : Color.white).opacity(0.06))
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke((sceneVM.showMindMapView ? Color(hex: "#ff9df0") : Color.white).opacity(0.22), lineWidth: 1))
+                        }
                     }
 
                     // Node cap — JS #node-cap-track in #multi-user-bar (on-scene HUD)

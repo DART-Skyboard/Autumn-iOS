@@ -1,0 +1,2708 @@
+{
+"nodes": [
+{
+"id": 0,
+"text": "LEAD EDGE ASH TREE REFLEX",
+"label": "ROOT",
+"depth": 0,
+"parent": null
+},
+{
+"id": 1,
+"text": "Sentience Journal",
+"label": "SJ",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 2,
+"text": "Connected Resources",
+"label": "CR",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 3,
+"text": "Verification",
+"label": "VER",
+"depth": 2,
+"parent": 2
+},
+{
+"id": 4,
+"text": "Allocation",
+"label": "ALL",
+"depth": 2,
+"parent": 2
+},
+{
+"id": 5,
+"text": "Master Buoyancy Reflex Pendulum Logic Sentience Journal Node",
+"label": "MBRP",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 6,
+"text": "Verification",
+"label": "VER",
+"depth": 2,
+"parent": 5
+},
+{
+"id": 7,
+"text": "Inbound",
+"label": "INB",
+"depth": 2,
+"parent": 5
+},
+{
+"id": 8,
+"text": "Allocation",
+"label": "ALL",
+"depth": 3,
+"parent": 7
+},
+{
+"id": 9,
+"text": "Outbound",
+"label": "OUT",
+"depth": 2,
+"parent": 5
+},
+{
+"id": 10,
+"text": "Buoyancy Reflex Pendulum Logic Nodes (BRPN Chain)",
+"label": "BRPL",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 11,
+"text": "Buoyancy Reflex Pendulum Logic Node",
+"label": "BRPL",
+"depth": 2,
+"parent": 10
+},
+{
+"id": 12,
+"text": "Inbound",
+"label": "INB",
+"depth": 3,
+"parent": 11
+},
+{
+"id": 13,
+"text": "Outbound",
+"label": "OUT",
+"depth": 3,
+"parent": 11
+},
+{
+"id": 14,
+"text": "Maze",
+"label": "MAZ",
+"depth": 3,
+"parent": 11
+},
+{
+"id": 15,
+"text": "Verification",
+"label": "VER",
+"depth": 4,
+"parent": 14
+},
+{
+"id": 16,
+"text": "Allocation",
+"label": "ALL",
+"depth": 4,
+"parent": 14
+},
+{
+"id": 17,
+"text": "Inbound",
+"label": "INB",
+"depth": 4,
+"parent": 14
+},
+{
+"id": 18,
+"text": "Outbound",
+"label": "OUT",
+"depth": 4,
+"parent": 14
+},
+{
+"id": 19,
+"text": "Buoyancy Reflex Pendulum Execution Logic Outbound",
+"label": "BRPE",
+"depth": 4,
+"parent": 14
+},
+{
+"id": 20,
+"text": "Nature Tool Buoyancy Reflex Execution Logic Outbound",
+"label": "NTBR",
+"depth": 4,
+"parent": 14
+},
+{
+"id": 21,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 4,
+"parent": 14
+},
+{
+"id": 22,
+"text": "Exponents",
+"label": "EXP",
+"depth": 5,
+"parent": 21
+},
+{
+"id": 23,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 24,
+"text": "Division",
+"label": "DIV",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 25,
+"text": "Addition",
+"label": "ADD",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 26,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 27,
+"text": "Mass",
+"label": "MAS",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 28,
+"text": "Volume",
+"label": "VOL",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 29,
+"text": "Weight",
+"label": "WEI",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 30,
+"text": "Density",
+"label": "DEN",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 31,
+"text": "Temperature",
+"label": "TEM",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 32,
+"text": "Velocity",
+"label": "VEL",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 33,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 34,
+"text": "Touch",
+"label": "TOU",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 35,
+"text": "Taste",
+"label": "TAS",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 36,
+"text": "Vision",
+"label": "VIS",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 37,
+"text": "Smell",
+"label": "SME",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 38,
+"text": "Sound",
+"label": "SOU",
+"depth": 6,
+"parent": 22
+},
+{
+"id": 39,
+"text": "Buoyancy Reflex Pendulum Logic Node",
+"label": "BRPL",
+"depth": 2,
+"parent": 10
+},
+{
+"id": 40,
+"text": "Inbound",
+"label": "INB",
+"depth": 3,
+"parent": 39
+},
+{
+"id": 41,
+"text": "Outbound",
+"label": "OUT",
+"depth": 3,
+"parent": 39
+},
+{
+"id": 42,
+"text": "Puzzle",
+"label": "PUZ",
+"depth": 3,
+"parent": 39
+},
+{
+"id": 43,
+"text": "Verification",
+"label": "VER",
+"depth": 4,
+"parent": 42
+},
+{
+"id": 44,
+"text": "Allocation",
+"label": "ALL",
+"depth": 4,
+"parent": 42
+},
+{
+"id": 45,
+"text": "Inbound",
+"label": "INB",
+"depth": 4,
+"parent": 42
+},
+{
+"id": 46,
+"text": "Outbound",
+"label": "OUT",
+"depth": 4,
+"parent": 42
+},
+{
+"id": 47,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 4,
+"parent": 42
+},
+{
+"id": 48,
+"text": "Exponents",
+"label": "EXP",
+"depth": 5,
+"parent": 47
+},
+{
+"id": 49,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 50,
+"text": "Division",
+"label": "DIV",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 51,
+"text": "Addition",
+"label": "ADD",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 52,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 53,
+"text": "Mass",
+"label": "MAS",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 54,
+"text": "Volume",
+"label": "VOL",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 55,
+"text": "Weight",
+"label": "WEI",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 56,
+"text": "Density",
+"label": "DEN",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 57,
+"text": "Temperature",
+"label": "TEM",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 58,
+"text": "Velocity",
+"label": "VEL",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 59,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 60,
+"text": "Touch",
+"label": "TOU",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 61,
+"text": "Taste",
+"label": "TAS",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 62,
+"text": "Vision",
+"label": "VIS",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 63,
+"text": "Smell",
+"label": "SME",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 64,
+"text": "Sound",
+"label": "SOU",
+"depth": 6,
+"parent": 48
+},
+{
+"id": 65,
+"text": "Buoyancy Reflex Pendulum Logic Node",
+"label": "BRPL",
+"depth": 2,
+"parent": 10
+},
+{
+"id": 66,
+"text": "Inbound",
+"label": "INB",
+"depth": 3,
+"parent": 65
+},
+{
+"id": 67,
+"text": "Outbound",
+"label": "OUT",
+"depth": 3,
+"parent": 65
+},
+{
+"id": 68,
+"text": "Envelope",
+"label": "ENV",
+"depth": 3,
+"parent": 65
+},
+{
+"id": 69,
+"text": "Verification",
+"label": "VER",
+"depth": 4,
+"parent": 68
+},
+{
+"id": 70,
+"text": "Allocation",
+"label": "ALL",
+"depth": 4,
+"parent": 68
+},
+{
+"id": 71,
+"text": "Inbound",
+"label": "INB",
+"depth": 4,
+"parent": 68
+},
+{
+"id": 72,
+"text": "Outbound",
+"label": "OUT",
+"depth": 4,
+"parent": 68
+},
+{
+"id": 73,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 4,
+"parent": 68
+},
+{
+"id": 74,
+"text": "Exponents",
+"label": "EXP",
+"depth": 5,
+"parent": 73
+},
+{
+"id": 75,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 76,
+"text": "Division",
+"label": "DIV",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 77,
+"text": "Addition",
+"label": "ADD",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 78,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 79,
+"text": "Mass",
+"label": "MAS",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 80,
+"text": "Volume",
+"label": "VOL",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 81,
+"text": "Weight",
+"label": "WEI",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 82,
+"text": "Density",
+"label": "DEN",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 83,
+"text": "Temperature",
+"label": "TEM",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 84,
+"text": "Velocity",
+"label": "VEL",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 85,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 86,
+"text": "Touch",
+"label": "TOU",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 87,
+"text": "Taste",
+"label": "TAS",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 88,
+"text": "Vision",
+"label": "VIS",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 89,
+"text": "Smell",
+"label": "SME",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 90,
+"text": "Sound",
+"label": "SOU",
+"depth": 6,
+"parent": 74
+},
+{
+"id": 91,
+"text": "Buoyancy Reflex Pendulum Logic Node",
+"label": "BRPL",
+"depth": 2,
+"parent": 10
+},
+{
+"id": 92,
+"text": "Inbound",
+"label": "INB",
+"depth": 3,
+"parent": 91
+},
+{
+"id": 93,
+"text": "Outbound",
+"label": "OUT",
+"depth": 3,
+"parent": 91
+},
+{
+"id": 94,
+"text": "Hammer",
+"label": "HAM",
+"depth": 3,
+"parent": 91
+},
+{
+"id": 95,
+"text": "Verification",
+"label": "VER",
+"depth": 4,
+"parent": 94
+},
+{
+"id": 96,
+"text": "Allocation",
+"label": "ALL",
+"depth": 4,
+"parent": 94
+},
+{
+"id": 97,
+"text": "Inbound",
+"label": "INB",
+"depth": 4,
+"parent": 94
+},
+{
+"id": 98,
+"text": "Outbound",
+"label": "OUT",
+"depth": 4,
+"parent": 94
+},
+{
+"id": 99,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 4,
+"parent": 94
+},
+{
+"id": 100,
+"text": "Exponents",
+"label": "EXP",
+"depth": 5,
+"parent": 99
+},
+{
+"id": 101,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 102,
+"text": "Division",
+"label": "DIV",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 103,
+"text": "Addition",
+"label": "ADD",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 104,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 105,
+"text": "Mass",
+"label": "MAS",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 106,
+"text": "Volume",
+"label": "VOL",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 107,
+"text": "Weight",
+"label": "WEI",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 108,
+"text": "Density",
+"label": "DEN",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 109,
+"text": "Temperature",
+"label": "TEM",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 110,
+"text": "Velocity",
+"label": "VEL",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 111,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 112,
+"text": "Touch",
+"label": "TOU",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 113,
+"text": "Taste",
+"label": "TAS",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 114,
+"text": "Vision",
+"label": "VIS",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 115,
+"text": "Smell",
+"label": "SME",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 116,
+"text": "Sound",
+"label": "SOU",
+"depth": 6,
+"parent": 100
+},
+{
+"id": 117,
+"text": "Buoyancy Reflex Pendulum Logic Node",
+"label": "BRPL",
+"depth": 2,
+"parent": 10
+},
+{
+"id": 118,
+"text": "Inbound",
+"label": "INB",
+"depth": 3,
+"parent": 117
+},
+{
+"id": 119,
+"text": "Outbound",
+"label": "OUT",
+"depth": 3,
+"parent": 117
+},
+{
+"id": 120,
+"text": "Stack",
+"label": "STA",
+"depth": 3,
+"parent": 117
+},
+{
+"id": 121,
+"text": "Verification",
+"label": "VER",
+"depth": 4,
+"parent": 120
+},
+{
+"id": 122,
+"text": "Allocation",
+"label": "ALL",
+"depth": 4,
+"parent": 120
+},
+{
+"id": 123,
+"text": "Inbound",
+"label": "INB",
+"depth": 4,
+"parent": 120
+},
+{
+"id": 124,
+"text": "Outbound",
+"label": "OUT",
+"depth": 4,
+"parent": 120
+},
+{
+"id": 125,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 4,
+"parent": 120
+},
+{
+"id": 126,
+"text": "Exponents",
+"label": "EXP",
+"depth": 5,
+"parent": 125
+},
+{
+"id": 127,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 128,
+"text": "Division",
+"label": "DIV",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 129,
+"text": "Addition",
+"label": "ADD",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 130,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 131,
+"text": "Mass",
+"label": "MAS",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 132,
+"text": "Volume",
+"label": "VOL",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 133,
+"text": "Weight",
+"label": "WEI",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 134,
+"text": "Density",
+"label": "DEN",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 135,
+"text": "Temperature",
+"label": "TEM",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 136,
+"text": "Velocity",
+"label": "VEL",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 137,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 138,
+"text": "Touch",
+"label": "TOU",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 139,
+"text": "Taste",
+"label": "TAS",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 140,
+"text": "Vision",
+"label": "VIS",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 141,
+"text": "Smell",
+"label": "SME",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 142,
+"text": "Sound",
+"label": "SOU",
+"depth": 6,
+"parent": 126
+},
+{
+"id": 143,
+"text": "Buoyancy Reflex Pendulum Logic Node",
+"label": "BRPL",
+"depth": 2,
+"parent": 10
+},
+{
+"id": 144,
+"text": "Inbound",
+"label": "INB",
+"depth": 3,
+"parent": 143
+},
+{
+"id": 145,
+"text": "Outbound",
+"label": "OUT",
+"depth": 3,
+"parent": 143
+},
+{
+"id": 146,
+"text": "knife",
+"label": "KNI",
+"depth": 3,
+"parent": 143
+},
+{
+"id": 147,
+"text": "Verification",
+"label": "VER",
+"depth": 4,
+"parent": 146
+},
+{
+"id": 148,
+"text": "Allocation",
+"label": "ALL",
+"depth": 4,
+"parent": 146
+},
+{
+"id": 149,
+"text": "Inbound",
+"label": "INB",
+"depth": 4,
+"parent": 146
+},
+{
+"id": 150,
+"text": "Outbound",
+"label": "OUT",
+"depth": 4,
+"parent": 146
+},
+{
+"id": 151,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 4,
+"parent": 146
+},
+{
+"id": 152,
+"text": "Exponents",
+"label": "EXP",
+"depth": 5,
+"parent": 151
+},
+{
+"id": 153,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 154,
+"text": "Division",
+"label": "DIV",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 155,
+"text": "Addition",
+"label": "ADD",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 156,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 157,
+"text": "Mass",
+"label": "MAS",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 158,
+"text": "Volume",
+"label": "VOL",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 159,
+"text": "Weight",
+"label": "WEI",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 160,
+"text": "Density",
+"label": "DEN",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 161,
+"text": "Temperature",
+"label": "TEM",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 162,
+"text": "Velocity",
+"label": "VEL",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 163,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 164,
+"text": "Touch",
+"label": "TOU",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 165,
+"text": "Taste",
+"label": "TAS",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 166,
+"text": "Vision",
+"label": "VIS",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 167,
+"text": "Smell",
+"label": "SME",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 168,
+"text": "Sound",
+"label": "SOU",
+"depth": 6,
+"parent": 152
+},
+{
+"id": 169,
+"text": "Buoyancy Reflex Pendulum Logic Node",
+"label": "BRPL",
+"depth": 2,
+"parent": 10
+},
+{
+"id": 170,
+"text": "Inbound",
+"label": "INB",
+"depth": 3,
+"parent": 169
+},
+{
+"id": 171,
+"text": "Outbound",
+"label": "OUT",
+"depth": 3,
+"parent": 169
+},
+{
+"id": 172,
+"text": "Scissors",
+"label": "SCI",
+"depth": 3,
+"parent": 169
+},
+{
+"id": 173,
+"text": "Verification",
+"label": "VER",
+"depth": 4,
+"parent": 172
+},
+{
+"id": 174,
+"text": "Allocation",
+"label": "ALL",
+"depth": 4,
+"parent": 172
+},
+{
+"id": 175,
+"text": "Inbound",
+"label": "INB",
+"depth": 4,
+"parent": 172
+},
+{
+"id": 176,
+"text": "Outbound",
+"label": "OUT",
+"depth": 4,
+"parent": 172
+},
+{
+"id": 177,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 4,
+"parent": 172
+},
+{
+"id": 178,
+"text": "Exponents",
+"label": "EXP",
+"depth": 5,
+"parent": 177
+},
+{
+"id": 179,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 180,
+"text": "Division",
+"label": "DIV",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 181,
+"text": "Addition",
+"label": "ADD",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 182,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 183,
+"text": "Mass",
+"label": "MAS",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 184,
+"text": "Volume",
+"label": "VOL",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 185,
+"text": "Weight",
+"label": "WEI",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 186,
+"text": "Density",
+"label": "DEN",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 187,
+"text": "Temperature",
+"label": "TEM",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 188,
+"text": "Velocity",
+"label": "VEL",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 189,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 190,
+"text": "Touch",
+"label": "TOU",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 191,
+"text": "Taste",
+"label": "TAS",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 192,
+"text": "Vision",
+"label": "VIS",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 193,
+"text": "Smell",
+"label": "SME",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 194,
+"text": "Sound",
+"label": "SOU",
+"depth": 6,
+"parent": 178
+},
+{
+"id": 195,
+"text": "Logic Allocation and Post Branch Inbound/Outbound",
+"label": "LAAP",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 196,
+"text": "Parentheses",
+"label": "PAR",
+"depth": 2,
+"parent": 195
+},
+{
+"id": 197,
+"text": "Exponents",
+"label": "EXP",
+"depth": 3,
+"parent": 196
+},
+{
+"id": 198,
+"text": "Multiplication",
+"label": "MUL",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 199,
+"text": "Division",
+"label": "DIV",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 200,
+"text": "Addition",
+"label": "ADD",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 201,
+"text": "Subtraction",
+"label": "SUB",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 202,
+"text": "Mass",
+"label": "MAS",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 203,
+"text": "Volume",
+"label": "VOL",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 204,
+"text": "Weight",
+"label": "WEI",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 205,
+"text": "Density",
+"label": "DEN",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 206,
+"text": "Temperature",
+"label": "TEM",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 207,
+"text": "Velocity",
+"label": "VEL",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 208,
+"text": "Photosynthesis",
+"label": "PHO",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 209,
+"text": "Touch",
+"label": "TOU",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 210,
+"text": "Taste",
+"label": "TAS",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 211,
+"text": "Vision",
+"label": "VIS",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 212,
+"text": "Smell",
+"label": "SME",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 213,
+"text": "Sound",
+"label": "SOU",
+"depth": 4,
+"parent": 197
+},
+{
+"id": 214,
+"text": "Outbound Integer, String or Both",
+"label": "OISO",
+"depth": 5,
+"parent": 213
+},
+{
+"id": 215,
+"text": "Inbound Integer, String or Both",
+"label": "IISO",
+"depth": 5,
+"parent": 213
+},
+{
+"id": 216,
+"text": "Prompt Terminals",
+"label": "PT",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 217,
+"text": "AI Output Prompt",
+"label": "AOP",
+"depth": 2,
+"parent": 216
+},
+{
+"id": 218,
+"text": "User Input Prompt",
+"label": "UIP",
+"depth": 2,
+"parent": 216
+},
+{
+"id": 219,
+"text": "Natural Order of Operations (shared ladder)",
+"label": "NOOO",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 220,
+"text": "1 Parentheses",
+"label": "1P",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 221,
+"text": "2 Exponents",
+"label": "2E",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 222,
+"text": "3 Multiplication",
+"label": "3M",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 223,
+"text": "4 Division",
+"label": "4D",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 224,
+"text": "5 Addition",
+"label": "5A",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 225,
+"text": "6 Subtraction",
+"label": "6S",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 226,
+"text": "7 Mass",
+"label": "7M",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 227,
+"text": "8 Volume",
+"label": "8V",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 228,
+"text": "9 Weight",
+"label": "9W",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 229,
+"text": "10 Density",
+"label": "1D",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 230,
+"text": "11 Temperature",
+"label": "1T",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 231,
+"text": "12 Velocity",
+"label": "1V",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 232,
+"text": "13 Photosynthesis",
+"label": "1P",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 233,
+"text": "14 Touch",
+"label": "1T",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 234,
+"text": "15 Taste",
+"label": "1T",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 235,
+"text": "16 Vision",
+"label": "1V",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 236,
+"text": "17 Smell",
+"label": "1S",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 237,
+"text": "18 Sound",
+"label": "1S",
+"depth": 2,
+"parent": 219
+},
+{
+"id": 238,
+"text": "Nature Tools",
+"label": "NT",
+"depth": 1,
+"parent": 0
+},
+{
+"id": 239,
+"text": "Maze",
+"label": "MAZ",
+"depth": 2,
+"parent": 238
+},
+{
+"id": 240,
+"text": "Puzzle",
+"label": "PUZ",
+"depth": 2,
+"parent": 238
+},
+{
+"id": 241,
+"text": "Envelope",
+"label": "ENV",
+"depth": 2,
+"parent": 238
+},
+{
+"id": 242,
+"text": "Hammer",
+"label": "HAM",
+"depth": 2,
+"parent": 238
+},
+{
+"id": 243,
+"text": "Stack",
+"label": "STA",
+"depth": 2,
+"parent": 238
+},
+{
+"id": 244,
+"text": "knife",
+"label": "KNI",
+"depth": 2,
+"parent": 238
+},
+{
+"id": 245,
+"text": "Scissors",
+"label": "SCI",
+"depth": 2,
+"parent": 238
+}
+],
+"edges": [
+{
+"from": 0,
+"to": 1
+},
+{
+"from": 0,
+"to": 2
+},
+{
+"from": 2,
+"to": 3
+},
+{
+"from": 2,
+"to": 4
+},
+{
+"from": 0,
+"to": 5
+},
+{
+"from": 5,
+"to": 6
+},
+{
+"from": 5,
+"to": 7
+},
+{
+"from": 7,
+"to": 8
+},
+{
+"from": 5,
+"to": 9
+},
+{
+"from": 0,
+"to": 10
+},
+{
+"from": 10,
+"to": 11
+},
+{
+"from": 11,
+"to": 12
+},
+{
+"from": 11,
+"to": 13
+},
+{
+"from": 11,
+"to": 14
+},
+{
+"from": 14,
+"to": 15
+},
+{
+"from": 14,
+"to": 16
+},
+{
+"from": 14,
+"to": 17
+},
+{
+"from": 14,
+"to": 18
+},
+{
+"from": 14,
+"to": 19
+},
+{
+"from": 14,
+"to": 20
+},
+{
+"from": 14,
+"to": 21
+},
+{
+"from": 21,
+"to": 22
+},
+{
+"from": 22,
+"to": 23
+},
+{
+"from": 22,
+"to": 24
+},
+{
+"from": 22,
+"to": 25
+},
+{
+"from": 22,
+"to": 26
+},
+{
+"from": 22,
+"to": 27
+},
+{
+"from": 22,
+"to": 28
+},
+{
+"from": 22,
+"to": 29
+},
+{
+"from": 22,
+"to": 30
+},
+{
+"from": 22,
+"to": 31
+},
+{
+"from": 22,
+"to": 32
+},
+{
+"from": 22,
+"to": 33
+},
+{
+"from": 22,
+"to": 34
+},
+{
+"from": 22,
+"to": 35
+},
+{
+"from": 22,
+"to": 36
+},
+{
+"from": 22,
+"to": 37
+},
+{
+"from": 22,
+"to": 38
+},
+{
+"from": 10,
+"to": 39
+},
+{
+"from": 39,
+"to": 40
+},
+{
+"from": 39,
+"to": 41
+},
+{
+"from": 39,
+"to": 42
+},
+{
+"from": 42,
+"to": 43
+},
+{
+"from": 42,
+"to": 44
+},
+{
+"from": 42,
+"to": 45
+},
+{
+"from": 42,
+"to": 46
+},
+{
+"from": 42,
+"to": 47
+},
+{
+"from": 47,
+"to": 48
+},
+{
+"from": 48,
+"to": 49
+},
+{
+"from": 48,
+"to": 50
+},
+{
+"from": 48,
+"to": 51
+},
+{
+"from": 48,
+"to": 52
+},
+{
+"from": 48,
+"to": 53
+},
+{
+"from": 48,
+"to": 54
+},
+{
+"from": 48,
+"to": 55
+},
+{
+"from": 48,
+"to": 56
+},
+{
+"from": 48,
+"to": 57
+},
+{
+"from": 48,
+"to": 58
+},
+{
+"from": 48,
+"to": 59
+},
+{
+"from": 48,
+"to": 60
+},
+{
+"from": 48,
+"to": 61
+},
+{
+"from": 48,
+"to": 62
+},
+{
+"from": 48,
+"to": 63
+},
+{
+"from": 48,
+"to": 64
+},
+{
+"from": 10,
+"to": 65
+},
+{
+"from": 65,
+"to": 66
+},
+{
+"from": 65,
+"to": 67
+},
+{
+"from": 65,
+"to": 68
+},
+{
+"from": 68,
+"to": 69
+},
+{
+"from": 68,
+"to": 70
+},
+{
+"from": 68,
+"to": 71
+},
+{
+"from": 68,
+"to": 72
+},
+{
+"from": 68,
+"to": 73
+},
+{
+"from": 73,
+"to": 74
+},
+{
+"from": 74,
+"to": 75
+},
+{
+"from": 74,
+"to": 76
+},
+{
+"from": 74,
+"to": 77
+},
+{
+"from": 74,
+"to": 78
+},
+{
+"from": 74,
+"to": 79
+},
+{
+"from": 74,
+"to": 80
+},
+{
+"from": 74,
+"to": 81
+},
+{
+"from": 74,
+"to": 82
+},
+{
+"from": 74,
+"to": 83
+},
+{
+"from": 74,
+"to": 84
+},
+{
+"from": 74,
+"to": 85
+},
+{
+"from": 74,
+"to": 86
+},
+{
+"from": 74,
+"to": 87
+},
+{
+"from": 74,
+"to": 88
+},
+{
+"from": 74,
+"to": 89
+},
+{
+"from": 74,
+"to": 90
+},
+{
+"from": 10,
+"to": 91
+},
+{
+"from": 91,
+"to": 92
+},
+{
+"from": 91,
+"to": 93
+},
+{
+"from": 91,
+"to": 94
+},
+{
+"from": 94,
+"to": 95
+},
+{
+"from": 94,
+"to": 96
+},
+{
+"from": 94,
+"to": 97
+},
+{
+"from": 94,
+"to": 98
+},
+{
+"from": 94,
+"to": 99
+},
+{
+"from": 99,
+"to": 100
+},
+{
+"from": 100,
+"to": 101
+},
+{
+"from": 100,
+"to": 102
+},
+{
+"from": 100,
+"to": 103
+},
+{
+"from": 100,
+"to": 104
+},
+{
+"from": 100,
+"to": 105
+},
+{
+"from": 100,
+"to": 106
+},
+{
+"from": 100,
+"to": 107
+},
+{
+"from": 100,
+"to": 108
+},
+{
+"from": 100,
+"to": 109
+},
+{
+"from": 100,
+"to": 110
+},
+{
+"from": 100,
+"to": 111
+},
+{
+"from": 100,
+"to": 112
+},
+{
+"from": 100,
+"to": 113
+},
+{
+"from": 100,
+"to": 114
+},
+{
+"from": 100,
+"to": 115
+},
+{
+"from": 100,
+"to": 116
+},
+{
+"from": 10,
+"to": 117
+},
+{
+"from": 117,
+"to": 118
+},
+{
+"from": 117,
+"to": 119
+},
+{
+"from": 117,
+"to": 120
+},
+{
+"from": 120,
+"to": 121
+},
+{
+"from": 120,
+"to": 122
+},
+{
+"from": 120,
+"to": 123
+},
+{
+"from": 120,
+"to": 124
+},
+{
+"from": 120,
+"to": 125
+},
+{
+"from": 125,
+"to": 126
+},
+{
+"from": 126,
+"to": 127
+},
+{
+"from": 126,
+"to": 128
+},
+{
+"from": 126,
+"to": 129
+},
+{
+"from": 126,
+"to": 130
+},
+{
+"from": 126,
+"to": 131
+},
+{
+"from": 126,
+"to": 132
+},
+{
+"from": 126,
+"to": 133
+},
+{
+"from": 126,
+"to": 134
+},
+{
+"from": 126,
+"to": 135
+},
+{
+"from": 126,
+"to": 136
+},
+{
+"from": 126,
+"to": 137
+},
+{
+"from": 126,
+"to": 138
+},
+{
+"from": 126,
+"to": 139
+},
+{
+"from": 126,
+"to": 140
+},
+{
+"from": 126,
+"to": 141
+},
+{
+"from": 126,
+"to": 142
+},
+{
+"from": 10,
+"to": 143
+},
+{
+"from": 143,
+"to": 144
+},
+{
+"from": 143,
+"to": 145
+},
+{
+"from": 143,
+"to": 146
+},
+{
+"from": 146,
+"to": 147
+},
+{
+"from": 146,
+"to": 148
+},
+{
+"from": 146,
+"to": 149
+},
+{
+"from": 146,
+"to": 150
+},
+{
+"from": 146,
+"to": 151
+},
+{
+"from": 151,
+"to": 152
+},
+{
+"from": 152,
+"to": 153
+},
+{
+"from": 152,
+"to": 154
+},
+{
+"from": 152,
+"to": 155
+},
+{
+"from": 152,
+"to": 156
+},
+{
+"from": 152,
+"to": 157
+},
+{
+"from": 152,
+"to": 158
+},
+{
+"from": 152,
+"to": 159
+},
+{
+"from": 152,
+"to": 160
+},
+{
+"from": 152,
+"to": 161
+},
+{
+"from": 152,
+"to": 162
+},
+{
+"from": 152,
+"to": 163
+},
+{
+"from": 152,
+"to": 164
+},
+{
+"from": 152,
+"to": 165
+},
+{
+"from": 152,
+"to": 166
+},
+{
+"from": 152,
+"to": 167
+},
+{
+"from": 152,
+"to": 168
+},
+{
+"from": 10,
+"to": 169
+},
+{
+"from": 169,
+"to": 170
+},
+{
+"from": 169,
+"to": 171
+},
+{
+"from": 169,
+"to": 172
+},
+{
+"from": 172,
+"to": 173
+},
+{
+"from": 172,
+"to": 174
+},
+{
+"from": 172,
+"to": 175
+},
+{
+"from": 172,
+"to": 176
+},
+{
+"from": 172,
+"to": 177
+},
+{
+"from": 177,
+"to": 178
+},
+{
+"from": 178,
+"to": 179
+},
+{
+"from": 178,
+"to": 180
+},
+{
+"from": 178,
+"to": 181
+},
+{
+"from": 178,
+"to": 182
+},
+{
+"from": 178,
+"to": 183
+},
+{
+"from": 178,
+"to": 184
+},
+{
+"from": 178,
+"to": 185
+},
+{
+"from": 178,
+"to": 186
+},
+{
+"from": 178,
+"to": 187
+},
+{
+"from": 178,
+"to": 188
+},
+{
+"from": 178,
+"to": 189
+},
+{
+"from": 178,
+"to": 190
+},
+{
+"from": 178,
+"to": 191
+},
+{
+"from": 178,
+"to": 192
+},
+{
+"from": 178,
+"to": 193
+},
+{
+"from": 178,
+"to": 194
+},
+{
+"from": 0,
+"to": 195
+},
+{
+"from": 195,
+"to": 196
+},
+{
+"from": 196,
+"to": 197
+},
+{
+"from": 197,
+"to": 198
+},
+{
+"from": 197,
+"to": 199
+},
+{
+"from": 197,
+"to": 200
+},
+{
+"from": 197,
+"to": 201
+},
+{
+"from": 197,
+"to": 202
+},
+{
+"from": 197,
+"to": 203
+},
+{
+"from": 197,
+"to": 204
+},
+{
+"from": 197,
+"to": 205
+},
+{
+"from": 197,
+"to": 206
+},
+{
+"from": 197,
+"to": 207
+},
+{
+"from": 197,
+"to": 208
+},
+{
+"from": 197,
+"to": 209
+},
+{
+"from": 197,
+"to": 210
+},
+{
+"from": 197,
+"to": 211
+},
+{
+"from": 197,
+"to": 212
+},
+{
+"from": 197,
+"to": 213
+},
+{
+"from": 213,
+"to": 214
+},
+{
+"from": 213,
+"to": 215
+},
+{
+"from": 0,
+"to": 216
+},
+{
+"from": 216,
+"to": 217
+},
+{
+"from": 216,
+"to": 218
+},
+{
+"from": 0,
+"to": 219
+},
+{
+"from": 219,
+"to": 220
+},
+{
+"from": 219,
+"to": 221
+},
+{
+"from": 219,
+"to": 222
+},
+{
+"from": 219,
+"to": 223
+},
+{
+"from": 219,
+"to": 224
+},
+{
+"from": 219,
+"to": 225
+},
+{
+"from": 219,
+"to": 226
+},
+{
+"from": 219,
+"to": 227
+},
+{
+"from": 219,
+"to": 228
+},
+{
+"from": 219,
+"to": 229
+},
+{
+"from": 219,
+"to": 230
+},
+{
+"from": 219,
+"to": 231
+},
+{
+"from": 219,
+"to": 232
+},
+{
+"from": 219,
+"to": 233
+},
+{
+"from": 219,
+"to": 234
+},
+{
+"from": 219,
+"to": 235
+},
+{
+"from": 219,
+"to": 236
+},
+{
+"from": 219,
+"to": 237
+},
+{
+"from": 0,
+"to": 238
+},
+{
+"from": 238,
+"to": 239
+},
+{
+"from": 238,
+"to": 240
+},
+{
+"from": 238,
+"to": 241
+},
+{
+"from": 238,
+"to": 242
+},
+{
+"from": 238,
+"to": 243
+},
+{
+"from": 238,
+"to": 244
+},
+{
+"from": 238,
+"to": 245
+}
+]
+}
