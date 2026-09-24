@@ -57,7 +57,10 @@ public final class BRPNSceneViewModel: ObservableObject {
         if mindMapScene == nil, showMindMapView {
             let built = LeatrMindMapScene()
             mindMapScene = built
-            if let built { scene.rootNode.addChildNode(built.rootGroup) }
+            if let built {
+                scene.rootNode.addChildNode(built.rootGroup)
+                animator.mindMapGroup = built.rootGroup
+            }
         }
         mindMapScene?.rootGroup.isHidden = !showMindMapView
         if showMindMapView { mindMapScene?.startThinking() } else { mindMapScene?.stopThinking() }
@@ -895,6 +898,11 @@ final class BRPNAnimator {
     var camera: SCNNode?
     var shellColors: [UIColor] = []
     var mantis: [MantisInst] = []
+    // TF142: the mind map's root group was never wired into rotX/rotY here,
+    // so the existing drag-to-rotate did nothing to it — it only ever
+    // rotated the (now-hidden) shells/maze/core directly, never the camera
+    // itself. Same rotation formula as core, just applied to this instead.
+    var mindMapGroup: SCNNode?
 
     var rotX: Float = 0
     var rotY: Float = 0
@@ -979,6 +987,12 @@ final class BRPNAnimator {
         core?.eulerAngles.y = rotY + f * 0.003
         let coreOp = 0.1 + shellPulse * 0.06 * sin(f * 0.04)
         core?.geometry?.firstMaterial?.emission.contents = ThreeJSGeometry.hex(0x00ffcc).withAlphaComponent(CGFloat(coreOp))
+
+        // REFLEX MAP — same drag-driven rotation as core/maze above, so
+        // orbit controls work on it too instead of only ever affecting the
+        // hidden buoyancy scene underneath.
+        mindMapGroup?.eulerAngles.x = rotX
+        mindMapGroup?.eulerAngles.y = rotY
 
         if let wall = mazeOrbGroup?.childNodes.first {
             let wop = 0.35 + 0.2 * sin(f * 0.04) + (isThinking ? 0.15 * sin(f * 0.09) : 0) + shellPulse * 0.08

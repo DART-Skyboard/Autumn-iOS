@@ -2,9 +2,23 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 141 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 142 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 142 — REFLEX MAP now actually responds to drag/pinch
+
+Found why orbit controls did nothing on it: the existing "orbit controls" in this scene
+were never a real camera orbit at all — drag sets `rotX`/`rotY` on the animator, which
+gets applied directly to the shells/maze/core's own `eulerAngles` each frame (each object
+spins in place; the camera itself only ever moves on pinch-zoom). The mind map's root
+group was a completely separate node that nothing was ever wired to rotate.
+
+Gave `BRPNAnimator` a `mindMapGroup` reference, set when the mind map is built, and
+applied the same `rotX`/`rotY` to it every frame — same mechanism as the core sphere,
+just without that one's constant slow auto-spin, since real orbit controls should stay
+put until you actually drag. Pinch-zoom needed no changes — it already moves the shared
+camera itself, so it was already working on both views equally.
 
 ## Build 141 — the LEATR mind map, as a real 3D wireframe toggle in the BRPN scene
 
