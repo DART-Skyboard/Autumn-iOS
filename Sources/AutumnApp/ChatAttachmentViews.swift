@@ -37,13 +37,98 @@ struct MessageAttachmentRow: View {
     private var bubbleSize: CGFloat { 110 }
 
     var body: some View {
-        if !attachments.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(attachments) { a in
-                        AttachmentThumb(attachment: a, size: bubbleSize, onRemove: nil)
+        if attachments.count == 1 {
+            AttachmentThumb(attachment: attachments[0], size: bubbleSize, onRemove: nil)
+        } else if attachments.count > 1 {
+            StackedAttachmentDeck(attachments: attachments)
+        }
+    }
+}
+
+/// TF153: multiple images in one message fan out like a held hand of cards
+/// rather than a plain scrolling row — tapping one brings it to the front,
+/// enlarged in place; tapping anywhere else in the stack's own frame (not
+/// on a card) sends it back to the fan. Selecting a different card while
+/// one is already forward swaps which one is forward directly.
+struct StackedAttachmentDeck: View {
+    let attachments: [ChatAttachment]
+    @State private var frontID: UUID?
+    @State private var images: [UUID: UIImage] = [:]
+
+    private let cardSize: CGFloat = 120
+    private let frontSize: CGFloat = 230
+    private let fanStep: CGFloat = 16   // per-card x/y offset in the resting fan
+    private let rotStep: Double = 5     // per-card rotation in the resting fan
+
+    private var totalWidth: CGFloat { frontSize + CGFloat(max(0, attachments.count - 1)) * fanStep + 20 }
+    private var totalHeight: CGFloat { frontSize + CGFloat(max(0, attachments.count - 1)) * (fanStep * 0.6) + 20 }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(attachments.enumerated()), id: \.element.id) { idx, a in
+                let isFront = frontID == a.id
+                let restOffset = CGFloat(idx) * fanStep
+                let restRotation = (Double(idx) - Double(attachments.count - 1) / 2) * rotStep
+
+                cardContent(a, isFront: isFront)
+                    .frame(width: isFront ? frontSize : cardSize, height: isFront ? frontSize : cardSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(isFront ? 0.55 : 0.22), lineWidth: 1))
+                    .shadow(color: .black.opacity(isFront ? 0.5 : 0.25), radius: isFront ? 14 : 3, y: isFront ? 8 : 2)
+                    .rotationEffect(.degrees(isFront ? 0 : restRotation))
+                    .offset(x: isFront ? 0 : restOffset, y: isFront ? 0 : restOffset * 0.6)
+                    .zIndex(isFront ? 100 : Double(idx))
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                            frontID = isFront ? nil : a.id
+                        }
                     }
-                }
+                    .onAppear { loadImage(a) }
+            }
+        }
+        .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard frontID != nil else { return }
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { frontID = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func cardContent(_ a: ChatAttachment, isFront: Bool) -> some View {
+        if let img = images[a.id] {
+            Image(uiImage: img)
+                .resizable()
+                // TF153: the actual ask — brought-forward shows the FULL
+                // original image (letterboxed if needed), not a crop; the
+                // resting fan card stays a cropped-to-fill thumbnail, same
+                // as any other thumbnail in this file.
+                .aspectRatio(contentMode: isFront ? .fit : .fill)
+                .background(isFront ? Color.black : Color.clear)
+        } else {
+            VStack(spacing: 4) {
+                Image(systemName: a.systemIcon)
+                    .font(.system(size: cardSize * 0.28, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.92))
+                Text(a.badge)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.white.opacity(0.08))
+        }
+    }
+
+    private func loadImage(_ a: ChatAttachment) {
+        guard images[a.id] == nil else { return }
+        if a.kind == .image, let img = UIImage(contentsOfFile: a.fileURL.path) {
+            images[a.id] = img
+        } else if a.kind == .video {
+            let asset = AVAsset(url: a.fileURL)
+            let gen = AVAssetImageGenerator(asset: asset)
+            gen.appliesPreferredTrackTransform = true
+            if let cg = try? gen.copyCGImage(at: CMTime(seconds: 0.3, preferredTimescale: 600), actualTime: nil) {
+                images[a.id] = UIImage(cgImage: cg)
             }
         }
     }

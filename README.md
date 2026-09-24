@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 152 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 153 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 153 — new LOUNGE theme; stacked-deck image attachments
+
+**New LOUNGE theme**, using the uploaded video as its background. Remuxed the source
+`.mov` straight to `.mp4` (same H.264 stream, no re-encode — lossless and fast) and
+dropped it into `Resources/Themes/`, the exact folder every other theme's video already
+lives in and which was already registered as a whole-folder build resource, so no
+project file changes were needed there. Added the new `.lounge` case to every
+exhaustive switch in `ThemeSystem.swift` (key, icon, accent, base/surface colors, scrim
+tint, gradient, video resource name) with a warm amber palette to match the footage.
+The theme picker already iterates `AutumnTheme.allCases` automatically, so it appears
+in the selector with no UI code changes at all.
+
+**Checked the single-image enlarge first**: it already does exactly what was asked —
+tapping a thumbnail opens a full-screen `.scaledToFit()` preview, the complete original
+image, letterboxed rather than cropped. That part didn't need building.
+
+**What was actually missing: multiple images in one message.** They were a plain
+horizontal scrolling row. Replaced with a fanned stack — each image offset and rotated
+like a spread hand of cards, tapping one brings it to the front at a much larger size
+showing its full uncropped content, tapping the surrounding area (or the front card
+again) sends it back to the fan, and picking a different card while one is already
+forward swaps which one is up front directly.
 
 ## Build 152 — Ash Star cards now actually log; copy/edit/repost on your own messages
 
