@@ -2,9 +2,19 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 143 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 144 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 144 — build 143's actual compile error, fixed and confirmed before writing this
+
+Build 143's CI genuinely failed — checked properly rather than assuming: two constants
+in `ReflexActivityBus` (`toolNotificationName`, `mathOpNotificationName`) were marked
+`fileprivate`, which only allows access from within that same file. `LeatrMindMapScene`
+lives in a different file and a different module (`AutumnApp` vs `LEATRCore`), so it
+couldn't see them — exactly two compile errors, both from this. Changed both to `public`.
+Everything else from build 143 (the real reflex-driven mind map animation, the HUD
+button fixes) is unchanged; this is purely the access-level fix.
 
 ## Build 143 — REFLEX MAP now animates real processing, HUD buttons thinner and left-aligned
 

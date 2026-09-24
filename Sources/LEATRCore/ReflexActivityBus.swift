@@ -27,8 +27,8 @@ public enum ReflexStage: String {
 
 public enum ReflexActivityBus {
     public static let notificationName = Notification.Name("LeatrReflexStage")
-    fileprivate static let toolNotificationName = Notification.Name("LeatrReflexTool")
-    fileprivate static let mathOpNotificationName = Notification.Name("LeatrReflexMathOp")
+    public static let toolNotificationName = Notification.Name("LeatrReflexTool")
+    public static let mathOpNotificationName = Notification.Name("LeatrReflexMathOp")
 
     /// Post a real pipeline stage. Safe to call from any thread/actor.
     public static func fire(_ stage: ReflexStage) {
