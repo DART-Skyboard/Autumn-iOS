@@ -2,9 +2,30 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 150 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 151 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 151 — found why Ash Star never fired: a solo-testing gate blocked it completely
+
+Watched the new recording and reviewed build 150's actual diff line by line first —
+the REFLEX MAP change was purely removing the diagnostic text and its closure, nothing
+touched the pulse logic itself, so that specific regression theory didn't hold up under
+review. Couldn't conclusively confirm from the frames alone whether the reflex
+animation itself regressed or just didn't line up with the sampling — flagging that
+honestly rather than guessing further.
+
+**Found a real, high-confidence bug in Ash Star's autonomous firing**, and it's
+independent of anything touched recently. `maybeAutumnStar()` — the function that lets
+Autumn spontaneously send a star on her own — had `guard !connectedUids.isEmpty else
+{ return }`, meaning the entire autonomous star, geometry included, could never fire at
+all unless at least one other person was live-connected at that exact moment. Testing
+solo, which is exactly what a quick recording usually is, silently blocked it
+completely every single time, no matter how long you waited. The function's own
+comment even says "geometry always" — and `fireAshStar` already has a sensible
+solo-safe fallback destination for exactly this case, it just was never being reached.
+Removed the gate; solo now correctly falls through to that existing fallback instead of
+returning early.
 
 ## Build 150 — removed the leftover diagnostic; Ash Star now actually saves to the user's private repo
 

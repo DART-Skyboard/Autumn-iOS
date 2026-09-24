@@ -788,13 +788,21 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     /// js _autumnJournalWatch — geometry always; archive only a real journal thought.
+    /// TF151: was `guard !connectedUids.isEmpty else { return }` — hard-gated
+    /// the ENTIRE autonomous star (geometry included) behind having at
+    /// least one other live connected user, which silently blocks it
+    /// completely when testing solo. The web version's own comment here
+    /// says "geometry always" — fireAshStar already has a sensible
+    /// solo-safe fallback destination for exactly this case
+    /// (SCNVector3(0.4, 1.8, -0.3) when there's no one to send it to), so
+    /// removing this gate lets that fallback actually get reached instead
+    /// of never firing at all.
     private func maybeAutumnStar() {
         let now = Date()
         if now.timeIntervalSince(lastJournalStar) < 20 { return }
         lastJournalStar = now
-        guard !connectedUids.isEmpty else { return }
         guard Int.random(in: 0..<4) == 0 else { return }
-        let pick = Array(connectedUids.shuffled().prefix(max(1, connectedUids.count / 3)))
+        let pick = connectedUids.isEmpty ? [] : Array(connectedUids.shuffled().prefix(max(1, connectedUids.count / 3)))
         Task { await self.autumnJournalStar(toUids: pick) }
     }
 
