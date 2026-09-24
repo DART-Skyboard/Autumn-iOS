@@ -2,9 +2,42 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 142 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 143 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 143 — REFLEX MAP now animates real processing, HUD buttons thinner and left-aligned
+
+**Real reflex activity, not simulated.** New `ReflexActivityBus` (LEATRCore) —
+`GrammarEngine.processForChat` now posts a named stage every time it actually passes
+through a real step of processing a real message: user input received, tokenized
+(Inbound), verified (the actual GBV check), math evaluated (Natural Order of
+Operations, down to the specific PEMDAS step actually used — Parentheses, Exponents,
+etc.), allocated (emotion/buoyancy/tool classification), the specific Nature Tool
+actually routed (Maze, Puzzle, and the rest), composed (Outbound), the reply ready (AI
+Output Prompt), and journaled (Sentience Journal). This lines up directly with the mind
+map's own vocabulary — it already represents this exact pipeline conceptually, so the
+mapping is real, not arbitrary.
+
+`LeatrMindMapScene` listens for these and, on each stage, finds the matching node and
+lights up its *entire ancestor chain back to the root* with a short stagger, so what's
+visible is the actual path a real message's reflex took through the tree, not a random
+node blinking. The old idle random-walk animation still runs underneath as ambient
+motion when nothing is actively processing.
+
+**HUD buttons**: SIGMA SOLVE and NEW MAZE were nearly double LIVE FEED's height (14/6
+padding + size-10 font vs 8/3 + size-8) — matched exactly. The left column
+(GEO/MAR/AERO/RADAR/NAV/ALC/MUSIC/ADMIN) was a plain `VStack` with no `alignment`,
+which defaults to `.center` — since every button has a different width, that put each
+one's *leading* edge at a different horizontal position, reading as staggered rather
+than aligned. Set to `.leading` and cut vertical padding from 7 to 4 to match, so the
+whole column is both flush-left and noticeably shorter.
+
+**Scope note:** the dynamic buoyancy-curve animation between live users (pulses
+traveling between users, consistent connections across mixed REFLEX MAP / buoyancy
+view modes) is real, separate work I haven't started — it touches the live multiplayer
+session sync directly, which isn't something to modify hastily alongside everything
+else here.
 
 ## Build 142 — REFLEX MAP now actually responds to drag/pinch
 

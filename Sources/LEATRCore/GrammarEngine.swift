@@ -155,6 +155,7 @@ public actor GrammarEngine {
     }
 
     public func processForChat(_ text: String, facts: [String: String] = [:]) async -> GrammarTurn {
+        ReflexActivityBus.fire(.userInput)
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let owner = facts["_memoryOwner"] ?? facts["user"] ?? lastOwner
         lastOwner = owner
@@ -163,12 +164,14 @@ public actor GrammarEngine {
         }
 
         // 0. GBV — core always True, reflex never loop
+        ReflexActivityBus.fire(.verification)
         let gbv = CoreCognition.generationBreachValidate(raw)
         if !gbv.ok {
             journalInner(owner: owner, thought: "cbs_compile \(gbv.reasons.joined(separator: ",")) — reflex, never loop.")
         }
 
         // 1. Allocate incoming as ONE buoyancy reflex (character FRP pipeline)
+        ReflexActivityBus.fire(.inbound)
         let reflex = leatrReflex(raw)
         let tokens = reflex.tokens
         let lower = raw.lowercased()
@@ -190,21 +193,37 @@ public actor GrammarEngine {
         if MathGlossary.looksLikeDefinitionAsk(raw), let def = MathGlossary.define(raw) {
             mathSpeak = def
         } else if MathOOO.isMathAsk(raw) {
+            ReflexActivityBus.fire(.mathOrder)
+            // Best-effort real detection of which PEMDAS step this
+            // expression actually touches, from the raw text itself —
+            // fires the matching Natural Order of Operations node
+            // (Parentheses/Exponents/Multiplication/Division/Addition/
+            // Subtraction) rather than only the umbrella stage.
+            if raw.contains("(") || raw.contains(")") { ReflexActivityBus.fireMathOp("Parentheses") }
+            else if raw.contains("^") || lower.contains("squared") || lower.contains("cubed") || lower.contains("exponent") { ReflexActivityBus.fireMathOp("Exponents") }
+            else if raw.contains("*") || raw.contains("×") || lower.contains("times") || lower.contains("multipl") { ReflexActivityBus.fireMathOp("Multiplication") }
+            else if raw.contains("/") || raw.contains("÷") || lower.contains("divid") { ReflexActivityBus.fireMathOp("Division") }
+            else if raw.contains("+") || lower.contains("plus") || lower.contains("add") { ReflexActivityBus.fireMathOp("Addition") }
+            else if raw.contains("-") || lower.contains("minus") || lower.contains("subtract") { ReflexActivityBus.fireMathOp("Subtraction") }
             mathSpeak = MathOOO.evalSpeak(raw)
         } else if MathOOO.isGrammarIntegerTalk(raw) {
             mathSpeak = nil
         }
 
         // 3. Emotion / buoyancy / tool from lexical + FRP
+        ReflexActivityBus.fire(.allocation)
         let f = Double(max(tokens.filter { $0.role == "content" }.count, 1))
         let r = Double(max(raw.count, 1))
         let p = Double(max(tokens.count, 1))
         let frp = CoreCognition.frpSqrtFrp(f: f, r: min(r, 80), p: p)
         let buoyancy = min(1.0, max(0.05, (frp.score.truncatingRemainder(dividingBy: 10)) / 10.0 + 0.35))
+        ReflexActivityBus.fire(.branchLogic)
         let tool = routeTool(tokens: tokens, raw: raw, math: mathSpeak != nil)
+        ReflexActivityBus.fireTool(tool.displayName)
         let emotion = classifyEmotion(raw: lower, tokens: tokens, buoyancy: buoyancy)
 
         // 4. Compose proportional reflex output (no side LLM)
+        ReflexActivityBus.fire(.outbound)
         let reply: String
         var studyGap: String? = nil
         if !gbv.ok {
@@ -216,6 +235,7 @@ public actor GrammarEngine {
             reply = composed
             studyGap = await detectStudyGap(lower: mergedLower, tokens: mergedTokens)
         }
+        ReflexActivityBus.fire(.aiOutput)
 
         // TF125: keep the topic open for next turn if this message itself
         // reads as an unfinished fragment, or if we explicitly couldn't
@@ -235,8 +255,10 @@ public actor GrammarEngine {
         }
 
         let inner = "FRP \(String(format: "%.3f", frp.score)) · \(tool.displayName) · \(reflex.sig) · \(reflex.sentenceType) · owner=\(owner)"
+        ReflexActivityBus.fire(.journal)
         journalInner(owner: owner, thought: inner)
         journalOuter(owner: owner, thought: raw, reply: reply, emotion: emotion.rawValue)
+        ReflexActivityBus.fire(.connectedResources)
 
         // Remember this user only
         var mem = userMemory[owner] ?? []

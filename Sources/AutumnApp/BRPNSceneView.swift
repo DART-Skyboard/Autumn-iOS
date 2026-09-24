@@ -91,38 +91,38 @@ public struct BRPNSceneView: View {
                     .background(Color.cyan.opacity(0.06))
                     .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.cyan.opacity(0.15), lineWidth: 1))
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: 6) {
                         if sceneVM.mazeCanSolve {
                             Button { sceneVM.autumnSolveMaze() } label: {
-                                HStack(spacing: 6) {
+                                HStack(spacing: 5) {
                                     Text("⬡")
-                                        .font(.system(size: 10))
+                                        .font(.system(size: 8))
                                         .foregroundColor(.cyan)
                                     Text(sceneVM.isSolving ? "SOLVING…" : "SIGMA SOLVE")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                        .tracking(1.2)
                                         .foregroundColor(.cyan)
                                 }
-                                .padding(.horizontal, 14).padding(.vertical, 6)
-                                .background(Color.cyan.opacity(0.1))
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.cyan.opacity(0.4), lineWidth: 0.8))
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Color.cyan.opacity(0.06))
+                                .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.cyan.opacity(0.22), lineWidth: 1))
                             }
                             .disabled(sceneVM.isSolving)
                         }
 
                         Button { sceneVM.generateNewMaze() } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 5) {
                                 Image(systemName: "arrow.triangle.2.circlepath")
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 8))
                                     .foregroundColor(Color.white.opacity(0.6))
                                 Text("NEW MAZE")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .tracking(1.2)
                                     .foregroundColor(Color.white.opacity(0.6))
                             }
-                            .padding(.horizontal, 14).padding(.vertical, 6)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Color.white.opacity(0.05))
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 0.8))
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.white.opacity(0.18), lineWidth: 1))
                         }
                     }
                     .padding(.bottom, 4)

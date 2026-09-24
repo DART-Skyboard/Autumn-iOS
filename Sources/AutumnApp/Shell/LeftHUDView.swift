@@ -37,7 +37,7 @@ public struct LeftHUDView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundColor(Color(hex: "#00ff88"))
-                .padding(.horizontal, 8).padding(.vertical, 7)
+                .padding(.horizontal, 8).padding(.vertical, 4)
                 .moduleFrost(stroke: Color(hex: "#00ff88").opacity(appNav.showRadar ? 0.7 : 0.35), fill: appNav.showRadar ? 0.14 : 0.08)
             }
             // TF138: standalone NAV button — was only reachable buried inside
@@ -58,7 +58,7 @@ public struct LeftHUDView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundColor(Color(hex: "#00e5ff"))
-                .padding(.horizontal, 8).padding(.vertical, 7)
+                .padding(.horizontal, 8).padding(.vertical, 4)
                 .moduleFrost(stroke: Color(hex: "#00e5ff").opacity(appNav.showMantis ? 0.7 : 0.35), fill: appNav.showMantis ? 0.14 : 0.08)
             }
             Button {
@@ -73,7 +73,7 @@ public struct LeftHUDView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundColor(Color(hex: "#a050ff"))
-                .padding(.horizontal, 8).padding(.vertical, 7)
+                .padding(.horizontal, 8).padding(.vertical, 4)
                 .moduleFrost(stroke: Color(hex: "#a050ff").opacity(appNav.studio == .alc ? 0.7 : 0.35), fill: appNav.studio == .alc ? 0.14 : 0.08)
             }
             // TF138: standalone MUSIC button — was also only reachable buried
@@ -92,7 +92,7 @@ public struct LeftHUDView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .foregroundColor(Color(hex: "#ff5fa8"))
-                .padding(.horizontal, 8).padding(.vertical, 7)
+                .padding(.horizontal, 8).padding(.vertical, 4)
                 .moduleFrost(stroke: Color(hex: "#ff5fa8").opacity(appNav.studio == .music ? 0.7 : 0.35), fill: appNav.studio == .music ? 0.14 : 0.08)
             }
             if circuit.allows(authVM) {
@@ -107,7 +107,7 @@ public struct LeftHUDView: View {
                             .fixedSize(horizontal: true, vertical: false)
                     }
                     .foregroundColor(Color(hex: "#ffb347"))
-                    .padding(.horizontal, 8).padding(.vertical, 7)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
                     .moduleFrost(stroke: Color(hex: "#ffb347").opacity(0.4), fill: 0.10)
                 }
             }
@@ -116,7 +116,16 @@ public struct LeftHUDView: View {
             HStack(spacing: 4) { pills }
                 .padding(.vertical, 2)
         } else {
-            VStack(spacing: 8) {
+            // TF143: was a plain VStack(spacing: 8) with no alignment,
+            // which defaults to .center — since each button has a
+            // different width (GEO FOUNDATION vs MUSIC vs ADMIN), center
+            // alignment put every button's *leading* edge at a different
+            // horizontal position, reading as staggered rather than
+            // aligned. .leading fixes every button's left edge to the
+            // widest one in the stack, matching the actual visual
+            // intent — a column of buttons flush against one edge, not
+            // drifting based on each label's length.
+            VStack(alignment: .leading, spacing: 8) {
                 pills
                 Spacer()
             }
@@ -138,7 +147,7 @@ public struct LeftHUDView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(color)
-            .padding(.horizontal, 8).padding(.vertical, 7)
+            .padding(.horizontal, 8).padding(.vertical, 4)
             .moduleFrost(stroke: color.opacity(0.35), fill: 0.08)
         }
         .buttonStyle(.plain)

@@ -1,6 +1,7 @@
 import Foundation
 import SceneKit
 import UIKit
+import LEATRCore
 
 // MARK: — Data model, decoded from Resources/leatr-mindmap.json
 // That file is a flattened export of lead-edge-ash-tree-reflex.mm (FreeMind
@@ -38,6 +39,8 @@ public final class LeatrMindMapScene {
     private var nodeByID: [Int: MindMapNode] = [:]
     private var pulseTimer: Timer?
     private var pulseFrame: Int = 0
+    private var observers: [NSObjectProtocol] = []
+    private var reflexPulseWorkItems: [Int: DispatchWorkItem] = [:]
 
     public init?() {
         guard let url = Bundle.main.url(forResource: "leatr-mindmap", withExtension: "json"),
@@ -48,9 +51,88 @@ public final class LeatrMindMapScene {
         rootGroup.name = "leatrMindMap"
         rootGroup.isHidden = true
         build(data)
+        observeReflexActivity()
     }
 
-    deinit { pulseTimer?.invalidate() }
+    deinit {
+        pulseTimer?.invalidate()
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+
+    // MARK: — Real reflex activity
+    //
+    // TF143: genuine, prompt-driven feedback rather than only the ambient
+    // idle walk below. GrammarEngine posts a named stage (see
+    // ReflexActivityBus) each time it actually passes through a real step
+    // of processing a real message. Matched here against this mind map's
+    // own node text — the vocabulary lines up directly (User Input Prompt,
+    // Inbound, Verification, Natural Order of Operations, Allocation,
+    // Outbound, AI Output Prompt, Sentience Journal) because this map
+    // already represents that same pipeline conceptually. When a stage
+    // fires, the matching node and its full ancestor chain back to the
+    // root light up together and fade — so what's visible is the actual
+    // path the reflex took through the tree for that specific message,
+    // not a random pick.
+
+    private func observeReflexActivity() {
+        let nc = NotificationCenter.default
+        observers.append(nc.addObserver(forName: ReflexActivityBus.notificationName, object: nil, queue: .main) { [weak self] note in
+            guard let stage = note.userInfo?["stage"] as? String else { return }
+            self?.pulsePath(matchingText: stage)
+        })
+        observers.append(nc.addObserver(forName: ReflexActivityBus.toolNotificationName, object: nil, queue: .main) { [weak self] note in
+            guard let tool = note.userInfo?["tool"] as? String else { return }
+            self?.pulsePath(matchingText: tool)
+        })
+        observers.append(nc.addObserver(forName: ReflexActivityBus.mathOpNotificationName, object: nil, queue: .main) { [weak self] note in
+            guard let op = note.userInfo?["op"] as? String else { return }
+            self?.pulsePath(matchingText: op)
+        })
+    }
+
+    /// Finds the node whose own text best matches (case-insensitive,
+    /// longest-match-wins so "Natural Order of Operations" doesn't get
+    /// shadowed by a shorter incidental match), then walks its parent
+    /// chain up to the root, lighting each one in sequence with a short
+    /// stagger so it reads as a signal traveling down the tree rather than
+    /// several nodes blinking at once.
+    private func pulsePath(matchingText query: String) {
+        let q = query.lowercased()
+        let candidates = nodeByID.values.filter { $0.text.lowercased().contains(q) || q.contains($0.text.lowercased()) }
+        guard let best = candidates.max(by: { $0.text.count < $1.text.count }) else { return }
+
+        var chain: [MindMapNode] = [best]
+        var cursor = best
+        while let pid = cursor.parent, let p = nodeByID[pid] {
+            chain.append(p)
+            cursor = p
+        }
+        // Root-to-leaf order so the animation reads as traveling outward.
+        for (i, node) in chain.reversed().enumerated() {
+            reflexPulseWorkItems[node.id]?.cancel()
+            let work = DispatchWorkItem { [weak self] in self?.reflexPulse(node.id) }
+            reflexPulseWorkItems[node.id] = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.06, execute: work)
+        }
+    }
+
+    private func reflexPulse(_ id: Int) {
+        guard let mesh = nodeMeshes[id] else { return }
+        SCNTransaction.begin()
+        SCNTransaction.animationDuration = 0.12
+        mesh.geometry?.materials.first?.emission.contents = UIColor.white
+        mesh.scale = SCNVector3(2.0, 2.0, 2.0)
+        SCNTransaction.completionBlock = { [weak self] in
+            guard let self, let node = self.nodeByID[id] else { return }
+            SCNTransaction.begin()
+            SCNTransaction.animationDuration = 0.9
+            mesh.geometry?.materials.first?.emission.contents = UIColor.black
+            mesh.geometry?.materials.first?.diffuse.contents = self.depthColor(node.depth)
+            mesh.scale = SCNVector3(1, 1, 1)
+            SCNTransaction.commit()
+        }
+        SCNTransaction.commit()
+    }
 
     // MARK: — Layout
     //
