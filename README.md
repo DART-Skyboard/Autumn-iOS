@@ -2,9 +2,28 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 144 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 145 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 145 — other users no longer disappear when you toggle REFLEX MAP
+
+Confirmed this was my own bug from build 141: `applyMindMapVisibility()`'s blanket hide
+(and the matching per-node guard at the session-group creation site) both caught
+session group nodes — other connected users' own presence in the scene — along with
+the buoyancy shells they were actually meant for. Toggling REFLEX MAP is a purely
+local, per-viewer preference for how *you* see the scene; it was never supposed to make
+other people vanish from it for you. Session nodes are now explicitly excluded from
+both the blanket hide and the dynamic per-node guard, so they stay visible in either
+mode.
+
+**Scope note, stated plainly:** this fixes "nothing displays for other users while I'm
+in REFLEX MAP mode." It does not yet make a remote user's *own* representation change
+to reflect whichever mode *they've* toggled into, updating live as they switch — that
+needs each user's current mode broadcast over the existing multiplayer sync (MIST) and
+rendered accordingly on every other connected client, which is real, separate work I
+haven't started. Wanted to be upfront about exactly where the line is rather than
+imply this build does more than it does.
 
 ## Build 144 — build 143's actual compile error, fixed and confirmed before writing this
 

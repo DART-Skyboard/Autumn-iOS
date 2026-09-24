@@ -68,14 +68,25 @@ public final class BRPNSceneViewModel: ObservableObject {
         // map is showing, and restore them when it's switched off — rather
         // than restructuring the many call sites elsewhere in this file
         // that add nodes directly under scene.rootNode (shells, particles,
-        // mantis contacts, session groups, tool shapes, path meshes), which
-        // would have meant touching working code across the whole view
-        // model just to make room for an alternate view. The camera and
-        // lights are left alone since both views share them.
+        // mantis contacts, tool shapes, path meshes), which would have
+        // meant touching working code across the whole view model just to
+        // make room for an alternate view. The camera and lights are left
+        // alone since both views share them.
+        //
+        // TF144: session group nodes (other connected users' own presence
+        // in the scene) are a real exception to this, not an oversight —
+        // toggling REFLEX MAP is a purely local, per-viewer preference for
+        // how *you* see the scene. It should never make other people
+        // disappear from it. This was the actual bug behind "nothing's
+        // displaying when I'm toggled into the ash tree mode": the blanket
+        // hide below, and the same-named per-node guard further down, both
+        // caught session nodes along with everything else.
+        let liveSessionNodes = Set(sessionGroupNodes.values.map { ObjectIdentifier($0) })
         for child in scene.rootNode.childNodes {
             guard child !== mindMapScene?.rootGroup,
                   child.camera == nil,
-                  child.light == nil
+                  child.light == nil,
+                  !liveSessionNodes.contains(ObjectIdentifier(child))
             else { continue }
             child.isHidden = showMindMapView
         }
@@ -83,9 +94,11 @@ public final class BRPNSceneViewModel: ObservableObject {
 
     /// Called at the end of every function elsewhere in this file that adds
     /// a new node directly to scene.rootNode after setup (mantis contacts,
-    /// session groups, tool shapes) — so nodes created *while* the mind map
-    /// is showing don't leak through as visible. Safe to call unconditionally;
-    /// it's a no-op when the mind map isn't active.
+    /// tool shapes) — so nodes created *while* the mind map is showing
+    /// don't leak through as visible. Safe to call unconditionally; it's a
+    /// no-op when the mind map isn't active. Deliberately NOT called from
+    /// session-group creation (see the comment above) — other users' own
+    /// presence stays visible regardless of this viewer's local toggle.
     func applyMindMapVisibility(to node: SCNNode) {
         if showMindMapView { node.isHidden = true }
     }
@@ -486,7 +499,6 @@ public final class BRPNSceneViewModel: ObservableObject {
         group.position = SCNVector3(pos.x, pos.y, pos.z)
         group.isHidden = !liveFeedEnabled
         scene.rootNode.addChildNode(group)
-        applyMindMapVisibility(to: group)
         sessionGroupNodes[sid] = group
         sessionOrder.append(sid)
         if liveFeedEnabled { activeNodes += 1 }
