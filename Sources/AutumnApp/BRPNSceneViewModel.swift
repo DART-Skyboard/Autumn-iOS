@@ -52,6 +52,11 @@ public final class BRPNSceneViewModel: ObservableObject {
         didSet { applyMindMapVisibility() }
     }
     private var mindMapScene: LeatrMindMapScene?
+    /// TF147: last reflex-pulse attempt, shown next to the REFLEX MAP
+    /// toggle — proves whether real events are actually reaching the mind
+    /// map scene and matching a node, instead of guessing when the
+    /// animation doesn't visibly show.
+    @Published public var lastReflexDiagnostic: String = "—"
 
     private func applyMindMapVisibility() {
         if mindMapScene == nil, showMindMapView {
@@ -60,6 +65,11 @@ public final class BRPNSceneViewModel: ObservableObject {
             if let built {
                 scene.rootNode.addChildNode(built.rootGroup)
                 animator.mindMapGroup = built.rootGroup
+                built.onPulseAttempt = { [weak self] query, matched in
+                    DispatchQueue.main.async {
+                        self?.lastReflexDiagnostic = "\(matched ? "✓" : "✗ no match") \"\(query)\" @ \(Date().formatted(date: .omitted, time: .standard))"
+                    }
+                }
             }
         }
         mindMapScene?.rootGroup.isHidden = !showMindMapView

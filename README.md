@@ -2,9 +2,34 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 146 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 147 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 147 — honest diagnosis of the screen recording, a real diagnostic, and actual volumetric-style glow
+
+Watched the screen recording frame by frame (extracted at 6fps around the actual
+message submission) rather than guessing from the description. The reply clearly
+landed — TOOL: ENVELOPE and emotion: INSPIRING both show correctly in the HUD, meaning
+`GrammarEngine.processForChat` genuinely ran and the events should have fired — but no
+distinctly colored pulse or flow line is visible in the sampled frames. Traced the real
+call path (`GrammarEngine.shared.processForChat`, confirmed the actual chat call site)
+and it lines up with what build 143–146 instrumented. Couldn't find a definitive wiring
+bug by static review alone, and didn't want to guess a fix for something I can't
+reproduce — so rather than another guess, this ships two real things instead:
+
+**A visible diagnostic.** `LeatrMindMapScene` now reports every pulse attempt — the
+exact stage text and whether it actually matched a node — shown live in small text next
+to the REFLEX MAP toggle whenever it's on. The next test will show definitively whether
+events are reaching the scene and matching, instead of relying on a recording.
+
+**Real volumetric-style glow**, per the actual ask, not a bigger pulse. Each of the 246
+nodes now has three concentric, unlit, additive-blended spheres around it (hidden by
+default, cheap for SceneKit to cull) — the same layered-falloff technique real-time
+engines use to fake volumetric light, since true marching-cubes rendering would be far
+too expensive per-node on a phone and wouldn't look meaningfully different at this
+scale. A pulse now blooms this glow outward in the reflex's real color before fading,
+alongside the node's own flash — actual 3D light spreading, not a flat color swap.
 
 ## Build 146 — shell/emotion colored reflexes, repeat detection, and a live per-prompt flow diagram
 

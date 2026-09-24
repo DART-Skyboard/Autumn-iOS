@@ -1,6 +1,7 @@
 import Foundation
 import SceneKit
 import UIKit
+import QuartzCore
 import LEATRCore
 
 // MARK: — Data model, decoded from Resources/leatr-mindmap.json
@@ -73,7 +74,13 @@ private extension UIColor {
 /// existing shell/particle/mantis code needs to change to make room for it.
 public final class LeatrMindMapScene {
     public let rootGroup = SCNNode()
+    /// TF147: diagnostic — reports every pulsePath call (query text, and
+    /// whether it actually matched a node), regardless of match success.
+    /// Exists specifically to answer "is this actually firing at all" the
+    /// next time this doesn't visibly animate, rather than guessing again.
+    public var onPulseAttempt: ((_ query: String, _ matched: Bool) -> Void)?
     private var nodeMeshes: [Int: SCNNode] = [:]
+    private var glowMeshes: [Int: SCNNode] = [:]   // layered additive spheres for the pulse glow
     private var edgeMeshes: [Int: SCNNode] = [:]   // keyed by the CHILD node id — each non-root node has exactly one parent edge
     private var edgeList: [MindMapEdge] = []
     private var nodeByID: [Int: MindMapNode] = [:]
@@ -176,7 +183,11 @@ public final class LeatrMindMapScene {
     private func pulsePath(matchingText query: String, shellColor: UIColor?) {
         let q = query.lowercased()
         let candidates = nodeByID.values.filter { $0.text.lowercased().contains(q) || q.contains($0.text.lowercased()) }
-        guard let best = candidates.max(by: { $0.text.count < $1.text.count }) else { return }
+        guard let best = candidates.max(by: { $0.text.count < $1.text.count }) else {
+            onPulseAttempt?(query, false)
+            return
+        }
+        onPulseAttempt?(query, true)
 
         // Repeat detection: the same node firing again shortly after itself
         // means this reflex genuinely ran more than once for this prompt —
@@ -214,6 +225,15 @@ public final class LeatrMindMapScene {
             edge.geometry?.materials.first?.diffuse.contents = tinted
             edge.geometry?.materials.first?.emission.contents = tinted
         }
+        // Glow burst — recolor every layer to this pulse's real color, pop
+        // it in, then let it bloom outward while fading, its own slower
+        // beat than the node's quick flash so it reads as light actually
+        // spreading rather than just a bigger dot.
+        if let glow = glowMeshes[id] {
+            for layer in glow.childNodes { layer.geometry?.materials.first?.emission.contents = tinted }
+            glow.opacity = 0.9 * intensity
+            glow.scale = SCNVector3(0.6, 0.6, 0.6)
+        }
         SCNTransaction.completionBlock = { [weak self] in
             guard let self, let node = self.nodeByID[id] else { return }
             SCNTransaction.begin()
@@ -228,6 +248,15 @@ public final class LeatrMindMapScene {
             SCNTransaction.commit()
         }
         SCNTransaction.commit()
+
+        if let glow = glowMeshes[id] {
+            SCNTransaction.begin()
+            SCNTransaction.animationDuration = 0.7
+            SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeOut)
+            glow.scale = SCNVector3(1.3, 1.3, 1.3)
+            glow.opacity = 0
+            SCNTransaction.commit()
+        }
     }
 
     // MARK: — Per-prompt sequence flow (the "circuit schematic" ask)
@@ -403,6 +432,34 @@ public final class LeatrMindMapScene {
             let label = billboardLabel(node.label, color: depthColor(node.depth), scale: node.depth == 0 ? 1.4 : 1.0)
             label.position = SCNVector3(0, Float(size) + 0.028, 0)
             group.addChildNode(label)
+
+            // TF147: real 3D glow, not a 2D post-effect — three
+            // concentric, unlit, additive-blended spheres around each
+            // node, hidden (opacity 0) until a pulse reveals them. Layered
+            // soft falloff is the standard cheap approximation for a
+            // volumetric glow in real-time engines; true marching-cubes
+            // volumetric rendering would be far too expensive to run per-
+            // node on a phone for a toggle-only view, and wouldn't look
+            // meaningfully different from this at this object scale.
+            // Hidden spheres are cheap for SceneKit to cull, so this is
+            // fine even across all 246 nodes.
+            let glow = SCNNode()
+            for (layerScale, layerOpacity) in [(2.2, 0.35), (3.6, 0.16), (5.5, 0.07)] {
+                let sphere = SCNSphere(radius: size * CGFloat(layerScale))
+                sphere.segmentCount = 10
+                let mat = SCNMaterial()
+                mat.lightingModel = .constant
+                mat.diffuse.contents = UIColor.clear
+                mat.emission.contents = depthColor(node.depth)
+                mat.blendMode = .add
+                mat.writesToDepthBuffer = false
+                mat.transparency = layerOpacity
+                sphere.materials = [mat]
+                glow.addChildNode(SCNNode(geometry: sphere))
+            }
+            glow.opacity = 0
+            group.addChildNode(glow)
+            glowMeshes[node.id] = glow
 
             rootGroup.addChildNode(group)
             nodeMeshes[node.id] = mesh
