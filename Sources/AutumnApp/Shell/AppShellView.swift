@@ -147,6 +147,16 @@ public struct AppShellView: View {
     }
 
     /// HUD tabs sit on TOP of the chat/scene strip in landscape so they don't clip off the edge.
+    /// TF139: was sized purely by content — a horizontal ScrollView should
+    /// keep a stable height regardless of how many buttons are in the row
+    /// (only width should be affected, since overflow scrolls rather than
+    /// wraps), but nothing pinned that height explicitly. Adding MUSIC/NAV
+    /// (build 138) was reported to push the Ash Canvas bottom menu off
+    /// screen in landscape specifically — sceneStage and AshCanvasView are
+    /// both height-bounded already (see the TF102 comment below), so this
+    /// row was the one remaining unconstrained element in that VStack.
+    /// Pinning its height removes any possibility of it being the cause,
+    /// regardless of exactly how the small variance was creeping in.
     private var landscapeTopHUD: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 3) {
@@ -157,6 +167,7 @@ public struct AppShellView: View {
             .padding(.horizontal, 4)
             .padding(.vertical, 4)
         }
+        .frame(height: 44)
         .background(themeVM.chrome.surface.opacity(0.9))
     }
 

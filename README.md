@@ -2,9 +2,22 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 138 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 139 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 139 — pinned the landscape HUD row's height so it can't be the source of the Ash Canvas clipping
+
+Traced the landscape layout fully: `sceneStage` and `AshCanvasView` are already explicitly
+height-bounded (from an earlier fix, TF102), which only leaves `landscapeTopHUD` — the
+row holding RADAR/NAV/ALC/MUSIC/ADMIN in landscape — as the one element sizing itself
+from content. It's wrapped in a horizontal `ScrollView`, which should only affect width
+when more buttons are added, not height, but nothing pinned that height explicitly. The
+overall vertical budget in landscape is already tight by design (confirmed: the stacked
+elements' worst-case heights land close to a typical landscape screen height with little
+margin), so this row was the one remaining place a small, otherwise-invisible content
+change could tip something already close to the edge. Pinned it to a fixed 44pt so it can
+never vary regardless of button count.
 
 ## Build 138 — standalone MUSIC and NAV HUD buttons; Mantis Nav now loads the real external page
 
