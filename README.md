@@ -2,9 +2,36 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 145 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 146 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 146 — shell/emotion colored reflexes, repeat detection, and a live per-prompt flow diagram
+
+**Edges are now individually colorable.** Was one combined line geometry for all 245
+edges (a single draw call, but impossible to color one independently of the rest).
+Rebuilt as 245 individual line nodes — a modest scene for a toggle-only alternate view
+— so a reflex's path can actually light up as it travels, edges included, not just the
+node markers.
+
+**Color now means something real.** When a Nature Tool actually routes through a real
+`BRPNShell`, the pulse uses that shell's own color — the same GEO/MAR/AERO palette the
+buoyancy scene already uses. Two prompts that route through the same shell light up
+the same color; a different shell reads as visibly different. The emotion
+`GrammarEngine` actually classifies for that message blends in as a tint on top (using
+`EmotionType.accentHex`, already defined per-emotion elsewhere in the app — not a new
+invented mapping). A reflex firing again within 4 seconds of itself is treated as a
+genuine repeat and pulses harder rather than identically.
+
+**The bigger piece — a live flow diagram for the actual order of operations.** The
+static tree stays exactly as it is, in its normal layout, at all times — that's
+correct and untouched. Layered on top: while a prompt is processing, every node it
+actually touches gets connected to the one before it with a bright temporary line,
+even when they're nowhere near each other in the tree (Verification and Maze aren't
+tree-adjacent, but a maze-solving prompt visits both) — so what's drawn, live, is the
+real sequence this specific prompt's reflex took. A couple seconds after the prompt
+finishes (AI Output Prompt / Sentience Journal), the whole diagram fades out and only
+the static tree remains, ready for the next prompt.
 
 ## Build 145 — other users no longer disappear when you toggle REFLEX MAP
 

@@ -219,8 +219,9 @@ public actor GrammarEngine {
         let buoyancy = min(1.0, max(0.05, (frp.score.truncatingRemainder(dividingBy: 10)) / 10.0 + 0.35))
         ReflexActivityBus.fire(.branchLogic)
         let tool = routeTool(tokens: tokens, raw: raw, math: mathSpeak != nil)
-        ReflexActivityBus.fireTool(tool.displayName)
+        ReflexActivityBus.fireTool(tool.displayName, shell: tool.shell)
         let emotion = classifyEmotion(raw: lower, tokens: tokens, buoyancy: buoyancy)
+        ReflexActivityBus.fireEmotion(emotion.rawValue, accentHex: emotion.accentHex)
 
         // 4. Compose proportional reflex output (no side LLM)
         ReflexActivityBus.fire(.outbound)

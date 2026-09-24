@@ -29,6 +29,7 @@ public enum ReflexActivityBus {
     public static let notificationName = Notification.Name("LeatrReflexStage")
     public static let toolNotificationName = Notification.Name("LeatrReflexTool")
     public static let mathOpNotificationName = Notification.Name("LeatrReflexMathOp")
+    public static let emotionNotificationName = Notification.Name("LeatrReflexEmotion")
 
     /// Post a real pipeline stage. Safe to call from any thread/actor.
     public static func fire(_ stage: ReflexStage) {
@@ -37,9 +38,13 @@ public enum ReflexActivityBus {
 
     /// Post the specific Nature Tool actually routed for this message
     /// (e.g. "Maze", "Puzzle") — matched against the mind map's own Nature
-    /// Tools node text, same node names shown in Ash Canvas.
-    public static func fireTool(_ toolName: String) {
-        NotificationCenter.default.post(name: toolNotificationName, object: nil, userInfo: ["tool": toolName])
+    /// Tools node text, same node names shown in Ash Canvas. Carries the
+    /// tool's real BRPNShell (geological/maritime/aerospace) so a listener
+    /// can color the reflex by which shell actually did the work, using
+    /// the same GEO/MAR/AERO palette the rest of the scene already uses —
+    /// not a guessed or arbitrary color.
+    public static func fireTool(_ toolName: String, shell: BRPNShell) {
+        NotificationCenter.default.post(name: toolNotificationName, object: nil, userInfo: ["tool": toolName, "shell": shell.rawValue])
     }
 
     /// Post the specific math operation actually evaluated (e.g.
@@ -48,5 +53,15 @@ public enum ReflexActivityBus {
     /// Operations.
     public static func fireMathOp(_ opName: String) {
         NotificationCenter.default.post(name: mathOpNotificationName, object: nil, userInfo: ["op": opName])
+    }
+
+    /// Post the emotion actually classified for this message (real output
+    /// of classifyEmotion, not invented) — carries that emotion's own
+    /// accentHex (already defined per-emotion in EmotionClassifier, used
+    /// elsewhere in the UI for the same emotion) so the color a listener
+    /// applies is the same one Autumn already associates with that
+    /// emotion, not a new invented mapping.
+    public static func fireEmotion(_ emotion: String, accentHex: String) {
+        NotificationCenter.default.post(name: emotionNotificationName, object: nil, userInfo: ["emotion": emotion, "accentHex": accentHex])
     }
 }
