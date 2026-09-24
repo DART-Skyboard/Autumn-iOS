@@ -2,9 +2,32 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 149 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 150 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 150 — removed the leftover diagnostic; Ash Star now actually saves to the user's private repo
+
+**Removed the diagnostic text** next to REFLEX MAP entirely — it did its job (confirmed
+build 148's cylinder-geometry fix was the real one), no longer needed and was never
+meant to be permanent UI.
+
+**Ash Star's save was incomplete, found by reading web's actual `ash-star-archive.js`
+line by line.** iOS already had a genuinely solid archive UI — individual SAVE buttons,
+a SAVE ALL button, persistent card list, all of it — but the save itself only wrote a
+general journal entry. Web's real save does two more things: a dedicated
+`ashtree/ashstars/{uid}.json` GAS write (its own step, separate from the general
+journal), and — the part specifically called out as missing — when the user has GitHub
+connected, a per-card file goes into their own private `Autumn-Ash-{username}` repo via
+their own OAuth. Ported both, reusing `UserVaultService` (the same vault abstraction
+Ash Canvas and Save Data already use) with a new `.ashStars` folder, rather than
+building a separate save path. Individual SAVE and SAVE ALL both benefit automatically
+since SAVE ALL just calls the same per-card save in a loop.
+
+Also confirmed the "she may fulfill it later" behavior is already real, not just UI:
+`AshStarThought.nextFromJournal` is genuinely wired into the live BRPN scene, pulling
+her actual autonomous journal thoughts when they occur — not something that needed
+building from scratch.
 
 ## Build 149 — fixed build 148's actual compile error (ambiguous `.pi`)
 

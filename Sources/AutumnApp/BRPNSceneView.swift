@@ -65,17 +65,6 @@ public struct BRPNSceneView: View {
                             .background((sceneVM.showMindMapView ? Color(hex: "#ff9df0") : Color.white).opacity(0.06))
                             .overlay(RoundedRectangle(cornerRadius: 3).stroke((sceneVM.showMindMapView ? Color(hex: "#ff9df0") : Color.white).opacity(0.22), lineWidth: 1))
                         }
-                        // TF147: temporary, visible diagnostic — proves
-                        // whether real reflex events are actually reaching
-                        // the mind map and matching a node, so this can be
-                        // confirmed directly instead of guessed at from a
-                        // screen recording next time.
-                        if sceneVM.showMindMapView {
-                            Text(sceneVM.lastReflexDiagnostic)
-                                .font(.system(size: 7, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.4))
-                                .lineLimit(1)
-                        }
                     }
 
                     // Node cap — JS #node-cap-track in #multi-user-bar (on-scene HUD)

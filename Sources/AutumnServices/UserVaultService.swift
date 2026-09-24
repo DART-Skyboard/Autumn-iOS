@@ -69,7 +69,7 @@ public actor UserVaultService {
     private func createAllSubfolders(at root: URL) {
         let fm = FileManager.default
         let folders = [
-            "journal", "memory", "projects", "exports", "ash-shard", "math",
+            "journal", "memory", "projects", "exports", "ash-shard", "math", "ashstars",
             "ArcLake", "ArcLake/models", "ArcLake/sessions", "ArcLake/exports"
         ]
         for sub in folders {
@@ -262,6 +262,12 @@ public enum VaultFolder: String, CaseIterable {
     case exports    = "exports"
     case shard      = "ash-shard"
     case math       = "math"
+    // TF150: ash star cards — matches web's `writeLeatrAshMemory('ashtree/
+    // ashstars/'+uid+'.json', card)` + per-card PUT to the user's own
+    // private repo. Web calls its repo folder "ashstars" directly at the
+    // repo root, not nested under a themed folder — kept as its own vault
+    // folder rather than reusing .journal so the path matches exactly.
+    case ashStars   = "ashstars"
     // ArcLake folders
     case arcModels  = "ArcLake/models"
     case arcSessions = "ArcLake/sessions"
@@ -276,6 +282,7 @@ public enum VaultFolder: String, CaseIterable {
         case .projects:    return "Projects"
         case .exports:     return "Exports"
         case .shard:       return "Ash Shard"
+        case .ashStars:    return "Ash Stars"
         case .math:        return "Math"
         case .arcModels:   return "ArcLake Models"
         case .arcSessions: return "ArcLake Sessions"

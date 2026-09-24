@@ -122,12 +122,39 @@ public struct StarOverlay: View {
     }
 
     private func saveOne(_ c: AshStarCard) async {
+        // TF150: was GAS journal-write only — web's real save does two more
+        // things this was missing: (1) a dedicated ashtree/ashstars/{uid}.json
+        // entry via GAS ashwrite (separate from the general journal write —
+        // web calls this out as its own step), and (2) when the user has
+        // GitHub connected, a per-card file in their own private
+        // Autumn-Ash-{username} repo via UserVaultService — this is
+        // specifically the "save it to their private repository as data"
+        // part that was missing entirely.
         await AutumnGASClient.shared.writeJournal(
             uid: authVM.sessionUID, thought: c.thought, reply: "[ash star]",
             emotion: "inspiring", buoyancy: 0.8)
+
+        let cardPayload: [String: Any] = [
+            "type": "ash_star_card", "thought": c.thought, "color": c.color,
+            "ts": c.ts, "from": c.from, "uid": c.uid, "saved": true
+        ]
+        _ = await AutumnGASClient.shared.ashwrite(
+            path: "ashtree/ashstars/\(authVM.sessionUID).json",
+            uid: authVM.sessionUID, append: true, payload: cardPayload)
+
+        var savedToRepo = false
+        if authVM.githubConnected, !authVM.githubUsername.isEmpty,
+           JSONSerialization.isValidJSONObject(cardPayload),
+           let data = try? JSONSerialization.data(withJSONObject: cardPayload, options: [.prettyPrinted]),
+           let json = String(data: data, encoding: .utf8) {
+            savedToRepo = await UserVaultService.shared.write(
+                folder: .ashStars, filename: "\(c.id).json",
+                content: json, githubUsername: authVM.githubUsername)
+        }
+
         AshStarArchive.markSaved(c.id)
         cards = AshStarArchive.load()
-        status = "SAVED VIA GAS"
+        status = savedToRepo ? "SAVED — journal + repo" : "SAVED VIA GAS"
     }
 
     private func saveAll() async {
