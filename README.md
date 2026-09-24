@@ -2,9 +2,38 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 139 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 140 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 140 — the actual landscape bug found and fixed; Music is now a real frosted overlay with skip
+
+**The real landscape bug, confirmed from the actual screenshot.** Build 139's HUD height
+pin was a real fix for a real risk, but not this one — the screenshot showed
+`AshCanvasView`'s G/M socket buttons visibly cut off at the frame's bottom edge, with no
+way to reach them. Root cause: the entire view was a plain `VStack` with no `ScrollView`,
+while `AppShellView`'s landscape layout applies a genuinely fixed height
+(`min(420, size.height*0.6)`) to it. When content (tool rows, save/send, the canvas box,
+G/M/A sockets, APPLY/LINK/DEL/RESET) is taller than that frame, SwiftUI clips the overflow
+silently — it doesn't scroll to it on its own. Wrapped the content in a `ScrollView` so
+everything is reachable regardless of how tight the landscape budget gets.
+
+**MUSIC is now a proper frosted overlay**, not the old Tools-menu presentation — same
+`.ultraThinMaterial` styling, same draggable title bar and close button as the Admin
+console, so it matches that visual language exactly rather than looking like a
+different kind of window.
+
+**Real skip added.** `AutumnMusic.play()` only ever queued a single song before, so
+skip had nothing to move through. It now takes the full search-result list and queues
+from the tapped song onward, so `ApplicationMusicPlayer`'s real `skipToNextEntry`/
+`skipToPreviousEntry` have an actual queue to work with — skip buttons dim themselves
+when there's nothing to skip to (a single bare play) rather than pretending to work.
+
+**Scope note on the mind-map 3D visualization:** haven't started this yet. Both files
+parse fine (FreeMind XML and a JSON tree), so it's technically doable, but building
+labeled 3D wireframe geometry, a spherical layout, a "thinking" animation, and the HUD
+toggle to swap it in for the buoyancy shells is a genuinely large, separate piece of
+work. Didn't want to rush it in alongside three other real fixes in the same pass.
 
 ## Build 139 — pinned the landscape HUD row's height so it can't be the source of the Ash Canvas clipping
 

@@ -20,6 +20,7 @@ struct MusicPanel: View {
     @State private var nowPlayingArtist: String? = nil
     @State private var isPlaying = false
     @State private var playError: String? = nil
+    @State private var hasQueueContext = false
 
     var body: some View {
         let chrome = themeVM.chrome
@@ -196,6 +197,19 @@ struct MusicPanel: View {
                 Text(artist).font(.system(size: 10, design: .monospaced)).foregroundColor(.white.opacity(0.5)).lineLimit(1)
             }
             Spacer()
+            // TF140: skip only does something meaningful once play() has
+            // queued more than one song (see AutumnMusic.hasQueueContext) —
+            // single-song plays (e.g. from a bare songID with no search
+            // results around it) have nothing to skip to, so these dim
+            // rather than pretend to work.
+            Button {
+                Task { await AutumnMusic.shared.skipToPrevious() }
+            } label: {
+                Image(systemName: "backward.end.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(chrome.accent.opacity(hasQueueContext ? 0.85 : 0.25))
+            }
+            .disabled(!hasQueueContext)
             Button {
                 Task {
                     if isPlaying {
@@ -215,6 +229,14 @@ struct MusicPanel: View {
                     .font(.system(size: 26))
                     .foregroundColor(chrome.accent)
             }
+            Button {
+                Task { await AutumnMusic.shared.skipToNext() }
+            } label: {
+                Image(systemName: "forward.end.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(chrome.accent.opacity(hasQueueContext ? 0.85 : 0.25))
+            }
+            .disabled(!hasQueueContext)
         }
         .padding(10)
         .background(chrome.accent.opacity(0.08))
@@ -248,10 +270,11 @@ struct MusicPanel: View {
         guard item.type == "song" else { return } // albums/artists: browse only for now
         playError = nil
         do {
-            try await AutumnMusic.shared.play(songID: item.id)
+            try await AutumnMusic.shared.play(songID: item.id, queueContext: results)
             nowPlayingTitle = item.title
             nowPlayingArtist = item.artist
             isPlaying = true
+            hasQueueContext = await AutumnMusic.shared.hasQueueContext
         } catch {
             playError = "Couldn't play — \(error.localizedDescription)"
         }

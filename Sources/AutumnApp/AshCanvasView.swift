@@ -60,7 +60,22 @@ public struct AshCanvasView: View {
     private var chrome: AutumnTheme { themeVM.chrome }
 
     public var body: some View {
-        VStack(spacing: 0) {
+        // TF140: the actual bug behind "can't see the bottom menu in
+        // landscape" — this whole view was a plain VStack with no
+        // ScrollView. AppShellView's landscape layout applies a genuinely
+        // fixed-height frame to this view (min(420, size.height*0.6)) — if
+        // the content (tool rows, save/send, canvas box, G/M/A sockets,
+        // APPLY/LINK/DEL/RESET) is taller than that frame, SwiftUI's
+        // default behavior is to CLIP the overflow silently, not scroll to
+        // it. That overflow was genuinely there and genuinely unreachable
+        // — confirmed directly in the landscape screenshot, where the G/M
+        // socket buttons were visibly cut off at the frame's bottom edge.
+        // Build 139's HUD height pin was a real, separate improvement but
+        // could never have fixed this, since the clipping was happening
+        // one level down, inside this view, independent of how tall the
+        // HUD row above it was.
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(spacing: 0) {
             Text("NATURAL TOOLS — drag onto canvas or tap to place")
                 .font(.system(size: 8, design: .monospaced))
                 .foregroundColor(chrome.textSecondary.opacity(0.7))
@@ -137,6 +152,7 @@ public struct AshCanvasView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
+        }
         .background(chrome.surface.opacity(0.97))
         .overlay(Rectangle().frame(height: 0.7)
             .foregroundColor(ac.opacity(0.22)), alignment: .top)

@@ -48,7 +48,11 @@ public struct AppShellView: View {
                 if appNav.showAdmin, circuit.allows(authVM) { AdminDrawerView().transition(.move(edge: .leading)) }
                 if appNav.showMantis { studioWrap { MantisNavWebView() } }
                 if appNav.showRadar { MantisRadarView() }
-                if let studio = appNav.studio { StudioHostView(kind: studio) }
+                // TF140: MUSIC is a frosted overlay now (matching Admin's
+                // visual style), not a full-screen StudioHostView wrap —
+                // handled as its own sibling condition, excluded below.
+                if appNav.studio == .music { MusicOverlayView() }
+                if let studio = appNav.studio, studio != .music { StudioHostView(kind: studio) }
                 if appNav.showMathSolver { MathSolverOverlay() }
                 if appNav.showLatexCanvas { LatexCanvasOverlay() }
             }
