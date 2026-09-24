@@ -92,6 +92,10 @@ public struct StarOverlay: View {
                     .font(.system(size: 12).italic())
                     .foregroundColor(.white.opacity(0.88))
                     .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("(geometry only — no journal thought attached)")
+                    .font(.system(size: 11).italic())
+                    .foregroundColor(.white.opacity(0.4))
             }
             HStack {
                 Spacer()
@@ -114,11 +118,21 @@ public struct StarOverlay: View {
     }
 
     private func sendStar() {
-        // Geometry only — Autumn's own journal thought archives separately if she sends one.
+        // TF152: was geometry + network broadcast only — never actually
+        // logged a card to the LOCAL archive, so a manually-sent star
+        // never showed up in the list at all, even though it visibly fired
+        // on the orb. The panel's own text says "messages pile here when
+        // Autumn sends one" — a button press is Autumn sending one just as
+        // much as an autonomous fire is, from what the person watching the
+        // archive can see, so it should log the same way.
         let ok = sceneVM.fireAshStar(thought: "", toUids: nil, force: true)
         thought = ""
         status = ok ? "SPAWNED ON ORB" : "COOLING — STAR QUEUED ON ORB"
         MISTModule.shared.emitAshStarPacket(thought: "", toUids: sceneVM.connectedUids, uid: authVM.sessionUID)
+        if ok {
+            AshStarArchive.push(AshStarCard(thought: "", color: "#00d4ff", from: "autumn", uid: authVM.sessionUID))
+            cards = AshStarArchive.load()
+        }
     }
 
     private func saveOne(_ c: AshStarCard) async {

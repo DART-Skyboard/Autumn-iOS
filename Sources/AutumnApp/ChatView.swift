@@ -122,7 +122,9 @@ struct EmoHUD: View {
 struct MessageBubble: View {
     let message: ChatMessage
     @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var chatVM: ChatViewModel
     @State private var showMeta = false
+    @State private var copyFlash = false
 
     var isUser: Bool { message.role == .user }
 
@@ -165,6 +167,36 @@ struct MessageBubble: View {
                     }
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(themeVM.current.textSecondary)
+                    .padding(.horizontal, 4)
+                }
+
+                // TF152: copy/edit/repost row for the user's own posted
+                // messages — Autumn's replies stay as they are, this is
+                // specifically for going back to something you typed.
+                if isUser && !message.content.isEmpty {
+                    HStack(spacing: 14) {
+                        Button {
+                            UIPasteboard.general.string = message.content
+                            copyFlash = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copyFlash = false }
+                        } label: {
+                            Label(copyFlash ? "Copied" : "Copy", systemImage: copyFlash ? "checkmark" : "doc.on.doc")
+                        }
+                        Button {
+                            chatVM.inputText = message.content
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        Button {
+                            chatVM.inputText = message.content
+                            Task { await chatVM.send() }
+                        } label: {
+                            Label("Repost", systemImage: "arrow.counterclockwise")
+                        }
+                    }
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 11))
+                    .foregroundColor(themeVM.current.textSecondary.opacity(0.55))
                     .padding(.horizontal, 4)
                 }
 

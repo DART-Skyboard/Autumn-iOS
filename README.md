@@ -2,9 +2,27 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 151 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 152 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 152 — Ash Star cards now actually log; copy/edit/repost on your own messages
+
+**Confirmed from the recording**: REFLEX MAP animation is genuinely back (dense colored
+activity visible, real tool/emotion changing frame to frame) and the solo-firing fix
+from build 151 worked — the star fires now. The archive list staying empty was a
+separate, real bug: the panel's own text says "messages pile here when Autumn sends
+one," but the SEND STAR button only ever fired the geometry and broadcast it over the
+network — it never actually pushed a card to the local archive. Fixed: a manual send
+now logs a card the same way an autonomous one does, with a clear "(geometry only — no
+journal thought attached)" line when there's no real thought behind it, rather than a
+confusing blank card. The list was already a `ScrollView`, so it fills correctly as
+more stars come in.
+
+**New: copy / edit / repost on your own messages.** A small row under each message you
+send — Copy puts it on the clipboard, Edit drops it back into the input bar to revise
+before sending, Repost sends the exact same content again immediately. Autumn's own
+replies are untouched — this is specifically for going back to something you typed.
 
 ## Build 151 — found why Ash Star never fired: a solo-testing gate blocked it completely
 
