@@ -2,9 +2,17 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 148 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 149 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 149 — fixed build 148's actual compile error (ambiguous `.pi`)
+
+Build 148 genuinely failed CI: `SCNVector4(1, 0, 0, .pi)` left `.pi` ambiguous between
+numeric types given the surrounding integer literals — Swift couldn't infer it in that
+context. Changed to `Float.pi` explicitly. Checked every other `SCNVector3`/`SCNVector4`
+call in the file for the same pattern; nothing else was affected. No other changes from
+build 148's real content (the cylinder-based edges, flow lines, and stronger pulses).
 
 ## Build 148 — the real cause, found from your screen recording's audio + frames
 

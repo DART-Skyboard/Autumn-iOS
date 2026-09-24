@@ -512,7 +512,7 @@ public final class LeatrMindMapScene {
                 let axis = SCNVector3(-dir.z, 0, dir.x)
                 node.rotation = SCNVector4(axis.x, axis.y, axis.z, angle)
             } else if angle >= Float.pi - 0.0001 {
-                node.rotation = SCNVector4(1, 0, 0, .pi)
+                node.rotation = SCNVector4(1, 0, 0, Float.pi)
             }
         }
         return node
