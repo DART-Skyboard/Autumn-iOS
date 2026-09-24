@@ -2,9 +2,31 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 147 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 148 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 148 — the real cause, found from your screen recording's audio + frames
+
+Transcribed your commentary and inspected the frames at that exact moment. You said
+the nodes were "twinkling" but no glow, and the segments weren't changing color or
+redirecting — that's the key clue. Nodes twinkling means the reflex system genuinely
+*was* firing (matching build 147's diagnostic, which should confirm this too). The
+actual problem was never the wiring — it was that the edges were built as GL_LINES,
+which render as a fixed, roughly 1-pixel-wide hairline regardless of scene scale.
+Cropped a frame closely and confirmed it directly: against a bright sky background and
+245 other crossing white hairlines, a color change on one or a few of them is
+genuinely imperceptible, no matter how correctly the code fires.
+
+**Rebuilt tree edges, flow-diagram lines, and pulses as real geometry.** Every edge is
+now a thin cylinder with actual, visible radius, oriented and placed properly between
+its two points — not a line primitive. A pulsing edge now visibly *thickens* (4x
+radius) in addition to recoloring, since a radius change reads clearly where a color
+change alone didn't. The temporary flow-diagram lines get an even thicker radius so
+they stand out as clearly more prominent than the resting tree. Node pulses and the
+volumetric glow layers both got a real intensity boost (2x → 4x scale, larger and
+brighter glow layers) for the same reason — the base elements are small, so the pulse
+needs real scale to read against the whole 246-node scene.
 
 ## Build 147 — honest diagnosis of the screen recording, a real diagnostic, and actual volumetric-style glow
 

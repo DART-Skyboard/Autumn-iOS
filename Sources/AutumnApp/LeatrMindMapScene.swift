@@ -220,10 +220,15 @@ public final class LeatrMindMapScene {
         SCNTransaction.begin()
         SCNTransaction.animationDuration = 0.12
         mesh.geometry?.materials.first?.emission.contents = tinted
-        mesh.scale = SCNVector3(2.0 * Float(intensity), 2.0 * Float(intensity), 2.0 * Float(intensity))
+        mesh.scale = SCNVector3(4.0 * Float(intensity), 4.0 * Float(intensity), 4.0 * Float(intensity))
         if let edge = edgeMeshes[id] {
             edge.geometry?.materials.first?.diffuse.contents = tinted
             edge.geometry?.materials.first?.emission.contents = tinted
+            edge.geometry?.materials.first?.transparency = 1.0
+            // Radius only (x/z in the cylinder's own local space, before
+            // its world-space rotation) — not length — so a pulsing edge
+            // visibly thickens rather than stretching.
+            edge.scale = SCNVector3(4.0 * Float(intensity), 1, 4.0 * Float(intensity))
         }
         // Glow burst — recolor every layer to this pulse's real color, pop
         // it in, then let it bloom outward while fading, its own slower
@@ -242,8 +247,10 @@ public final class LeatrMindMapScene {
             mesh.geometry?.materials.first?.diffuse.contents = self.depthColor(node.depth)
             mesh.scale = SCNVector3(1, 1, 1)
             if let edge = self.edgeMeshes[id] {
-                edge.geometry?.materials.first?.diffuse.contents = UIColor(white: 0.7, alpha: 0.28)
+                edge.geometry?.materials.first?.diffuse.contents = UIColor(white: 0.75, alpha: 1)
                 edge.geometry?.materials.first?.emission.contents = UIColor.black
+                edge.geometry?.materials.first?.transparency = 0.35
+                edge.scale = SCNVector3(1, 1, 1)
             }
             SCNTransaction.commit()
         }
@@ -294,17 +301,20 @@ public final class LeatrMindMapScene {
             return g
         }()
 
-        let source = SCNGeometrySource(vertices: [a, b])
-        let element = SCNGeometryElement(indices: [Int32(0), Int32(1)] as [Int32], primitiveType: .line)
-        let geo = SCNGeometry(sources: [source], elements: [element])
-        geo.materials = [ThreeJSGeometry.basicMat(color, opacity: 0.0)]
-        let line = SCNNode(geometry: geo)
+        // TF148: same fix as the tree edges — a hairline .line primitive
+        // is imperceptible against the busy scene. The flow diagram is
+        // meant to be the most visually prominent thing on screen while a
+        // prompt is processing, so this gets a noticeably thicker radius
+        // than the tree's own resting edges (0.006 vs 0.0025) on top of
+        // full opacity and real emission.
+        let line = buildEdgeCylinder(from: a, to: b, radius: 0.006, color: color, opacity: 0.0)
         group.addChildNode(line)
 
         SCNTransaction.begin()
         SCNTransaction.animationDuration = 0.18
         line.geometry?.materials.first?.emission.contents = color
-        line.opacity = 0.9
+        line.geometry?.materials.first?.transparency = 1.0
+        line.opacity = 0.95
         SCNTransaction.commit()
     }
 
@@ -408,7 +418,7 @@ public final class LeatrMindMapScene {
         rootGroup.addChildNode(edgeGroup)
         for edge in data.edges {
             guard let a = positions[edge.from], let b = positions[edge.to] else { continue }
-            let line = buildEdgeLine(from: a, to: b)
+            let line = buildEdgeCylinder(from: a, to: b, radius: 0.0025, color: UIColor(white: 0.75, alpha: 1), opacity: 0.35)
             edgeGroup.addChildNode(line)
             edgeMeshes[edge.to] = line   // keyed by child — one parent edge per non-root node
         }
@@ -444,7 +454,7 @@ public final class LeatrMindMapScene {
             // Hidden spheres are cheap for SceneKit to cull, so this is
             // fine even across all 246 nodes.
             let glow = SCNNode()
-            for (layerScale, layerOpacity) in [(2.2, 0.35), (3.6, 0.16), (5.5, 0.07)] {
+            for (layerScale, layerOpacity) in [(3.5, 0.5), (6.0, 0.24), (9.0, 0.1)] {
                 let sphere = SCNSphere(radius: size * CGFloat(layerScale))
                 sphere.segmentCount = 10
                 let mat = SCNMaterial()
@@ -467,17 +477,45 @@ public final class LeatrMindMapScene {
     }
 
     /// TF146: one small line geometry per edge (was a single combined
-    /// geometry for all 245 — a single draw call, but impossible to color
-    /// one edge independently of the rest, which the reflex-path and
-    /// per-prompt-sequence animations both need). 245 individual thin line
-    /// nodes is a modest scene for SceneKit, well within reasonable
-    /// bounds for a toggle-only alternate view.
-    private func buildEdgeLine(from a: SCNVector3, to b: SCNVector3) -> SCNNode {
-        let source = SCNGeometrySource(vertices: [a, b])
-        let element = SCNGeometryElement(indices: [Int32(0), Int32(1)] as [Int32], primitiveType: .line)
-        let geo = SCNGeometry(sources: [source], elements: [element])
-        geo.materials = [ThreeJSGeometry.basicMat(UIColor(white: 0.7, alpha: 0.28), opacity: 0.28)]
-        return SCNNode(geometry: geo)
+    /// TF148: real, visible geometry instead of a hairline GL_LINES
+    /// primitive. Confirmed directly from a screen recording (audio
+    /// commentary + frame inspection) that thin .line-primitive edges are
+    /// genuinely imperceptible against a bright camera background and 245
+    /// other crossing white lines — a color change on one hairline strand
+    /// is lost in the noise regardless of whether the underlying code
+    /// fires correctly. A thin cylinder between the two points has real,
+    /// visible width and — critically — a radius that can actually scale
+    /// up during a pulse for a dramatic, unmistakable effect, which a GPU
+    /// line primitive's fixed ~1px width never could.
+    private func buildEdgeCylinder(from a: SCNVector3, to b: SCNVector3, radius: CGFloat, color: UIColor, opacity: CGFloat) -> SCNNode {
+        let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z
+        let length = CGFloat(sqrt(dx*dx + dy*dy + dz*dz))
+        let cyl = SCNCylinder(radius: radius, height: max(length, 0.0001))
+        cyl.radialSegmentCount = 6
+        let mat = SCNMaterial()
+        mat.lightingModel = .constant
+        mat.diffuse.contents = color
+        mat.emission.contents = UIColor.black
+        mat.transparency = opacity
+        cyl.materials = [mat]
+        let node = SCNNode(geometry: cyl)
+        // Cylinders are built along Y by default — orient and place at the midpoint.
+        let mid = SCNVector3((a.x+b.x)/2, (a.y+b.y)/2, (a.z+b.z)/2)
+        node.position = mid
+        let len = Float(length)
+        if len > 0.0001 {
+            let dir = SCNVector3(dx/len, dy/len, dz/len)
+            let dot = max(-1, min(1, dir.y))   // dot with (0,1,0)
+            let angle = acos(dot)
+            if angle > 0.0001 && angle < Float.pi - 0.0001 {
+                // axis = (0,1,0) × dir
+                let axis = SCNVector3(-dir.z, 0, dir.x)
+                node.rotation = SCNVector4(axis.x, axis.y, axis.z, angle)
+            } else if angle >= Float.pi - 0.0001 {
+                node.rotation = SCNVector4(1, 0, 0, .pi)
+            }
+        }
+        return node
     }
 
     private func billboardLabel(_ text: String, color: UIColor, scale: CGFloat) -> SCNNode {
