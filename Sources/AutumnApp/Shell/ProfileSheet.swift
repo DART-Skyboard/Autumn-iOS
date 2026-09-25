@@ -176,6 +176,17 @@ public struct ProfileSheet: View {
                     labelRow("ARC FORGE")
                 }
 
+                // TF156: direct shortcut to the same SYS overlay/compose
+                // sheet reachable from the right rail — same read/write
+                // path (system-broadcast.json via GAS), so nothing new to
+                // keep in sync; this is purely a more convenient entry
+                // point for the one person who can actually post to it.
+                if circuit.allows(authVM) {
+                    Button { appNav.rightTab = .sys; appNav.showProfile = false } label: {
+                        labelRow("⚡ SYSTEM MESSAGE")
+                    }
+                }
+
                 if authVM.adminAllowed {
                     Button { authVM.toggleAdminFlag() } label: {
                         labelRow(authVM.adminEnabled ? "⚙ DISABLE ADMIN" : "⚙ ENABLE ADMIN")

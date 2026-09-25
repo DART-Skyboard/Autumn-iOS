@@ -2,9 +2,39 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 154 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 155 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 155 — system message editor: profile access, images, real link tool
+
+**Checked what already existed first** — iOS's SYS overlay already had genuine
+bidirectional sync with web: it reads `system-broadcast.json` from the same GitHub
+file web writes to, and its existing compose sheet already writes back via GAS to
+that identical file, with basic auto-linkified URLs and markdown `[label](url)`
+parsing. That core sync didn't need rebuilding — this adds what was actually missing.
+
+**Profile access** — a "⚡ SYSTEM MESSAGE" entry in the profile menu (admin-gated,
+same as the existing entry point) opens the exact same overlay, so nothing new needs
+keeping in sync — it's one feature with two doors into it.
+
+**Real image attachments.** Pick a photo, it uploads as its own file to the Autumn
+repo at full original resolution, displayed at a 100×100 thumbnail — tapping it opens
+that same file at full size, not an upscaled thumbnail. Multiple images fan out as a
+stacked deck, same interaction as the chat attachment stack. An image can optionally
+be attached as a hyperlink instead — tapping it opens that link rather than the
+full-size view.
+
+**A real selection-based link tool**, not just typed markdown. New
+`SelectableTextEditor` bridges `UITextView` to actually expose the current selection
+(plain SwiftUI `TextEditor` has no selection API) — tapping "Link" with text selected
+wraps exactly that selection as `[selection](url)`; with nothing selected, it prompts
+for both a label and a URL and inserts fresh at the cursor.
+
+**Not touched this round:** the real-time-scene analytics/cubicle-maze export system
+described separately — that's substantial, separate work (a new maze-based session
+data structure, JSON/zip export, date-range selection, a new admin tab) that needs its
+own dedicated pass rather than being squeezed in alongside this.
 
 ## Build 154 — stop/send toggle, no more filename talk-back, right rail fixed, landscape mind-map bug found and fixed
 
