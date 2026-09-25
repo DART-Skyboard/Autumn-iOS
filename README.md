@@ -2,9 +2,34 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 157 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 158 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 158 — the real reason solve never showed a path, plus layered overflow for the export data
+
+**Found the actual bug from the screenshot.** `basicMat(color, opacity: 0)` bakes that
+opacity directly into the diffuse/emission color's own alpha channel
+(`color.withAlphaComponent(opacity)`) — it never touches `SCNMaterial.transparency` at
+all. Setting `.transparency = 1` when revealing a path node did nothing, because the
+underlying color already had zero alpha baked in permanently — zero alpha times any
+transparency multiplier is still zero. Both instant and animated solve were correctly
+tracking which nodes should be visible; the actual pixels just could never become
+visible under that approach. Fixed by replacing the color itself with a fresh, fully
+opaque one on reveal instead of touching transparency.
+
+**Layered overflow for the export**, addressing the data-volume question directly. I
+want to be upfront about the specific choice made here rather than overstate it: a
+literal version of "let dense stretches spread into the maze's own dead-end
+branches" would mean tracing which off-path cells are actually reachable near a given
+path point through the real walls — a real flood-fill through the maze's own
+connectivity, and a substantially larger separate piece of work. What's shipped
+instead captures the same real intent more simply: when a cell's assigned events
+exceed a per-cell capacity, the overflow spills into a new *layer* — a second full
+pass through the same path structure stacked underneath the first, a third if that
+also fills, and so on. Nothing gets dropped or truncated at high volume; the nesting
+just grows in an orderly, addressable way. Worth deciding together whether the fuller
+geometric version is worth building next, now that this direction is real and working.
 
 ## Build 157 — real maze geometry, instant/animated solve, inline generate, cube-as-container export
 

@@ -195,6 +195,24 @@ public struct AnalyticsExportPanel: View {
     /// than path cells) — "the icing at the very core," a quick way to
     /// reach exactly the data a given research pass needs without
     /// scanning the whole cube.
+    /// TF159: even distribution first assigns events round-robin across
+    /// path cells, same as before. What's new is what happens when a
+    /// session/range genuinely has more events than reasonably belongs in
+    /// one cell's entry — rather than letting one cell's JSON balloon
+    /// arbitrarily, overflow spills into a new *layer*: a second full pass
+    /// through the same path structure, stacked under the first, and a
+    /// third if that also fills, and so on. This is a deliberate,
+    /// simplified stand-in for "let dense stretches spread into the
+    /// maze's own dead-end branches" — actually tracing which off-path
+    /// cells are reachable near a given path point (a real walled-maze
+    /// flood-fill) is a substantially larger piece of work on its own;
+    /// layering the same path repeatedly captures the same real intent —
+    /// nothing gets dropped or truncated when volume is high, nesting
+    /// grows in an orderly, addressable way instead — without that
+    /// separate undertaking. Worth flagging plainly rather than silently
+    /// presenting this as the literal geometric version.
+    private let perCellCapacity = 25
+
     private func runExport() async {
         isExporting = true
         exportStatus = "Gathering analytics…"
@@ -203,22 +221,33 @@ public struct AnalyticsExportPanel: View {
             : await AnalyticsEventLogger.shared.fetchRange(from: rangeStart, to: rangeEnd)
 
         let path = maze.solutionCells()
-        var cellBuckets: [[AnalyticsEvent]] = Array(repeating: [], count: max(path.count, 1))
+        // layers[layerIndex][cellIndex] = events assigned to that cell in that layer
+        var layers: [[[AnalyticsEvent]]] = path.isEmpty ? [] : [Array(repeating: [], count: path.count)]
         if !path.isEmpty {
             for (i, event) in events.enumerated() {
-                let idx = min(i * path.count / max(events.count, 1), path.count - 1)
-                cellBuckets[idx].append(event)
+                let cellIdx = min(i * path.count / max(events.count, 1), path.count - 1)
+                var layerIdx = 0
+                while layers[layerIdx][cellIdx].count >= perCellCapacity {
+                    layerIdx += 1
+                    if layerIdx == layers.count { layers.append(Array(repeating: [], count: path.count)) }
+                }
+                layers[layerIdx][cellIdx].append(event)
             }
         }
 
-        var pathJSON: [[String: Any]] = []
-        for (i, pt) in path.enumerated() {
-            let cellEvents = cellBuckets[i].map { e -> [String: Any] in
-                var d: [String: Any] = ["ts": ISO8601DateFormatter().string(from: e.ts), "category": e.category, "label": e.label]
-                if let detail = e.detail { d["detail"] = detail }
-                return d
+        func eventJSON(_ e: AnalyticsEvent) -> [String: Any] {
+            var d: [String: Any] = ["ts": ISO8601DateFormatter().string(from: e.ts), "category": e.category, "label": e.label]
+            if let detail = e.detail { d["detail"] = detail }
+            return d
+        }
+
+        var pathLayersJSON: [[String: Any]] = []
+        for (layerIdx, cells) in layers.enumerated() {
+            var pathJSON: [[String: Any]] = []
+            for (i, pt) in path.enumerated() {
+                pathJSON.append(["order": i, "x": pt.x, "y": pt.y, "z": pt.z, "events": cells[i].map(eventJSON)])
             }
-            pathJSON.append(["order": i, "x": pt.x, "y": pt.y, "z": pt.z, "events": cellEvents])
+            pathLayersJSON.append(["layer": layerIdx, "path": pathJSON])
         }
 
         func openingJSON(_ p: LEMACEngineASH.Perimeter3D?) -> Any {
@@ -255,7 +284,7 @@ public struct AnalyticsExportPanel: View {
                 "exit": openingJSON(maze.endOpening),
                 "cells": cubeCells
             ],
-            "pathIndex": pathJSON,
+            "pathIndex": pathLayersJSON,
             "totalEvents": events.count
         ]
 
@@ -274,7 +303,7 @@ public struct AnalyticsExportPanel: View {
         do {
             try zipData.write(to: url)
             exportedFileURL = url
-            exportStatus = "\(events.count) events, \(cubeCells.count) cube cells — \(zipData.count / 1024) KB."
+            exportStatus = "\(events.count) events across \(layers.count) layer\(layers.count == 1 ? "" : "s"), \(cubeCells.count) cube cells — \(zipData.count / 1024) KB."
             showShareSheet = true
         } catch {
             exportStatus = "Export failed writing file."
@@ -386,11 +415,23 @@ struct MazeOrbitSceneView: UIViewRepresentable {
         // Reveal/hide path nodes up to revealCount — instant solve sets
         // revealCount to the full path length at once; animated solve
         // steps it up over time via a Timer in the panel above.
+        //
+        // TF159: the actual bug — basicMat(color, opacity:) bakes that
+        // opacity directly into diffuse/emission's own alpha channel via
+        // color.withAlphaComponent(opacity), it never touches
+        // SCNMaterial.transparency at all. Setting .transparency here did
+        // nothing, since the underlying color already had zero alpha
+        // baked in permanently — 0 alpha × any transparency multiplier is
+        // still 0. Revealing now replaces the color itself with a fresh,
+        // fully-opaque one instead.
         guard let root = v.scene?.rootNode.childNode(withName: "mazeRoot", recursively: false) else { return }
         let pathNodes = root.childNodes.filter { $0.name == "pathNode" }
+        let cyan = ThreeJSGeometry.hex(0x00ffff)
         for (i, node) in pathNodes.enumerated() {
             let visible = isSolving && i < revealCount
-            node.geometry?.firstMaterial?.transparency = visible ? 1 : 0
+            let color = cyan.withAlphaComponent(visible ? 1 : 0)
+            node.geometry?.firstMaterial?.diffuse.contents = color
+            node.geometry?.firstMaterial?.emission.contents = color
         }
     }
 
