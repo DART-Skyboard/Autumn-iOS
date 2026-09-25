@@ -2,9 +2,45 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 153 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 154 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 154 — stop/send toggle, no more filename talk-back, right rail fixed, landscape mind-map bug found and fixed
+
+**No more filename talk-back.** Chat bubbles and what `GrammarEngine` sees no longer
+carry raw attachment filenames (`autumn-pick-<uuid>...`) — the bubble shows only the
+actual message text (the thumbnail/stack already shows what's attached), and Autumn
+gets a clean kind/count signal like "[2 images attached]" instead, so a reply can
+still reference that something was attached without ever surfacing or speaking a
+filename.
+
+**Stop/send toggle.** The send button now becomes a stop button whenever Autumn is
+either still processing *or* speaking the previous reply out loud — tapping it cancels
+the in-flight reply and halts TTS immediately, reverting straight back to a send
+button so a new message (including a "continue" follow-up) can go out right away.
+`isSpeaking` is now a real `@Published` property wired to TTS's actual start/finish
+callbacks rather than a non-reactive computed value, so the button genuinely updates
+when speech begins or ends.
+
+**Right rail (MIST/STAR/SHARD/SYS) fixed** — same centering bug already fixed on the
+left HUD column: a `VStack` with no `alignment:` defaults to `.center`, so
+different-width labels sat at different horizontal positions instead of a clean right
+edge. Set to `.trailing`, thinned the padding to match the left side, and gave each
+button its own color (cyan/gold/violet/green) instead of uniform gray.
+
+**The landscape mind-map bug — real root cause found.** `setupScene()` was
+unconditionally wiping and rebuilding the *entire* SceneKit scene graph every time
+`BRPNSceneView`'s `.onAppear` refired — which orientation changes do, since the
+portrait/landscape layout swap changes this view's position in the hierarchy. That
+wipe detached the mind map's own node group with no code path that ever reattached it,
+then rebuilt the buoyancy shells fresh and fully visible, with no way to know REFLEX
+MAP had been toggled on (`didSet` only fires on an actual value change, not a scene
+rebuild) — exactly why rotating reverted the view and why toggling off/on afterward
+didn't help either (the mind map object still existed, just detached from anything
+being rendered). Added a one-time guard so the scene graph only builds once per
+session; `presenceTimer`, which really does need to restart on every reappear since
+`teardown()` stops it, was carefully kept working outside that guard.
 
 ## Build 153 — new LOUNGE theme; stacked-deck image attachments
 

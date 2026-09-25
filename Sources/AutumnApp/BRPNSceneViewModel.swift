@@ -130,7 +130,39 @@ public final class BRPNSceneViewModel: ObservableObject {
     private let shellRadii: [Float] = [1.9, 1.4, 0.9]
 
     // MARK: — Setup  (JS initBRPN)
+    private var didSetupScene = false
+
     public func setupScene() {
+        // TF155: the actual landscape bug. This function used to run in
+        // full every time BRPNSceneView's .onAppear refired — which
+        // orientation changes do, since the portrait/landscape layout
+        // swap changes this view's position in the hierarchy. It
+        // unconditionally wiped every node in the scene, including
+        // detaching the mind map's own rootGroup with no code path that
+        // ever reattached it, then rebuilt the buoyancy shells fresh and
+        // visible — with no way to know REFLEX MAP had been toggled on,
+        // since didSet only fires on an actual value change, not a scene
+        // rebuild. That's why toggling off and back on didn't help either:
+        // mindMapScene was still non-nil, so applyMindMapVisibility just
+        // flipped .isHidden on a rootGroup that was no longer even
+        // attached to anything. sceneVM itself is a single, persistent
+        // @StateObject created once at the app root (see AutumnApp.swift)
+        // and never recreated by orientation changes — only the UIKit-side
+        // SCNView needs reattaching on reappear (makeUIView/updateUIView
+        // already do that via v.scene = vm.scene), not the scene graph
+        // itself. Guarded so the real setup work only ever happens once.
+        guard !didSetupScene else {
+            // Scene graph itself doesn't need rebuilding (see above), but
+            // presenceTimer was stopped by teardown() on .onDisappear and
+            // does need restarting every time this view reappears —
+            // invalidate-then-recreate is safe even if it's already nil.
+            presenceTimer?.invalidate()
+            presenceTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                Task { await self?.pollPresence() }
+            }
+            return
+        }
+        didSetupScene = true
         Self.shared = self
         scene.background.contents = UIColor.clear
 

@@ -189,7 +189,7 @@ struct MessageBubble: View {
                         }
                         Button {
                             chatVM.inputText = message.content
-                            Task { await chatVM.send() }
+                            chatVM.sendTapped()
                         } label: {
                             Label("Repost", systemImage: "arrow.counterclockwise")
                         }
@@ -301,7 +301,7 @@ struct InputBar: View {
             AskAutumnComposer(
                 text: $chatVM.inputText,
                 accent: UIColor.fromSwiftUI(themeVM.current.accent),
-                onSubmit: { Task { await chatVM.send() } },
+                onSubmit: { chatVM.isBusyOrSpeaking ? chatVM.stopProcessingOrSpeaking() : chatVM.sendTapped() },
                 measuredHeight: $composerHeight
             )
             .frame(height: composerHeight)
@@ -316,13 +316,17 @@ struct InputBar: View {
             .layoutPriority(1)
 
             Button {
-                Task { await chatVM.send() }
+                if chatVM.isBusyOrSpeaking {
+                    chatVM.stopProcessingOrSpeaking()
+                } else {
+                    chatVM.sendTapped()
+                }
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
+                Image(systemName: chatVM.isBusyOrSpeaking ? "stop.circle.fill" : "arrow.up.circle.fill")
                     .font(.system(size: 34))
-                    .foregroundColor(canSend ? themeVM.current.accent : themeVM.current.textSecondary)
+                    .foregroundColor(chatVM.isBusyOrSpeaking ? Color(hex: "#ff4466") : (canSend ? themeVM.current.accent : themeVM.current.textSecondary))
             }
-            .disabled(!canSend || chatVM.isThinking)
+            .disabled(!chatVM.isBusyOrSpeaking && !canSend)
             .padding(.leading, compact ? 4 : 0)
         }
         .padding(.horizontal, 16)

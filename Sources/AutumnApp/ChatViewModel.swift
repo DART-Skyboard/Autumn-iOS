@@ -10,6 +10,12 @@ public final class ChatViewModel: ObservableObject {
     @Published public var messages: [ChatMessage] = []
     @Published public var inputText = ""
     @Published public var isThinking = false
+    // TF154: real, reactive speaking state — AutumnTTS.isSpeaking is a
+    // plain computed property (not @Published), so SwiftUI never redrew on
+    // its own when speech started/stopped. Wired through TTS's existing
+    // onSpeakingStart/onSpeakingFinish closures instead of polling.
+    @Published public var isSpeaking = false
+    private var currentSendTask: Task<Void, Never>?
     @Published public var currentEmotion: EmotionType = .neutral
     @Published public var currentBuoyancy: Double = 0.5
     @Published public var currentTool: NaturalTool = .maze
@@ -25,6 +31,18 @@ public final class ChatViewModel: ObservableObject {
     private var reasoningProvider: any ReasoningProvider = LEATROnlyProvider()
     private let tts = AutumnTTS.shared
     private let maxMemory = 40
+
+    public init() {
+        // TF154: reflect TTS's real start/finish into a @Published property
+        // so the stop/send button actually redraws when speech begins or
+        // ends, rather than only when a new message is processed.
+        tts.onSpeakingStart = { [weak self] in
+            DispatchQueue.main.async { self?.isSpeaking = true }
+        }
+        tts.onSpeakingFinish = { [weak self] in
+            DispatchQueue.main.async { self?.isSpeaking = false }
+        }
+    }
 
     // TF115: AnthropicClaudeProvider lives in AutumnServices/ClaudeIntegration/,
     // isolated so it can be deleted entirely (this switch case included) without
@@ -88,9 +106,20 @@ public final class ChatViewModel: ObservableObject {
         inputText = ""
         pendingAttachments = []
 
-        let names = files.map(\.fileName).joined(separator: ", ")
-        let display = text.isEmpty ? "[attached \(names)]" : text
-        let grammar = files.isEmpty ? display : display + "\n\n[files: \(names)]"
+        // TF154: was echoing raw filenames (autumn-pick-<uuid>...) both in
+        // the chat bubble and into what GrammarEngine sees — ugly and,
+        // worse, spoken back by TTS. The bubble now shows only the actual
+        // message text (the thumbnail/stack already shows what's
+        // attached, no text placeholder needed); GrammarEngine gets a
+        // plain kind/count signal instead of names, e.g. "[2 images
+        // attached]", so a reply can still reference that something was
+        // attached without ever surfacing a filename.
+        let display = text
+        let kindCounts = Dictionary(grouping: files, by: { $0.kind }).mapValues(\.count)
+        let kindSummary = kindCounts.map { kind, count in
+            count == 1 ? "\(count) \(kind.rawValue)" : "\(count) \(kind.rawValue)s"
+        }.joined(separator: ", ")
+        let grammar = files.isEmpty ? display : (display.isEmpty ? "[\(kindSummary) attached]" : display + "\n\n[\(kindSummary) attached]")
 
         let userMsg = ChatMessage(role: .user, content: display, attachments: files)
         messages.append(userMsg)
@@ -133,6 +162,7 @@ public final class ChatViewModel: ObservableObject {
         if WeatherIntent.wantsWeather(text) {
             let weatherReply = await WeatherIntent.answer()
             let turn = await GrammarEngine.shared.processForChat(grammar, facts: ["_memoryOwner": memoryOwner])
+            guard !Task.isCancelled else { isThinking = false; sentienceState = .idle; return }
             currentEmotion = turn.emotion
             currentBuoyancy = turn.buoyancy
             currentTool = turn.tool
@@ -165,6 +195,17 @@ public final class ChatViewModel: ObservableObject {
         currentTool = turn.tool
         currentShell = turn.shell
         sentienceState = .thinking
+
+        // TF154: stop button cancels the wrapping Task — checked here so a
+        // reply that finished computing after the user hit stop never gets
+        // displayed or spoken. The computation itself already ran (LEATR
+        // processing isn't internally interruptible), but nothing from it
+        // reaches the chat or TTS once cancelled.
+        guard !Task.isCancelled else {
+            isThinking = false
+            sentienceState = .idle
+            return
+        }
 
         let inner = ChatMessage(role: .assistant, content: turn.innerThought, isInternal: true)
         messages.append(inner)
@@ -218,6 +259,29 @@ public final class ChatViewModel: ObservableObject {
             )
         }
         autosaveIfNeeded()
+    }
+
+    // MARK: — Stop / send toggle
+    // TF154: the composer's button is a send button when idle, and a stop
+    // button whenever there's something to interrupt — either Autumn is
+    // still processing, or she's speaking the previous reply out loud
+    // (someone who's heard enough of a long answer should be able to cut
+    // it off, not just wait it out). Tapping stop cancels the in-flight
+    // send() and halts speech; the button reverts to send immediately,
+    // ready to take a new message to pick up from there.
+    public var isBusyOrSpeaking: Bool { isThinking || isSpeaking }
+
+    public func sendTapped() {
+        currentSendTask = Task { await self.send() }
+    }
+
+    public func stopProcessingOrSpeaking() {
+        currentSendTask?.cancel()
+        currentSendTask = nil
+        tts.stop()
+        isThinking = false
+        isSpeaking = false
+        sentienceState = .idle
     }
 
     // MARK: — Voice input

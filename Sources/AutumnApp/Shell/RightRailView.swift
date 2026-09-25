@@ -9,15 +9,22 @@ public struct RightRailView: View {
 
     public var body: some View {
         let tabs = Group {
-            rail("MIST", selected: appNav.rightTab == .mist) { toggle(.mist) }
-            rail("STAR", selected: appNav.rightTab == .star) { toggle(.star) }
-            rail("SHARD", selected: appNav.rightTab == .shard) { toggle(.shard) }
-            rail("SYS", selected: appNav.rightTab == .sys) { toggle(.sys) }
+            rail("MIST", color: Color(hex: "#5fd4ff"), selected: appNav.rightTab == .mist) { toggle(.mist) }
+            rail("STAR", color: Color(hex: "#ffd25f"), selected: appNav.rightTab == .star) { toggle(.star) }
+            rail("SHARD", color: Color(hex: "#c48bff"), selected: appNav.rightTab == .shard) { toggle(.shard) }
+            rail("SYS", color: Color(hex: "#6dff9e"), selected: appNav.rightTab == .sys) { toggle(.sys) }
         }
         if axis == .horizontal {
             HStack(spacing: 4) { tabs }
         } else {
-            VStack(spacing: 8) {
+            // TF155: was VStack(spacing: 8) with no alignment (defaults to
+            // .center) — same bug as the left HUD column before it was
+            // fixed: different-width labels put each one's edge at a
+            // different horizontal position. .trailing flushes them all to
+            // the right edge, matching "align those right" directly.
+            // Vertical padding cut 10->5 to match the left column's
+            // thinner treatment.
+            VStack(alignment: .trailing, spacing: 8) {
                 tabs
                 Spacer()
             }
@@ -29,17 +36,16 @@ public struct RightRailView: View {
         appNav.rightTab = appNav.rightTab == t ? .none : t
     }
 
-    private func rail(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        let chrome = themeVM.chrome
-        return Button(action: action) {
+    private func rail(_ title: String, color: Color, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Text(title)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .tracking(0.8)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(selected ? chrome.accent : chrome.textSecondary)
-                .padding(.horizontal, 8).padding(.vertical, 10)
-                .moduleFrost(stroke: chrome.accent.opacity(selected ? 0.55 : 0.22), fill: selected ? 0.14 : 0.08)
+                .foregroundColor(color.opacity(selected ? 1.0 : 0.75))
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .moduleFrost(stroke: color.opacity(selected ? 0.6 : 0.3), fill: selected ? 0.16 : 0.09)
         }
     }
 }
