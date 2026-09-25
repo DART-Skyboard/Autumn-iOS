@@ -586,6 +586,12 @@ public final class BRPNSceneViewModel: ObservableObject {
             contacts.append((type: "vessel", lat: v.lat, lon: v.lon, alt: 0))
         }
         guard !contacts.isEmpty else { return }
+        // TF160: real per-type counts for this batch, into the same bus
+        // AnalyticsEventLogger already listens to for chat reflex events —
+        // aircraft/satellite/vessel data now actually reaches the export
+        // pipeline instead of stopping at the scene.
+        let counts = Dictionary(grouping: contacts, by: { $0.type }).mapValues(\.count)
+        for (kind, count) in counts { ReflexActivityBus.fireRealTimeFeed(kind: kind, count: count) }
         injectMantisContacts(contacts)
     }
 
@@ -817,6 +823,12 @@ public final class BRPNSceneViewModel: ObservableObject {
         applyLiveFeedVisibility()
         if liveFeedEnabled { rebuildSplines() }
         maybeAutumnStar()
+        // TF160: the fourth thing asked for alongside the three live feeds
+        // — the real state of user-to-user buoyancy interaction in the
+        // scene, not just this device's own reflexes. connectedUids
+        // reflects sessionGroupNodes right after this poll's add/remove
+        // pass above, so this is a genuine live count each cycle.
+        ReflexActivityBus.firePresence(connectedCount: connectedUids.count)
     }
 
     /// js _autumnJournalWatch — geometry always; archive only a real journal thought.

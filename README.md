@@ -2,9 +2,31 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 158 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 159 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 159 — all four real-time feeds now reach the export; layering groups by occurrence type
+
+**Aircraft, satellite, vessel, and presence data now actually logged.** Confirmed
+directly beforehand that `AnalyticsEventLogger` had zero connection to
+`injectMantisContacts` — the real-time feed data animating in the scene never reached
+analytics at all, only chat-driven reflex stages did. Fixed at the source: the mantis
+contact injection site now fires one real event per feed type per batch (actual counts,
+not per-contact spam), and `pollPresence()` fires the real connected-user count each
+cycle — the fourth piece, actual user-to-user presence in the scene, not just this
+device's own activity. All four route through the same `ReflexActivityBus` →
+`AnalyticsEventLogger` pipeline the chat reflexes already used, so the export's existing
+layering logic picks them up automatically.
+
+**Layering now groups by occurrence type**, not raw chronological order. The previous
+version filled the path in pure arrival-time order, which could interleave unrelated
+categories at adjacent path positions. Events are now grouped by their occurrence type
+first (category+label), keeping each type's original first-occurrence order relative to
+other types, then that grouped sequence feeds through the same path-filling logic —
+same-type events land contiguously along the path, and if one type alone has more
+events than the path can hold, its own overflow continues into the next layer before
+the next type begins, rather than everything reshuffled by arrival time.
 
 ## Build 158 — the real reason solve never showed a path, plus layered overflow for the export data
 

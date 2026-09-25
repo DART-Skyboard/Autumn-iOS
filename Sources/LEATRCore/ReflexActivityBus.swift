@@ -30,6 +30,14 @@ public enum ReflexActivityBus {
     public static let toolNotificationName = Notification.Name("LeatrReflexTool")
     public static let mathOpNotificationName = Notification.Name("LeatrReflexMathOp")
     public static let emotionNotificationName = Notification.Name("LeatrReflexEmotion")
+    // TF160: the three live real-time feeds animating in the BRPN scene
+    // (aircraft/ADS-B, satellite/orbital, maritime vessels) had no
+    // connection at all to analytics logging before this — only chat-driven
+    // reflex stages were captured. Plus presence, for the fourth thing
+    // asked for: the actual state of user-to-user buoyancy node
+    // interactions in the scene, not just individual reflexes.
+    public static let realTimeFeedNotificationName = Notification.Name("LeatrRealTimeFeed")
+    public static let presenceNotificationName = Notification.Name("LeatrPresence")
 
     /// Post a real pipeline stage. Safe to call from any thread/actor.
     public static func fire(_ stage: ReflexStage) {
@@ -63,5 +71,22 @@ public enum ReflexActivityBus {
     /// emotion, not a new invented mapping.
     public static func fireEmotion(_ emotion: String, accentHex: String) {
         NotificationCenter.default.post(name: emotionNotificationName, object: nil, userInfo: ["emotion": emotion, "accentHex": accentHex])
+    }
+
+    /// Post one real-time-feed injection batch — fired once per batch
+    /// (not per individual contact, since a batch can be dozens of
+    /// aircraft/satellites/vessels at once and per-contact events would
+    /// flood the log for no real analytical benefit). Carries the real
+    /// counts actually injected into the scene for that feed type.
+    public static func fireRealTimeFeed(kind: String, count: Int) {
+        NotificationCenter.default.post(name: realTimeFeedNotificationName, object: nil, userInfo: ["kind": kind, "count": count])
+    }
+
+    /// Post the real state of user-to-user presence in the scene — how
+    /// many other live buoyancy nodes are actually connected and
+    /// interacting right now, the fourth thing asked for alongside the
+    /// three live feeds above.
+    public static func firePresence(connectedCount: Int) {
+        NotificationCenter.default.post(name: presenceNotificationName, object: nil, userInfo: ["connectedCount": connectedCount])
     }
 }

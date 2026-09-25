@@ -221,11 +221,35 @@ public struct AnalyticsExportPanel: View {
             : await AnalyticsEventLogger.shared.fetchRange(from: rangeStart, to: rangeEnd)
 
         let path = maze.solutionCells()
+        // TF160: was pure chronological round-robin — the actual ask is
+        // that events of the SAME occurrence type stay grouped together
+        // as they fill the path, with a new layer (depth) only starting
+        // when the current one genuinely runs out of room — not that
+        // different types get interleaved by raw arrival time. Groups
+        // events by (category,label) first, keeping group order to each
+        // type's own first real occurrence (so the layering still
+        // reflects the actual order of operations/patterns as they first
+        // appeared), then feeds that grouped sequence through the same
+        // path-filling/overflow logic. Same-type events land contiguously
+        // along the path and, if one type alone has more events than the
+        // path can hold, its own overflow continues into the next layer
+        // before the next type begins — exactly "start back at the top on
+        // a new layer for the next category" rather than everything
+        // reshuffled by time.
+        var groupOrder: [String] = []
+        var groups: [String: [AnalyticsEvent]] = [:]
+        for event in events {
+            let key = "\(event.category):\(event.label)"
+            if groups[key] == nil { groupOrder.append(key); groups[key] = [] }
+            groups[key]?.append(event)
+        }
+        let groupedEvents = groupOrder.flatMap { groups[$0] ?? [] }
+
         // layers[layerIndex][cellIndex] = events assigned to that cell in that layer
         var layers: [[[AnalyticsEvent]]] = path.isEmpty ? [] : [Array(repeating: [], count: path.count)]
         if !path.isEmpty {
-            for (i, event) in events.enumerated() {
-                let cellIdx = min(i * path.count / max(events.count, 1), path.count - 1)
+            for (i, event) in groupedEvents.enumerated() {
+                let cellIdx = min(i * path.count / max(groupedEvents.count, 1), path.count - 1)
                 var layerIdx = 0
                 while layers[layerIdx][cellIdx].count >= perCellCapacity {
                     layerIdx += 1

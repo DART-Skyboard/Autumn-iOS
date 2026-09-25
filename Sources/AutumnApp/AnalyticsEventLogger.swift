@@ -35,6 +35,20 @@ public final class AnalyticsEventLogger {
             guard let emotion = note.userInfo?["emotion"] as? String else { return }
             self?.record(category: "emotion", label: emotion)
         })
+        // TF160: the three live real-time feeds (aircraft/satellite/vessel)
+        // and presence — previously had no path into analytics logging at
+        // all. "kind" carries which feed (aircraft/satellite/vessel);
+        // label is the count actually injected, matching the same
+        // category/label shape everything else here already uses so the
+        // export's grouping logic doesn't need a special case for these.
+        observers.append(nc.addObserver(forName: ReflexActivityBus.realTimeFeedNotificationName, object: nil, queue: nil) { [weak self] note in
+            guard let kind = note.userInfo?["kind"] as? String, let count = note.userInfo?["count"] as? Int else { return }
+            self?.record(category: "realtime_feed", label: kind, detail: "\(count)")
+        })
+        observers.append(nc.addObserver(forName: ReflexActivityBus.presenceNotificationName, object: nil, queue: nil) { [weak self] note in
+            guard let count = note.userInfo?["connectedCount"] as? Int else { return }
+            self?.record(category: "presence", label: "connected_users", detail: "\(count)")
+        })
     }
 
     deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
