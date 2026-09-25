@@ -371,6 +371,11 @@ public final class AuthViewModel: NSObject, ObservableObject {
         githubConnected = true
         githubUsername  = ghUser
         username = ghUser
+        // TF157: AutumnServices can't import AutumnApp (would be circular),
+        // so a notification is how a fresh sign-in tells
+        // AnalyticsExportMaze to regenerate for the new session, rather
+        // than a direct call.
+        NotificationCenter.default.post(name: .autumnDidSignIn, object: nil)
         if let avatar = profile.avatarURL {
             githubAvatarURL = avatar
             KeychainService.shared.save(key: "github_avatar_url", value: avatar.absoluteString)
@@ -733,4 +738,11 @@ public struct SavedAccount: Codable, Identifiable {
     public let id: String
     public let displayName: String
     public var avatarURL: String? = nil
+}
+
+extension Notification.Name {
+    /// Fired once per fresh GitHub OAuth sign-in success — AutumnServices
+    /// can't import AutumnApp, so this is how AnalyticsExportMaze (in
+    /// AutumnApp) learns to regenerate for the new session.
+    public static let autumnDidSignIn = Notification.Name("autumnDidSignIn")
 }

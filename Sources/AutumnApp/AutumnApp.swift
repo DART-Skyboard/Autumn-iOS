@@ -17,6 +17,9 @@ struct AutumnApp: App {
     @StateObject private var circuit   = AdminCircuitMonitor.shared
 
     let persistence = PersistenceController.shared
+    // TF157: referencing .shared once is enough to trigger AnalyticsEventLogger's
+    // init() and register its ReflexActivityBus observers for the whole app session.
+    private let analyticsLogger = AnalyticsEventLogger.shared
 
     init() {
         AutumnAutonomy.shared.registerTasks()

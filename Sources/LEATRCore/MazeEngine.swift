@@ -16,7 +16,7 @@ import Foundation
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// JS: cell `{top,bottom,left,right,front,back,visited}` — true = wall present
-public struct OrbMazeCell {
+public struct OrbMazeCell: Codable {
     public var top = true
     public var bottom = true
     public var left = true

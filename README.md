@@ -2,9 +2,44 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 155 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 156 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 156 — the analytics export system: 4th admin tab, real data collection, fixed maze, Face ID, zip export
+
+New **ANALYTICS** tab in the admin console (4th, after DATA/ASH/MESSAGES).
+
+**Real, persistent data collection, not just session memory.** New `AnalyticsEventLogger`
+listens to the same `ReflexActivityBus` events already driving REFLEX MAP's live
+animation, and now also logs each one to a daily file
+(`ashtree/analytics/{yyyy-MM-dd}.json`, via the same GAS append path journal/study-queue
+already use) — so a date-range export has genuine collected history to draw from, not
+just whatever happened since the app launched.
+
+**A separate, fixed maze purely for export structure** — confirmed and reused
+`MazeEngine`'s real 3D generator/solver directly (`orbGenMaze`/`orbSolveMaze`, already
+fully 3D, already exactly this algorithm) rather than reimplementing maze logic. New
+`AnalyticsExportMaze` is a completely independent instance from the live BRPN scene's
+own maze: default 10×10×10, adjustable 10–50 per axis, persisted across app launches
+within a session, regenerating automatically only on a fresh sign-in (`AuthViewModel`
+posts a notification — it lives in `AutumnServices`, which can't import `AutumnApp`
+directly). Manual regeneration is genuinely **Face ID gated** via `LocalAuthentication`
+(falls back to device passcode if Face ID/Touch ID isn't enrolled).
+
+**Real 3D visualization with true camera-orbit controls** — a wireframe cube sized to
+the maze's actual dimensions, drag to rotate, pinch to zoom, plus a SOLVE toggle that
+lights up the maze's real solution path from entrance to exit.
+
+**The actual export**: gathers events (either the current session's in-memory events,
+or a real fetched date range), then nests them in chronological order one-per-cell
+along the maze's real solution path — when there are more events than path cells, later
+ones group onto the last cells rather than being dropped, matching "start grouping
+things" directly. Serializes to JSON, and since iOS has no built-in zip API, new
+`MiniZip` builds a genuine standard `.zip` (real DEFLATE compression via the
+`Compression` framework, proper CRC32, a real local/central-directory structure any
+standard tool can open) — not just a renamed JSON file. Hitting export immediately
+opens the share sheet so it saves straight to the device.
 
 ## Build 155 — system message editor: profile access, images, real link tool
 
