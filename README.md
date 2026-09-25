@@ -2,9 +2,36 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 156 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 157 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 157 — real maze geometry, instant/animated solve, inline generate, cube-as-container export
+
+Confirmed from the screenshots exactly what was missing — checked the live BRPN scene's
+own maze code specifically, as asked, rather than the simpler generator this started
+with. `buildOrbMazeGeometry()` actually uses `LEMACEngineASH.generateCubic`/`solveCubic`
+(randomized far-apart start/end openings, a real perimeter shell) plus
+`MazeEngine.cubicShellAndPassageVerts` for genuine per-cell wall and passage geometry —
+rebuilt the export maze on that exact system instead, copied and made fully independent.
+
+**Real wall geometry now**, not just an outer box — shell + internal passages rendered
+the same way the live maze does, plus green/red start/end markers at the actual punched
+openings.
+
+**Instant and animated solve, both real** — instant reveals the whole path at once;
+animated steps it in over time via the same reveal-count mechanism, both driving the
+same path-node visibility the live maze uses.
+
+**Generate simplified per direct instruction** — Face ID requirement removed entirely,
+and the dimension fields now expand inline on the same frosted panel instead of opening
+a separate sheet.
+
+**Export restructured**: the cube is now the actual full container — every cell's wall
+state is included, addressable by (x,y,z) — with the solution path layered on top as a
+fast-access index into it, entrance/exit markers included, events nested one-per-path-
+cell in chronological order. The cube is the casing; the path is the quick way to the
+data actually worth pulling for research, not the whole structure scanned every time.
 
 ## Build 156 — the analytics export system: 4th admin tab, real data collection, fixed maze, Face ID, zip export
 

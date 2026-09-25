@@ -54,7 +54,7 @@ public struct OrbMazeCell: Codable {
 }
 
 /// JS: `{x,y,z}` maze coordinate
-public struct MazePt: Equatable, Hashable {
+public struct MazePt: Equatable, Hashable, Codable {
     public var x: Int
     public var y: Int
     public var z: Int
@@ -460,7 +460,7 @@ public enum LEMACEngineASH {
         public var face: String
         public init(x: Int, y: Int, face: String) { self.x = x; self.y = y; self.face = face }
     }
-    public struct Perimeter3D {
+    public struct Perimeter3D: Codable {
         public var x: Int
         public var y: Int
         public var z: Int
@@ -477,7 +477,7 @@ public enum LEMACEngineASH {
             self.grid = grid; self.start = start; self.end = end; self.w = w; self.h = h
         }
     }
-    public struct CubicResult {
+    public struct CubicResult: Codable {
         public var grid: [[[OrbMazeCell]]]
         public var start: Perimeter3D
         public var end: Perimeter3D
