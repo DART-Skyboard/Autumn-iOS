@@ -2,9 +2,34 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 161 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 162 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 162 — found the real viewer repo; iOS now writes a ready-to-load live export
+
+**Found the actual session-cube viewer source**, using the access provided: it's
+`DART-Skyboard/Ariel`, under `session-cube-src/` — a real React/TypeScript/Vite app, not
+guessable from search. Read its actual `RawExport` TypeScript type directly rather than
+assume, and confirmed something worth stating plainly: it matches this app's own export
+JSON almost field-for-field, arrived at independently without ever having seen that file.
+Also confirmed the existing `stackDims`/`selectedIds`/`multi`/`assignStacks` architecture
+already does exactly the cube-stack behavior described (fill order, new-stack-on-full,
+select all/deselect) — that part didn't need building, it already exists.
+
+**iOS now writes a ready-to-load live export** — rather than duplicate the viewer's
+maze-solving/path logic in TypeScript, the one real nesting implementation stays on the
+Swift side (already built, already CI-verified), and `LiveFeedController` now writes a
+`RawExport`-shaped `latest-export.json` after every successful chunk flush, sourced from
+a rolling buffer of recent live events. This is deliberately simpler than the full
+grouped-by-type/multi-layer export (single layer, straightforward distribution) — a live
+"what's happening right now" preview, not the archival version, which stays exactly
+what the LIVE FEED export button already produces.
+
+**Next, on the Ariel side**: add the actual LIVE FEED toggle button, a fetch against this
+new file, loading it through the viewer's own existing `cubeFromRaw()`, and the green
+glow on whichever cube stack is the live one — real work against real, now-confirmed
+files, continuing directly from here.
 
 ## Build 161 — fixed the live feed self-disabling bug; honest status on the web viewer
 

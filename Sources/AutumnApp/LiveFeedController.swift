@@ -203,6 +203,9 @@ public final class LiveFeedController: ObservableObject {
         if ok {
             currentChunkBytes += data.count
             statusText = "chunk \(currentChunkIndex), \(currentChunkBytes / 1024) KB"
+            recentLiveEvents.append(contentsOf: batch)
+            if recentLiveEvents.count > 4000 { recentLiveEvents.removeFirst(recentLiveEvents.count - 4000) }
+            await writeLiveExport()
         } else {
             // TF161: resilience — if the write genuinely failed (a real
             // GitHub/GAS error, not just this call's own retry), put the
@@ -211,6 +214,64 @@ public final class LiveFeedController: ObservableObject {
             pendingChunkEvents = batch + pendingChunkEvents
             statusText = "write failed, will retry"
         }
+    }
+
+    // MARK: — Live preview export for the web viewer
+    //
+    // TF163: found the real viewer repo (Ariel/session-cube-src) and
+    // confirmed its RawExport TypeScript type directly — it matches this
+    // app's own export JSON almost field-for-field, independently arrived
+    // at without ever having seen that file. Rather than duplicate the
+    // web viewer's maze-solving/path logic in TypeScript, this keeps the
+    // one real nesting implementation on the Swift side (already built,
+    // already verified via CI) and just periodically writes a ready-to-
+    // load RawExport-shaped file the viewer can fetch directly, the same
+    // way it already loads any other file — no second pipeline on the web
+    // side to maintain. This is deliberately a simpler, single-layer
+    // distribution for a live "what's happening right now" preview; the
+    // fuller grouped-by-type, multi-layer version stays exactly what the
+    // manual/live EXPORT button in the admin panel produces for real
+    // archival use.
+    private var recentLiveEvents: [[String: Any]] = []
+
+    private func writeLiveExport() async {
+        guard let cubic = masterMaze else { return }
+        let solution = LEMACEngineASH.solveCubic(cubic)
+        guard !solution.isEmpty else { return }
+        var buckets: [[[String: Any]]] = Array(repeating: [], count: solution.count)
+        for (i, event) in recentLiveEvents.enumerated() {
+            buckets[min(i * solution.count / max(recentLiveEvents.count, 1), solution.count - 1)].append(event)
+        }
+        var pathJSON: [[String: Any]] = []
+        for (i, pt) in solution.enumerated() {
+            pathJSON.append(["order": i, "x": pt.x, "y": pt.y, "z": pt.z, "events": buckets[i]])
+        }
+        var cubeCells: [[String: Any]] = []
+        for z in 0..<masterMazeDepth {
+            for y in 0..<masterMazeHeight {
+                for x in 0..<masterMazeWidth {
+                    let c = cubic.grid[z][y][x]
+                    cubeCells.append(["x": x, "y": y, "z": z, "walls": ["top": c.top, "bottom": c.bottom, "left": c.left, "right": c.right, "front": c.front, "back": c.back]])
+                }
+            }
+        }
+        func openingJSON(_ p: LEMACEngineASH.Perimeter3D) -> [String: Any] { ["x": p.x, "y": p.y, "z": p.z, "face": p.face] }
+        let root: [String: Any] = [
+            "exportedAt": ISO8601DateFormatter().string(from: Date()),
+            "mode": "LIVE FEED",
+            "cube": [
+                "width": masterMazeWidth, "height": masterMazeHeight, "depth": masterMazeDepth,
+                "entrance": openingJSON(cubic.start), "exit": openingJSON(cubic.end),
+                "cells": cubeCells
+            ],
+            "pathIndex": [["layer": 0, "path": pathJSON]],
+            "totalEvents": recentLiveEvents.count
+        ]
+        guard JSONSerialization.isValidJSONObject(root) else { return }
+        _ = await AutumnGASClient.shared.ashwriteReplace(
+            path: "ashtree/analytics-live/\(masterMazeId)/latest-export.json",
+            uid: "live-feed", payload: root, message: "live export refresh"
+        )
     }
 
     private func chunkPath(index: Int) -> String {
