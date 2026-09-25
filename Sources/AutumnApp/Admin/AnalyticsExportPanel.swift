@@ -6,10 +6,15 @@ import AutumnServices
 public struct AnalyticsExportPanel: View {
     @EnvironmentObject var themeVM: ThemeViewModel
     @StateObject private var maze = AnalyticsExportMaze.shared
+    @StateObject private var liveFeed = LiveFeedController.shared
     @State private var showGenerateInline = false
     @State private var genWidth = "10"
     @State private var genHeight = "10"
     @State private var genDepth = "10"
+    @State private var showLiveGenerateInline = false
+    @State private var liveGenWidth = "10"
+    @State private var liveGenHeight = "10"
+    @State private var liveGenDepth = "10"
     @State private var isSolving = false
     @State private var animateSolveStep = 0
     @State private var animTimer: Timer?
@@ -21,12 +26,13 @@ public struct AnalyticsExportPanel: View {
     @State private var exportedFileURL: URL?
     @State private var showShareSheet = false
 
-    enum ExportMode: String, CaseIterable { case session = "THIS SESSION", range = "DATE RANGE" }
+    enum ExportMode: String, CaseIterable { case session = "THIS SESSION", range = "DATE RANGE", live = "LIVE FEED" }
 
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
+                liveFeedCard
 
                 MazeOrbitSceneView(maze: maze, isSolving: $isSolving, revealCount: $animateSolveStep)
                     .frame(height: 260)
@@ -146,6 +152,70 @@ public struct AnalyticsExportPanel: View {
         return "Fixed \(maze.width)×\(maze.height)×\(maze.depth) cube — generated \(genStr). Regenerates automatically on a fresh sign-in."
     }
 
+    /// TF161: separate from the manual maze/export above entirely — its
+    /// own master maze, its own toggle, its own chunk stream. Turning this
+    /// on writes the shared flag every active session checks, so this
+    /// isn't a "record what I do" switch, it's "the sentient journal is
+    /// active" for everyone, matching what was actually asked for.
+    private var liveFeedCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("LIVE FEED").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundColor(.white.opacity(0.6))
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { liveFeed.isEnabled },
+                    set: { newValue in Task { await liveFeed.setEnabled(newValue) } }
+                ))
+                .labelsHidden()
+                .tint(Color(hex: "#6dff9e"))
+            }
+            Text(liveFeed.isEnabled
+                 ? "Active — collecting from every signed-in session, chunk \(liveFeed.currentChunkIndex) (\(liveFeed.currentChunkBytes / 1024) KB). Closes at 5 MB and starts a new chunk automatically."
+                 : "Off. When enabled, every active session's real-time scene activity is continuously logged in 5 MB chunks under its own master maze, independent of the manual export above.")
+                .font(.system(size: 10)).foregroundColor(.white.opacity(0.5))
+
+            if liveFeed.masterMaze != nil {
+                Text("Master maze: \(liveFeed.masterMazeWidth)×\(liveFeed.masterMazeHeight)×\(liveFeed.masterMazeDepth) — \(liveFeed.masterMazeId)")
+                    .font(.system(size: 9, design: .monospaced)).foregroundColor(.white.opacity(0.4))
+            }
+
+            Button {
+                withAnimation { showLiveGenerateInline.toggle() }
+                liveGenWidth = "\(liveFeed.masterMazeWidth)"; liveGenHeight = "\(liveFeed.masterMazeHeight)"; liveGenDepth = "\(liveFeed.masterMazeDepth)"
+            } label: {
+                Label(showLiveGenerateInline ? "CANCEL" : "NEW MASTER MAZE", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundColor(Color(hex: "#ff9d6a"))
+
+            if showLiveGenerateInline {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Replaces the master maze — existing chunks stay under the old one; a fresh chunk stream starts under the new one.")
+                        .font(.system(size: 9)).foregroundColor(.white.opacity(0.45))
+                    HStack(spacing: 8) {
+                        dimField("W", $liveGenWidth); dimField("H", $liveGenHeight); dimField("D", $liveGenDepth)
+                    }
+                    Button("GENERATE") {
+                        let w = Int(liveGenWidth) ?? 10, h = Int(liveGenHeight) ?? 10, d = Int(liveGenDepth) ?? 10
+                        Task { await liveFeed.regenerateMasterMaze(width: w, height: h, depth: d) }
+                        showLiveGenerateInline = false
+                    }
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+                    .background(Color(hex: "#6dff9e"))
+                    .cornerRadius(6)
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(8)
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(8)
+    }
+
     private var exportCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("EXPORT").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundColor(.white.opacity(0.6))
@@ -153,7 +223,7 @@ public struct AnalyticsExportPanel: View {
                 ForEach(ExportMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
-            if exportMode == .range {
+            if exportMode == .range || exportMode == .live {
                 DatePicker("From", selection: $rangeStart, displayedComponents: .date)
                 DatePicker("To", selection: $rangeEnd, in: rangeStart..., displayedComponents: .date)
                     .font(.system(size: 12))
@@ -216,11 +286,38 @@ public struct AnalyticsExportPanel: View {
     private func runExport() async {
         isExporting = true
         exportStatus = "Gathering analytics…"
-        let events = exportMode == .session
-            ? AnalyticsEventLogger.shared.eventsThisSession()
-            : await AnalyticsEventLogger.shared.fetchRange(from: rangeStart, to: rangeEnd)
+        let events: [AnalyticsEvent]
+        var pathSource: [MazePt]
+        var cubeForExport: LEMACEngineASH.CubicResult?
+        var startOpeningForExport: LEMACEngineASH.Perimeter3D?
+        var endOpeningForExport: LEMACEngineASH.Perimeter3D?
+        var dimsForExport = (maze.width, maze.height, maze.depth)
 
-        let path = maze.solutionCells()
+        switch exportMode {
+        case .session:
+            events = AnalyticsEventLogger.shared.eventsThisSession()
+            pathSource = maze.solutionCells()
+            cubeForExport = maze.cubic; startOpeningForExport = maze.startOpening; endOpeningForExport = maze.endOpening
+        case .range:
+            events = await AnalyticsEventLogger.shared.fetchRange(from: rangeStart, to: rangeEnd)
+            pathSource = maze.solutionCells()
+            cubeForExport = maze.cubic; startOpeningForExport = maze.startOpening; endOpeningForExport = maze.endOpening
+        case .live:
+            // TF161: compiles the live feed's own chunk files under its
+            // own master maze — a genuinely different data source and
+            // structure from the manual export above, per direct
+            // instruction that these stay independent.
+            events = await fetchLiveFeedEvents(from: rangeStart, to: rangeEnd)
+            if let cubic = liveFeed.masterMaze {
+                pathSource = LEMACEngineASH.solveCubic(cubic)
+                cubeForExport = cubic; startOpeningForExport = cubic.start; endOpeningForExport = cubic.end
+                dimsForExport = (liveFeed.masterMazeWidth, liveFeed.masterMazeHeight, liveFeed.masterMazeDepth)
+            } else {
+                pathSource = []
+            }
+        }
+        let path = pathSource
+
         // TF160: was pure chronological round-robin — the actual ask is
         // that events of the SAME occurrence type stay grouped together
         // as they fill the path, with a new layer (depth) only starting
@@ -280,12 +377,13 @@ public struct AnalyticsExportPanel: View {
         }
 
         // Full cube container: every cell's wall state, addressable by
-        // (x,y,z) — the casing around the path index above.
+        // (x,y,z) — the casing around the path index above. Uses whichever
+        // maze this export mode actually pulled from (manual or live).
         var cubeCells: [[String: Any]] = []
-        if let grid = maze.cubic?.grid {
-            for z in 0..<maze.depth {
-                for y in 0..<maze.height {
-                    for x in 0..<maze.width {
+        if let grid = cubeForExport?.grid {
+            for z in 0..<dimsForExport.2 {
+                for y in 0..<dimsForExport.1 {
+                    for x in 0..<dimsForExport.0 {
                         let c = grid[z][y][x]
                         cubeCells.append([
                             "x": x, "y": y, "z": z,
@@ -299,13 +397,13 @@ public struct AnalyticsExportPanel: View {
         let root: [String: Any] = [
             "exportedAt": ISO8601DateFormatter().string(from: Date()),
             "mode": exportMode.rawValue,
-            "rangeStart": exportMode == .range ? ISO8601DateFormatter().string(from: rangeStart) : NSNull(),
-            "rangeEnd": exportMode == .range ? ISO8601DateFormatter().string(from: rangeEnd) : NSNull(),
+            "rangeStart": exportMode != .session ? ISO8601DateFormatter().string(from: rangeStart) : NSNull(),
+            "rangeEnd": exportMode != .session ? ISO8601DateFormatter().string(from: rangeEnd) : NSNull(),
             "cube": [
-                "width": maze.width, "height": maze.height, "depth": maze.depth,
-                "generatedAt": maze.generatedAt.map { ISO8601DateFormatter().string(from: $0) } ?? NSNull(),
-                "entrance": openingJSON(maze.startOpening),
-                "exit": openingJSON(maze.endOpening),
+                "width": dimsForExport.0, "height": dimsForExport.1, "depth": dimsForExport.2,
+                "mazeId": exportMode == .live ? liveFeed.masterMazeId : "",
+                "entrance": openingJSON(startOpeningForExport),
+                "exit": openingJSON(endOpeningForExport),
                 "cells": cubeCells
             ],
             "pathIndex": pathLayersJSON,
@@ -333,6 +431,31 @@ public struct AnalyticsExportPanel: View {
             exportStatus = "Export failed writing file."
         }
         isExporting = false
+    }
+
+    /// TF161: fetches every chunk file under the live feed's current
+    /// master maze, filters to events actually inside the requested date
+    /// range, and flattens them into the same AnalyticsEvent shape the
+    /// rest of the export pipeline already works with — reusing the exact
+    /// same layering/nesting/zip logic for both manual and live exports
+    /// rather than a second export pipeline to maintain.
+    private func fetchLiveFeedEvents(from start: Date, to end: Date) async -> [AnalyticsEvent] {
+        var out: [AnalyticsEvent] = []
+        for path in liveFeed.allChunkPaths() {
+            let url = URL(string: "https://raw.githubusercontent.com/DART-Skyboard/leatr-ash/main/\(path)")!
+            guard let (data, resp) = try? await URLSession.shared.data(from: url),
+                  (resp as? HTTPURLResponse)?.statusCode == 200,
+                  let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+            else { continue }
+            for dict in arr {
+                guard let tsStr = dict["ts"] as? String, let ts = ISO8601DateFormatter().date(from: tsStr),
+                      ts >= start, ts <= end,
+                      let category = dict["category"] as? String, let label = dict["label"] as? String
+                else { continue }
+                out.append(AnalyticsEvent(ts: ts, category: category, label: label, detail: dict["detail"] as? String))
+            }
+        }
+        return out.sorted { $0.ts < $1.ts }
     }
 }
 

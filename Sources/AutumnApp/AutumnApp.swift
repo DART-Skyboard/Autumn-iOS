@@ -20,6 +20,9 @@ struct AutumnApp: App {
     // TF157: referencing .shared once is enough to trigger AnalyticsEventLogger's
     // init() and register its ReflexActivityBus observers for the whole app session.
     private let analyticsLogger = AnalyticsEventLogger.shared
+    // TF161: same pattern — activates LiveFeedController's remote-config
+    // polling and event subscription for the whole app session.
+    private let liveFeedController = LiveFeedController.shared
 
     init() {
         AutumnAutonomy.shared.registerTasks()
