@@ -2,9 +2,29 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 160 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 161 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 161 — fixed the live feed self-disabling bug; honest status on the web viewer
+
+**Found the real cause of the toggle turning itself off.** The 30-second remote-config
+poll was applying every read unconditionally — GitHub's Contents API (what the config
+read/write goes through) has real write-propagation lag, a pattern already confirmed
+elsewhere in this exact codebase, not a new guess. Toggle on, and a poll landing shortly
+after could read back a stale "enabled: false" from before the write had propagated,
+silently flipping the local state back off — exactly "toggles itself off after a while."
+Fixed by tracking the last local write and holding off applying a remote read for a
+window afterward, so a stale echo can't undo what was just set. Maze dimensions/grid
+still update freely during that window since a plain on/off toggle doesn't touch those.
+
+**On the web viewer at radicaldeepscale.com/session-cube/**: made a genuine second
+attempt to locate its actual source — searched directly, tried browsing the likely
+GitHub repos — and couldn't find the file. I don't want to guess at edits to a page I
+can't actually see; that's how a confidently-wrong change happens. If there's a more
+specific repo/path it lives under, that would let this move forward — otherwise this
+piece (the LIVE FEED toggle button and the green glow on the active cube stack) is
+still outstanding.
 
 ## Build 160 — the always-on live feed system
 

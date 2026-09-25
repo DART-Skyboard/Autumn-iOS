@@ -31,6 +31,18 @@ public final class LiveFeedController: ObservableObject {
     private let configPath = "ashtree/analytics-live/config.json"
     private var pendingChunkEvents: [[String: Any]] = []
     private var refreshTimer: Timer?
+    // TF162: the actual bug behind "toggles itself off after a while."
+    // GitHub's Contents API (what ashread/ashwrite go through) has real
+    // write-propagation lag — a stale read shortly after a write is a
+    // pattern already confirmed elsewhere in this exact codebase, not a
+    // one-off guess. The 30s poll was applying every remote read
+    // unconditionally, so a stale "enabled: false" read shortly after
+    // toggling on would silently overwrite the local state back off. This
+    // tracks the last local write and skips applying a remote read for a
+    // window afterward, giving the write time to actually propagate before
+    // a poll is trusted again.
+    private var lastLocalWriteTime: Date?
+    private let writeSettleWindow: TimeInterval = 90
     private var observers: [NSObjectProtocol] = []
 
     private init() {
@@ -79,9 +91,20 @@ public final class LiveFeedController: ObservableObject {
 
     private func refreshFromRemote() async {
         guard let obj = await AutumnGASClient.shared.ashread(path: configPath) as? [String: Any] else { return }
-        isEnabled = (obj["enabled"] as? Bool) ?? false
+        // TF162: within the settle window after our OWN write, a remote
+        // read is more likely to be a stale echo of the pre-write state
+        // than genuinely newer information — skip applying it rather than
+        // let it silently undo what was just set locally. Structural
+        // fields (maze dimensions/grid) are still safe to pick up even
+        // during the window, since those don't change from a plain on/off
+        // toggle; only `enabled` and the chunk index (which this device's
+        // own writes also drive) are held back.
+        let withinSettleWindow = lastLocalWriteTime.map { Date().timeIntervalSince($0) < writeSettleWindow } ?? false
+        if !withinSettleWindow {
+            isEnabled = (obj["enabled"] as? Bool) ?? false
+            currentChunkIndex = (obj["currentChunkIndex"] as? Int) ?? currentChunkIndex
+        }
         masterMazeId = (obj["mazeId"] as? String) ?? masterMazeId
-        currentChunkIndex = (obj["currentChunkIndex"] as? Int) ?? currentChunkIndex
         masterMazeWidth = (obj["width"] as? Int) ?? masterMazeWidth
         masterMazeHeight = (obj["height"] as? Int) ?? masterMazeHeight
         masterMazeDepth = (obj["depth"] as? Int) ?? masterMazeDepth
@@ -100,6 +123,7 @@ public final class LiveFeedController: ObservableObject {
     }
 
     private func writeConfig() async {
+        lastLocalWriteTime = Date()
         var payload: [String: Any] = [
             "enabled": isEnabled,
             "mazeId": masterMazeId,
