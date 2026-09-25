@@ -171,7 +171,7 @@ public struct AnalyticsExportPanel: View {
             }
             Text(liveFeed.isEnabled
                  ? "Active — collecting from every signed-in session, chunk \(liveFeed.currentChunkIndex) (\(liveFeed.currentChunkBytes / 1024) KB). Closes at 5 MB and starts a new chunk automatically."
-                 : "Off. When enabled, every active session's real-time scene activity is continuously logged in 5 MB chunks under its own master maze, independent of the manual export above.")
+                 : "Stopped. It's on by default the moment anyone signs in — this only pauses collection; resuming continues the same master maze and chunk position, it doesn't start fresh.")
                 .font(.system(size: 10)).foregroundColor(.white.opacity(0.5))
 
             if liveFeed.masterMaze != nil {

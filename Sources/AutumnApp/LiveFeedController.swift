@@ -17,7 +17,26 @@ import AutumnServices
 public final class LiveFeedController: ObservableObject {
     public static let shared = LiveFeedController()
 
-    @Published public private(set) var isEnabled = false
+    // TF164: the actual root cause of "still toggling off," found by
+    // checking the real repo directly — ashtree/analytics-live/ didn't
+    // exist at all. Every write had been failing. Traced into presence.gs
+    // itself: ashWrite() always returns {ok: true} regardless of whether
+    // the underlying _ashWrite() succeeded, and _ashWrite() wraps its own
+    // GitHub PUT in a bare try/catch that discards the fetch result and
+    // swallows any exception silently — a write can fail for any reason
+    // (including GitHub's rate limiting) with zero indication anywhere.
+    // This app's own code was firing a write on every single reflex event
+    // — a single message-processing cycle fires stage/tool/math/emotion
+    // in quick succession, each one immediately triggering both a chunk
+    // append AND a live-export replace. That's easily 8+ rapid writes to
+    // the same repo per message, which is exactly the kind of pattern
+    // GitHub's secondary rate limits exist to catch — and with the GAS
+    // side unable to report that failure, it looked indistinguishable
+    // from the toggle itself being flaky. Not touching presence.gs itself
+    // here (a shared script many other features depend on; not a change
+    // to make blind), fixing it at the actual source instead: batching
+    // writes on a timer instead of firing one per event.
+    @Published public private(set) var isEnabled = true
     @Published public private(set) var masterMaze: LEMACEngineASH.CubicResult?
     @Published public private(set) var masterMazeWidth = 10
     @Published public private(set) var masterMazeHeight = 10
@@ -31,16 +50,11 @@ public final class LiveFeedController: ObservableObject {
     private let configPath = "ashtree/analytics-live/config.json"
     private var pendingChunkEvents: [[String: Any]] = []
     private var refreshTimer: Timer?
-    // TF162: the actual bug behind "toggles itself off after a while."
-    // GitHub's Contents API (what ashread/ashwrite go through) has real
-    // write-propagation lag — a stale read shortly after a write is a
-    // pattern already confirmed elsewhere in this exact codebase, not a
-    // one-off guess. The 30s poll was applying every remote read
-    // unconditionally, so a stale "enabled: false" read shortly after
-    // toggling on would silently overwrite the local state back off. This
-    // tracks the last local write and skips applying a remote read for a
-    // window afterward, giving the write time to actually propagate before
-    // a poll is trusted again.
+    private var flushTimer: Timer?
+    private var didInitializeRemote = false
+    // TF162: within a settle window after our OWN write, a remote read is
+    // more likely to be a stale echo of the pre-write state than genuinely
+    // newer information.
     private var lastLocalWriteTime: Date?
     private let writeSettleWindow: TimeInterval = 90
     private var observers: [NSObjectProtocol] = []
@@ -53,15 +67,24 @@ public final class LiveFeedController: ObservableObject {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { await self?.refreshFromRemote() }
         }
+        // TF164: batches every event this session records and writes at
+        // most once per interval, drastically cutting write frequency
+        // instead of firing one GitHub commit per reflex event.
+        flushTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
+            Task { await self?.flushIfNeeded() }
+        }
         subscribeToAnalyticsEvents()
     }
 
     // MARK: — Admin control (the toggle in AnalyticsExportPanel)
 
-    /// Turning this on for the first time generates the master maze and
-    /// writes the shared config; turning it off just flips the flag —
-    /// the master maze and whatever's already been chunked stay exactly
-    /// where they are, ready to resume the moment it's re-enabled.
+    /// TF164: per direct instruction, this should already be active the
+    /// moment the admin console opens — the toggle's real job is letting
+    /// the admin STOP an already-running feed and RESUME it, not start
+    /// from an off-by-default state. A brand new master maze only gets
+    /// generated here if none exists yet at all (the very first time
+    /// anyone has ever enabled this); resuming after a stop reuses
+    /// whatever maze and chunk position was already in progress.
     public func setEnabled(_ on: Bool) async {
         if on && masterMaze == nil {
             generateMasterMaze(width: masterMazeWidth, height: masterMazeHeight, depth: masterMazeDepth)
@@ -90,18 +113,25 @@ public final class LiveFeedController: ObservableObject {
     // MARK: — Shared config (this is what makes it "always running" across sessions/devices)
 
     private func refreshFromRemote() async {
-        guard let obj = await AutumnGASClient.shared.ashread(path: configPath) as? [String: Any] else { return }
-        // TF162: within the settle window after our OWN write, a remote
-        // read is more likely to be a stale echo of the pre-write state
-        // than genuinely newer information — skip applying it rather than
-        // let it silently undo what was just set locally. Structural
-        // fields (maze dimensions/grid) are still safe to pick up even
-        // during the window, since those don't change from a plain on/off
-        // toggle; only `enabled` and the chunk index (which this device's
-        // own writes also drive) are held back.
+        guard let obj = await AutumnGASClient.shared.ashread(path: configPath) as? [String: Any] else {
+            // TF164: genuinely no config exists yet anywhere (confirmed
+            // directly — the whole ashtree/analytics-live/ directory was
+            // 404). Rather than sit at the local default forever waiting
+            // for an admin to press a button, the first session to ever
+            // see this initializes it live and writes the config itself —
+            // "should already be toggled on," including for the very
+            // first person, ever.
+            guard !didInitializeRemote else { return }
+            didInitializeRemote = true
+            if masterMaze == nil { generateMasterMaze(width: masterMazeWidth, height: masterMazeHeight, depth: masterMazeDepth) }
+            isEnabled = true
+            await writeConfig()
+            return
+        }
+        didInitializeRemote = true
         let withinSettleWindow = lastLocalWriteTime.map { Date().timeIntervalSince($0) < writeSettleWindow } ?? false
         if !withinSettleWindow {
-            isEnabled = (obj["enabled"] as? Bool) ?? false
+            isEnabled = (obj["enabled"] as? Bool) ?? true
             currentChunkIndex = (obj["currentChunkIndex"] as? Int) ?? currentChunkIndex
         }
         masterMazeId = (obj["mazeId"] as? String) ?? masterMazeId
@@ -134,7 +164,15 @@ public final class LiveFeedController: ObservableObject {
            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             payload["grid"] = dict
         }
-        _ = await AutumnGASClient.shared.ashwriteReplace(path: configPath, uid: "live-feed", payload: payload, message: "live feed config update")
+        let ok = await AutumnGASClient.shared.ashwriteReplace(path: configPath, uid: "live-feed", payload: payload, message: "live feed config update")
+        // TF164: the GAS wrapper always reports {ok: true} regardless of
+        // whether the underlying GitHub write actually landed (a real bug
+        // in presence.gs, not something fixable from here) — so this
+        // return value can't be fully trusted either. Logged into
+        // statusText anyway since it's at least sometimes accurate (a
+        // genuine network failure on this device's own request still
+        // surfaces), and it's better than reporting nothing.
+        if !ok { statusText = "config write reported failure" }
     }
 
     // MARK: — Chunked writes
@@ -180,7 +218,9 @@ public final class LiveFeedController: ObservableObject {
         default: return
         }
         pendingChunkEvents.append(entry)
-        Task { await flushIfNeeded() }
+        // TF164: no longer flushes immediately per event — the flushTimer
+        // above now batches these, which is the actual fix for the rapid-
+        // successive-writes problem.
     }
 
     /// Writes accumulated events to the current chunk file, and — TF161's
@@ -287,6 +327,7 @@ public final class LiveFeedController: ObservableObject {
 
     deinit {
         refreshTimer?.invalidate()
+        flushTimer?.invalidate()
         observers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 }

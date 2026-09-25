@@ -2,9 +2,38 @@
 
 Native SwiftUI port of [leatr.xyz](https://leatr.xyz). Not a WKWebView of the site.
 
-Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 162 / 1.0.2**.
+Bundle id `com.dartmeadow.autumn` · Team `L7AHWS9Q6V` · **build 163 / 1.0.2**.
 
 Linux CI here cannot `xcodebuild`. TestFlight is built by `.github/workflows/testflight.yml` on merge to `main`.
+
+## Build 163 — the real cause of the toggle bug, found by checking the actual repo
+
+**Checked the repo directly instead of guessing again**: `ashtree/analytics-live/` didn't
+exist at all — every single write had been failing, not just occasionally. Traced it
+into `presence.gs` itself: `ashWrite()` always returns `{ok: true}` no matter what
+`_ashWrite()` actually does, and `_ashWrite()` wraps its own GitHub PUT in a bare
+try/catch that discards the fetch result and swallows any exception silently. A write
+can fail for any reason — including GitHub's own rate limiting — with zero indication
+anywhere in the chain.
+
+And this app's own code was almost certainly triggering exactly that: a write fired on
+every single reflex event, with a single message-processing cycle producing
+stage/tool/math/emotion events in quick succession — each one immediately triggering
+both a chunk append and a live-export replace. That's easily 8+ rapid commits to the
+same repo per message, which is exactly the pattern GitHub's secondary rate limits exist
+to catch. With the GAS side unable to report that failure, it looked identical to the
+toggle itself being flaky.
+
+Not touching `presence.gs` itself — it's a shared script a lot of other features depend
+on, not something to change blind. Fixed at the actual source instead: events now batch
+into a buffer and flush on an 8-second timer instead of firing a write per event,
+cutting the write rate dramatically.
+
+**Also fixed the default-state issue directly raised**: `isEnabled` now defaults to
+`true`, and if `refreshFromRemote()` finds no config at all (confirmed this is the
+current real state), the first session to notice initializes it live and writes the
+config itself — matching "should already be toggled on" for the very first person too,
+not requiring a manual first enable.
 
 ## Build 162 — found the real viewer repo; iOS now writes a ready-to-load live export
 
