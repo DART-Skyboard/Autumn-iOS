@@ -94,10 +94,17 @@ public final class LiveFeedController: ObservableObject {
     }
 
     public func regenerateMasterMaze(width: Int, height: Int, depth: Int) async {
+        // Start the settle window before anything else so no remote read can
+        // race the new maze we are about to write (see refreshFromRemote).
+        lastLocalWriteTime = Date()
         generateMasterMaze(width: width, height: height, depth: depth)
         currentChunkIndex = 0
         currentChunkBytes = 0
         pendingChunkEvents = []
+        // A new maze starts empty. These are the last few thousand events from
+        // the previous maze and would otherwise be bucketed into the new
+        // maze's first export.
+        recentLiveEvents = []
         await writeConfig()
     }
 
@@ -130,14 +137,32 @@ public final class LiveFeedController: ObservableObject {
         }
         didInitializeRemote = true
         let withinSettleWindow = lastLocalWriteTime.map { Date().timeIntervalSince($0) < writeSettleWindow } ?? false
-        if !withinSettleWindow {
-            isEnabled = (obj["enabled"] as? Bool) ?? true
-            currentChunkIndex = (obj["currentChunkIndex"] as? Int) ?? currentChunkIndex
-        }
-        masterMazeId = (obj["mazeId"] as? String) ?? masterMazeId
+        // Within the window a remote read is more likely a stale echo of the
+        // config from before our own write than news, so it must not overwrite
+        // anything we just set. That has to include WHICH MAZE we are on: only
+        // enabled/chunk index were protected before, so pressing Generate could
+        // be undone a few seconds later by a stale read, and the next flush
+        // then filed the new events under the OLD maze's folder.
+        if withinSettleWindow { return }
+        isEnabled = (obj["enabled"] as? Bool) ?? true
+        currentChunkIndex = (obj["currentChunkIndex"] as? Int) ?? currentChunkIndex
+        let remoteMazeId = (obj["mazeId"] as? String) ?? masterMazeId
+        let mazeChanged = !masterMazeId.isEmpty && !remoteMazeId.isEmpty && remoteMazeId != masterMazeId
+        masterMazeId = remoteMazeId
         masterMazeWidth = (obj["width"] as? Int) ?? masterMazeWidth
         masterMazeHeight = (obj["height"] as? Int) ?? masterMazeHeight
         masterMazeDepth = (obj["depth"] as? Int) ?? masterMazeDepth
+        if mazeChanged {
+            // Another session generated a new maze. Take its STRUCTURE, not just
+            // its id: keeping the old structure under the new id filed events
+            // and exports under a maze they don't belong to, and made the
+            // export index a grid smaller than the new dimensions. Clearing it
+            // here lets the decode below replace it (and, if the remote grid
+            // can't be read, collecting pauses instead of mislabelling).
+            masterMaze = nil
+            recentLiveEvents = []
+            currentChunkBytes = 0
+        }
         // TF161: resumability — if this device doesn't have the master
         // maze's actual structure yet (fresh launch, or the flag was
         // enabled by someone else), regenerate it from the SAME stored
@@ -276,6 +301,9 @@ public final class LiveFeedController: ObservableObject {
 
     private func writeLiveExport() async {
         guard let cubic = masterMaze else { return }
+        guard cubic.grid.count == masterMazeDepth,
+              cubic.grid.first?.count == masterMazeHeight,
+              cubic.grid.first?.first?.count == masterMazeWidth else { return }
         let solution = LEMACEngineASH.solveCubic(cubic)
         guard !solution.isEmpty else { return }
         var buckets: [[[String: Any]]] = Array(repeating: [], count: solution.count)
