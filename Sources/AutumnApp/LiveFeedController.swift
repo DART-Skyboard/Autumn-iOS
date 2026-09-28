@@ -58,6 +58,16 @@ public final class LiveFeedController: ObservableObject {
     private var lastLocalWriteTime: Date?
     private let writeSettleWindow: TimeInterval = 90
     private var observers: [NSObjectProtocol] = []
+    // TF165: if masterMaze is nil when activity arrives -- a cold launch
+    // where the initial refreshFromRemote() hasn't resolved yet, or any
+    // other reason -- handleEvent used to just silently drop the event and
+    // wait for an admin to notice and press Generate. isBootstrapping and
+    // the queue below let the event itself be the wake-up signal instead,
+    // from ANY endpoint (any user's app instance, not just the admin
+    // console), without a burst of simultaneous events each racing to
+    // bootstrap their own maze.
+    private var isBootstrapping = false
+    private var eventsAwaitingBootstrap: [(Notification.Name, [AnyHashable: Any]?)] = []
 
     private init() {
         Task { await refreshFromRemote() }
@@ -219,7 +229,34 @@ public final class LiveFeedController: ObservableObject {
     }
 
     private func handleEvent(name: Notification.Name, userInfo: [AnyHashable: Any]?) {
-        guard isEnabled, masterMaze != nil else { return }
+        guard isEnabled else { return }
+        // Any activity -- from this device, another user's, or an external
+        // script -- is itself the signal to (re)start a session. Try to pick
+        // up whatever maze is already running elsewhere first (the normal
+        // resume path in refreshFromRemote, same one a cold launch already
+        // goes through), and only generate a genuinely new one if nothing
+        // recoverable actually exists. This event is queued and replayed
+        // once a maze exists rather than lost; later events arriving mid-
+        // bootstrap are queued too instead of each starting their own.
+        guard masterMaze != nil else {
+            eventsAwaitingBootstrap.append((name, userInfo))
+            if !isBootstrapping {
+                isBootstrapping = true
+                Task { [weak self] in
+                    guard let self else { return }
+                    await self.refreshFromRemote()
+                    if self.masterMaze == nil {
+                        self.generateMasterMaze(width: self.masterMazeWidth, height: self.masterMazeHeight, depth: self.masterMazeDepth)
+                        await self.writeConfig()
+                    }
+                    self.isBootstrapping = false
+                    let queued = self.eventsAwaitingBootstrap
+                    self.eventsAwaitingBootstrap = []
+                    for (queuedName, queuedInfo) in queued { self.handleEvent(name: queuedName, userInfo: queuedInfo) }
+                }
+            }
+            return
+        }
         var entry: [String: Any] = ["ts": ISO8601DateFormatter().string(from: Date())]
         switch name {
         case ReflexActivityBus.notificationName:
