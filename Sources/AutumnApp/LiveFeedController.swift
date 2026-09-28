@@ -190,6 +190,33 @@ public final class LiveFeedController: ObservableObject {
            let cubic = try? JSONDecoder().decode(LEMACEngineASH.CubicResult.self, from: gridData) {
             masterMaze = cubic
         }
+        await handleRegenerateRequestIfNewer(obj)
+    }
+
+    // TF167: lets the web admin console request a fresh master maze without
+    // needing to run the actual maze-generation algorithm itself (that only
+    // exists here, in LEMACEngineASH — a web port isn't a small thing to
+    // reproduce faithfully, and this doesn't require it at all). The web
+    // side just writes a plain request; whichever iOS instance next polls
+    // is the one that actually generates it and publishes the result, the
+    // same way any other device already does via regenerateMasterMaze.
+    //
+    // regenerateRequestedAt is compared against the CURRENT maze's own id,
+    // which already embeds its creation time (masterMazeId = "live-<secs>")
+    // — no separate "have I handled this yet" bookkeeping needed: once a
+    // fresh maze is generated, its own new timestamp is newer than the
+    // request that asked for it, so the same request can never fire twice.
+    // Units matter here and nowhere else in this file: the embedded id is
+    // whole SECONDS (Int(Date().timeIntervalSince1970)); a web page writes
+    // Date.now(), which is MILLISECONDS.
+    private func handleRegenerateRequestIfNewer(_ obj: [String: Any]) async {
+        guard let requestedAtMs = (obj["regenerateRequestedAt"] as? NSNumber)?.doubleValue,
+              let currentSecs = Int(masterMazeId.dropFirst("live-".count)) else { return }
+        guard requestedAtMs > Double(currentSecs) * 1000 else { return }
+        let w = (obj["regenerateRequestedWidth"] as? Int) ?? masterMazeWidth
+        let h = (obj["regenerateRequestedHeight"] as? Int) ?? masterMazeHeight
+        let d = (obj["regenerateRequestedDepth"] as? Int) ?? masterMazeDepth
+        await regenerateMasterMaze(width: w, height: h, depth: d)
     }
 
     private func writeConfig() async {
