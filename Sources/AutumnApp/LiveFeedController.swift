@@ -73,9 +73,14 @@ public final class LiveFeedController: ObservableObject {
         Task { await refreshFromRemote() }
         // Poll the shared flag periodically rather than only on launch —
         // any session should pick up an admin's toggle without needing a
-        // relaunch.
+        // relaunch. This is also the check that lets a truly idle feed wake
+        // itself from REMOTE activity with zero local events on this
+        // device — see checkRemotePresenceAndWakeIfNeeded below.
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { await self?.refreshFromRemote() }
+            Task {
+                await self?.refreshFromRemote()
+                await self?.checkRemotePresenceAndWakeIfNeeded()
+            }
         }
         // TF164: batches every event this session records and writes at
         // most once per interval, drastically cutting write frequency
@@ -230,31 +235,12 @@ public final class LiveFeedController: ObservableObject {
 
     private func handleEvent(name: Notification.Name, userInfo: [AnyHashable: Any]?) {
         guard isEnabled else { return }
-        // Any activity -- from this device, another user's, or an external
-        // script -- is itself the signal to (re)start a session. Try to pick
-        // up whatever maze is already running elsewhere first (the normal
-        // resume path in refreshFromRemote, same one a cold launch already
-        // goes through), and only generate a genuinely new one if nothing
-        // recoverable actually exists. This event is queued and replayed
-        // once a maze exists rather than lost; later events arriving mid-
-        // bootstrap are queued too instead of each starting their own.
+        // Any LOCAL activity is itself the signal to (re)start a session —
+        // this device doesn't need to wait for the 30s remote-presence check
+        // below when it already knows something just happened right here.
         guard masterMaze != nil else {
             eventsAwaitingBootstrap.append((name, userInfo))
-            if !isBootstrapping {
-                isBootstrapping = true
-                Task { [weak self] in
-                    guard let self else { return }
-                    await self.refreshFromRemote()
-                    if self.masterMaze == nil {
-                        self.generateMasterMaze(width: self.masterMazeWidth, height: self.masterMazeHeight, depth: self.masterMazeDepth)
-                        await self.writeConfig()
-                    }
-                    self.isBootstrapping = false
-                    let queued = self.eventsAwaitingBootstrap
-                    self.eventsAwaitingBootstrap = []
-                    for (queuedName, queuedInfo) in queued { self.handleEvent(name: queuedName, userInfo: queuedInfo) }
-                }
-            }
+            ensureSessionThenReplay()
             return
         }
         var entry: [String: Any] = ["ts": ISO8601DateFormatter().string(from: Date())]
@@ -283,6 +269,43 @@ public final class LiveFeedController: ObservableObject {
         // TF164: no longer flushes immediately per event — the flushTimer
         // above now batches these, which is the actual fix for the rapid-
         // successive-writes problem.
+    }
+
+    // TF166: shared by both wake paths (local activity in handleEvent, and
+    // remote presence below) so there's exactly one bootstrap-or-resume
+    // implementation, not two copies to keep in sync.
+    private func ensureSessionThenReplay() {
+        guard !isBootstrapping else { return }
+        isBootstrapping = true
+        Task { [weak self] in
+            guard let self else { return }
+            await self.refreshFromRemote()
+            if self.masterMaze == nil {
+                self.generateMasterMaze(width: self.masterMazeWidth, height: self.masterMazeHeight, depth: self.masterMazeDepth)
+                await self.writeConfig()
+            }
+            self.isBootstrapping = false
+            let queued = self.eventsAwaitingBootstrap
+            self.eventsAwaitingBootstrap = []
+            for (queuedName, queuedInfo) in queued { self.handleEvent(name: queuedName, userInfo: queuedInfo) }
+        }
+    }
+
+    // TF166: per direct instruction — an idle feed should wake from ANY
+    // endpoint's activity, not just this device's own. readNodes() is the
+    // exact same CacheService-backed presence check the web app's own
+    // _pollAshNodes already uses for "who else is online", and it already
+    // fires for guest sessions too (confirmed in Autumn/index.html: "Works
+    // for ALL users (guest + logged in)"), filtered server-side to entries
+    // from the last 30 seconds. So: any node present here means someone,
+    // somewhere -- signed in or not, iOS or web -- touched the system
+    // recently. That alone is enough to wake a dormant feed; no local event
+    // on this device is required.
+    private func checkRemotePresenceAndWakeIfNeeded() async {
+        guard isEnabled, masterMaze == nil, !isBootstrapping else { return }
+        let nodes = await AutumnGASClient.shared.readNodes()
+        guard !nodes.isEmpty else { return }
+        ensureSessionThenReplay()
     }
 
     /// Writes accumulated events to the current chunk file, and — TF161's
