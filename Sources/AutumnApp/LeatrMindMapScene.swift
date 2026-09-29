@@ -3,6 +3,7 @@ import SceneKit
 import UIKit
 import QuartzCore
 import LEATRCore
+import AutumnServices
 
 // MARK: — Data model, decoded from Resources/leatr-mindmap.json
 // That file is a flattened export of lead-edge-ash-tree-reflex.mm (FreeMind
