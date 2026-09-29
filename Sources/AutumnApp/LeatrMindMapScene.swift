@@ -91,6 +91,61 @@ public final class LeatrMindMapScene {
     private var recentFires: [String: Date] = [:]       // detects the same reflex repeating
     private var currentEmotionTint: UIColor?
 
+    // TF152: direct correction -- this only ever reacted to THIS device's own
+    // ReflexActivityBus notifications, so another user's activity never
+    // showed up here even in the same shared real-time scene. The data
+    // already exists (same ashtree/analytics-live/ chunk every device
+    // writes to, fixed earlier to be a complete independent read on both
+    // iOS and web) -- this was just never watching it for pulse purposes.
+    // Polls the current chunk, diffs against the last-seen length for the
+    // current (mazeId, chunkIndex) pair, and pulses every genuinely new
+    // entry through the exact same pulsePath() this file already has --
+    // from ANY contributor, this device's own included, so a local prompt
+    // and a remote one animate identically. Web-side equivalent:
+    // pollSharedActivity() in reflex-map-module.js.
+    private var sharedActivityTimer: Timer?
+    private var sharedMazeID: String?
+    private var sharedChunkIndex: Int?
+    private var sharedSeenCount = -1
+
+    private func startSharedActivityPolling() {
+        sharedActivityTimer?.invalidate()
+        sharedActivityTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { await self?.pollSharedActivity() }
+        }
+    }
+
+    private func pollSharedActivity() async {
+        guard let cfgRaw = await AutumnGASClient.shared.ashread(path: "ashtree/analytics-live/config.json"),
+              let cfg = cfgRaw as? [String: Any],
+              let enabled = cfg["enabled"] as? Bool, enabled,
+              let mazeId = cfg["mazeId"] as? String, !mazeId.isEmpty
+        else { return }
+        let chunkIndex = (cfg["currentChunkIndex"] as? Int) ?? 0
+        if sharedMazeID != mazeId || sharedChunkIndex != chunkIndex {
+            // New session or chunk rollover -- resync to "everything from
+            // here is new" rather than replaying a whole session's history.
+            sharedMazeID = mazeId
+            sharedChunkIndex = chunkIndex
+            sharedSeenCount = -1
+        }
+        let path = "ashtree/analytics-live/\(mazeId)/chunk-\(chunkIndex).json"
+        guard let chunkRaw = await AutumnGASClient.shared.ashread(path: path),
+              let events = chunkRaw as? [[String: Any]]
+        else { return }
+        if sharedSeenCount == -1 { sharedSeenCount = events.count; return }
+        guard events.count > sharedSeenCount else { return }
+        let fresh = events[sharedSeenCount...]
+        sharedSeenCount = events.count
+        for (i, event) in fresh.enumerated() {
+            guard let label = event["label"] as? String else { continue }
+            let delay = Double(i) * 0.15
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.pulsePath(matchingText: label, shellColor: nil)
+            }
+        }
+    }
+
     public init?() {
         guard let url = Bundle.main.url(forResource: "leatr-mindmap", withExtension: "json"),
               let raw = try? Data(contentsOf: url),
@@ -101,10 +156,12 @@ public final class LeatrMindMapScene {
         rootGroup.isHidden = true
         build(data)
         observeReflexActivity()
+        startSharedActivityPolling()
     }
 
     deinit {
         pulseTimer?.invalidate()
+        sharedActivityTimer?.invalidate()
         observers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
