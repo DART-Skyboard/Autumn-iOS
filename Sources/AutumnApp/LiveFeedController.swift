@@ -386,6 +386,18 @@ public final class LiveFeedController: ObservableObject {
     // archival use.
     private var recentLiveEvents: [[String: Any]] = []
 
+    // TF168: this used to bucket only recentLiveEvents -- this device's own
+    // locally-flushed batches -- which meant the live preview only ever
+    // reflected whichever device (in practice: only ever iOS, since the web
+    // admin console couldn't independently produce it) happened to be the
+    // one flushing. The whole point of the shared analytics-live/ path is
+    // that any contributor's events belong in it; neither side should have
+    // to depend on the other being active. Reading the shared chunk fresh
+    // here, instead of trusting local memory, means iOS and the web admin
+    // console (which now runs the equivalent of this same function, see
+    // js/reflex-map... actually see _autumnWriteLiveExport in index.html)
+    // each independently produce a complete, correct preview from whatever
+    // has actually been collected, regardless of who wrote which event.
     private func writeLiveExport() async {
         guard let cubic = masterMaze else { return }
         guard cubic.grid.count == masterMazeDepth,
@@ -393,9 +405,11 @@ public final class LiveFeedController: ObservableObject {
               cubic.grid.first?.first?.count == masterMazeWidth else { return }
         let solution = LEMACEngineASH.solveCubic(cubic)
         guard !solution.isEmpty else { return }
+        let events = await fetchSharedChunkEvents()
+        guard !events.isEmpty else { return }
         var buckets: [[[String: Any]]] = Array(repeating: [], count: solution.count)
-        for (i, event) in recentLiveEvents.enumerated() {
-            buckets[min(i * solution.count / max(recentLiveEvents.count, 1), solution.count - 1)].append(event)
+        for (i, event) in events.enumerated() {
+            buckets[min(i * solution.count / max(events.count, 1), solution.count - 1)].append(event)
         }
         var pathJSON: [[String: Any]] = []
         for (i, pt) in solution.enumerated() {
@@ -420,13 +434,25 @@ public final class LiveFeedController: ObservableObject {
                 "cells": cubeCells
             ],
             "pathIndex": [["layer": 0, "path": pathJSON]],
-            "totalEvents": recentLiveEvents.count
+            "totalEvents": events.count
         ]
         guard JSONSerialization.isValidJSONObject(root) else { return }
         _ = await AutumnGASClient.shared.ashwriteReplace(
             path: "ashtree/analytics-live/\(masterMazeId)/latest-export.json",
             uid: "live-feed", payload: root, message: "live export refresh"
         )
+    }
+
+    // Reads the CURRENT chunk fresh from the shared backend -- capturing
+    // every contributor's events (iOS, web, any future client), not just
+    // this device's own. Capped at the same 4000 most-recent events
+    // recentLiveEvents used to cap at, for the same reason: keep the
+    // export computation bounded regardless of how large the chunk grows.
+    private func fetchSharedChunkEvents() async -> [[String: Any]] {
+        let path = chunkPath(index: currentChunkIndex)
+        guard let raw = await AutumnGASClient.shared.ashread(path: path),
+              let arr = raw as? [[String: Any]] else { return [] }
+        return arr.count > 4000 ? Array(arr.suffix(4000)) : arr
     }
 
     private func chunkPath(index: Int) -> String {
