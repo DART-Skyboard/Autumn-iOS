@@ -87,6 +87,27 @@ jobs:
           sudo chmod +x /usr/local/bin/xcodegen
           xcodegen version
 
+      - name: Set a real, always-increasing build number
+        run: |
+          set -e
+          # Root cause of every upload since build 163 being silently
+          # rejected: CURRENT_PROJECT_VERSION in project.yml was a static
+          # literal ("163"), never bumped between builds. Apple requires
+          # each upload's CFBundleVersion to be strictly higher than any
+          # previously accepted one; a static value meant every single
+          # upload after 163 was accepted asked to reuse "163" again --
+          # rejected every time (altool actually printed this error, it
+          # just also happened to return exit code 0 regardless, which is
+          # why this was invisible in CI for as long as it was).
+          # Unix timestamp is comfortably higher than 163 forever and
+          # always increases regardless of how many times this workflow
+          # has run, unlike github.run_number.
+          NEW_BUILD=$(date +%s)
+          echo "Setting CURRENT_PROJECT_VERSION to $NEW_BUILD"
+          sed -i.bak "s/CURRENT_PROJECT_VERSION: \"163\"/CURRENT_PROJECT_VERSION: \"$NEW_BUILD\"/" project.yml
+          grep -n "CURRENT_PROJECT_VERSION" project.yml
+          echo "NEW_BUILD_NUMBER=$NEW_BUILD" >> $GITHUB_ENV
+
       - name: Generate Xcode project
         run: |
           xcodegen generate --spec project.yml
@@ -156,12 +177,15 @@ jobs:
             --apiKey "NQXQ595W59" \
             --apiIssuer "$ASC_ISSUER_ID" \
             --apiKeyPath ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8 \
-            --verbose 2>&1
-          # Root cause of builds silently not landing despite a "green" step:
-          # this block had no `set -e`, and the unconditional echo below was
-          # the LAST command -- so the step's reported exit code was always
-          # echo's (0), regardless of whether altool itself actually
-          # succeeded. `set -e` makes the script stop immediately (skipping
-          # the echo, reporting real failure) the moment altool returns
-          # non-zero, instead of masking it.
-          echo "✓ altool exited 0 -- upload genuinely succeeded"
+            --verbose 2>&1 | tee /tmp/altool.log
+          # Confirmed directly from a real failure this session: altool can
+          # print "ERROR: ... Failed to upload package." and still exit 0,
+          # which defeats set -e above on its own. This checks the actual
+          # printed text as a second, independent signal -- not a guess,
+          # this exact string was observed in a real rejected upload
+          # (duplicate build number) that CI had been reporting as success.
+          if grep -q "Failed to upload package\|ERROR: \[ContentDelivery" /tmp/altool.log; then
+            echo "altool printed an error despite its exit code -- treating as a real failure"
+            exit 1
+          fi
+          echo "✓ upload genuinely succeeded (exit 0, no error text in output)"
