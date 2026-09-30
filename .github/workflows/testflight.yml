@@ -148,6 +148,7 @@ jobs:
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          set -e
           echo "Uploading: $IPA_PATH"
           xcrun altool --upload-app \
             --type ios \
@@ -156,4 +157,11 @@ jobs:
             --apiIssuer "$ASC_ISSUER_ID" \
             --apiKeyPath ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8 \
             --verbose 2>&1
-          echo "✓ Upload complete"
+          # Root cause of builds silently not landing despite a "green" step:
+          # this block had no `set -e`, and the unconditional echo below was
+          # the LAST command -- so the step's reported exit code was always
+          # echo's (0), regardless of whether altool itself actually
+          # succeeded. `set -e` makes the script stop immediately (skipping
+          # the echo, reporting real failure) the moment altool returns
+          # non-zero, instead of masking it.
+          echo "✓ altool exited 0 -- upload genuinely succeeded"
