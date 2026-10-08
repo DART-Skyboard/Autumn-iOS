@@ -22,6 +22,10 @@ public struct AdminDrawerView: View {
 
     public var body: some View {
         let chrome = themeVM.chrome
+        GeometryReader { geo in
+        // geo is the area above the keyboard: while it is up the panel fits inside it (input + content stay
+        // visible), and it springs back to full size when the keyboard collapses.
+        let fitH = max(240, geo.size.height - 60 - 8 - max(0, dragOffset.height + liveDrag.height))
         ZStack(alignment: .topLeading) {
             Color.clear
                 .contentShape(Rectangle())
@@ -77,7 +81,7 @@ public struct AdminDrawerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(width: min(380, UIScreen.main.bounds.width - 24), height: min(600, UIScreen.main.bounds.height * 0.75))
+            .frame(width: min(380, UIScreen.main.bounds.width - 24), height: min(600, UIScreen.main.bounds.height * 0.75, fitH))
             .background(.ultraThinMaterial)
             .background(Color.white.opacity(0.06))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(chrome.accent.opacity(0.3), lineWidth: 1))
@@ -85,6 +89,8 @@ public struct AdminDrawerView: View {
             .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
             .padding(.leading, 16).padding(.top, 60)
             .offset(x: dragOffset.width + liveDrag.width, y: dragOffset.height + liveDrag.height)
+        }
+        .animation(.easeInOut(duration: 0.25), value: fitH)
         }
     }
 
