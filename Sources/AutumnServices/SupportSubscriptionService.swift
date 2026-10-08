@@ -92,7 +92,7 @@ public final class SupportSubscriptionService: ObservableObject {
     }
 
     /// Record a verified transaction (subscription active, or one more one-time gift — each transaction counted once).
-    private func apply(_ transaction: Transaction) {
+    private func apply(_ transaction: StoreKit.Transaction) {
         if transaction.productID == monthlyID {
             isSubscribed = transaction.revocationDate == nil
             transactionID = String(transaction.id)
@@ -122,7 +122,7 @@ public final class SupportSubscriptionService: ObservableObject {
     // MARK: — Check current subscription status
     public func checkSubscriptionStatus() async {
         var active = false
-        for await result in Transaction.currentEntitlements {
+        for await result in StoreKit.Transaction.currentEntitlements {
             if let transaction = try? checkVerified(result), transaction.productID == monthlyID {
                 active = true
                 transactionID = String(transaction.id)
@@ -134,7 +134,7 @@ public final class SupportSubscriptionService: ObservableObject {
     // MARK: — Listen for transaction updates
     private func listenForTransactions() -> Task<Void, Error> {
         Task.detached {
-            for await result in Transaction.updates {
+            for await result in StoreKit.Transaction.updates {
                 if let transaction = try? await MainActor.run(body: {
                     return try self.checkVerified(result)
                 }) {
