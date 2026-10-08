@@ -124,22 +124,23 @@ enum AshAgents {
 
     static func topicOf(_ k: String) -> String { k.split(separator: "/", omittingEmptySubsequences: false).prefix(2).joined(separator: "/") }
 
-    /// Most matured topic (buildable desc, sequence desc, name asc).
-    static func topTopic(_ st: AshShell64State) -> String {
+    /// Topics ordered by maturity (buildable desc, sequence desc, name asc).
+    static func harvestTopics(_ st: AshShell64State) -> [String] {
         var by: [String: (b: Int, s: Int)] = [:]
         for r in st.recs {
             let t = topicOf(r.k); var e = by[t] ?? (0, 0)
             if r.kind == "buildable" { e.b += 1 } else if r.kind == "sequence" { e.s += 1 }
             by[t] = e
         }
-        let sorted = by.keys.sorted { a, b in
+        return by.keys.sorted { a, b in
             let x = by[a]!, y = by[b]!
             if x.b != y.b { return x.b > y.b }
             if x.s != y.s { return x.s > y.s }
             return a < b
         }
-        return sorted.first ?? "syntax/ash"
     }
+
+    static func topTopic(_ st: AshShell64State) -> String { harvestTopics(st).first ?? "syntax/ash" }
 
     static func plan(_ st: AshShell64State, _ c: AshContract, _ goal: String) -> [AshTask] {
         var topics = Set<String>(), order: [String] = [], verb: String? = nil
@@ -203,11 +204,13 @@ enum AshAgents {
 @MainActor
 final class AshAgentsModel: ObservableObject {
     struct Msg: Identifiable { let id = UUID(); let user: Bool; let text: String; let program: String? }
-    @Published var msgs: [Msg] = [Msg(user: false, text: "Chief ready. Give a goal; assistant chiefs and managers cascade it over Shell 64. Everything runs on this device; no outside AI.", program: nil)]
+    @Published var msgs: [Msg] = [Msg(user: false, text: "Autumn here, team lead. Give me a goal; my assistant lead and team split it over Shell 64. Try \"create another team member to triangulate\". Runs on this device; no outside AI.", program: nil)]
     @Published var busy = false
     @Published var status = "Shell 64: not loaded"
 
     private var state: AshShell64State?
+    private var team: AshTeamState?
+    private var teamParams = TeamParams()
     private var contract = AshContract()
     // leatr-ash is a private repo: raw.githubusercontent.com always 404s, so read through the authenticated Contents API
     // (the admin's own GitHub sign-in token, same as the Training catalogs). Live state first, then the condensed seed.
@@ -236,7 +239,7 @@ final class AshAgentsModel: ObservableObject {
         let local = dir.appendingPathComponent("shell64.state.ash")
         if !reset, let t = try? String(contentsOf: local, encoding: .utf8) { state = AshShell64State.parse(t) }
         else if let t = await fetch(statePaths, cache: "shell64") { state = AshShell64State.parse(t); try? t.write(to: local, atomically: true, encoding: .utf8) }
-        if let c = await fetch([contractPath], cache: "agents") { contract = AshContract.parse(c) }
+        if let c = await fetch([contractPath], cache: "agents") { contract = AshContract.parse(c); teamParams = TeamParams.parse(c) }
         status = state.map { "Shell 64: \($0.recs.count) records" } ?? "Shell 64 unavailable (offline, no cache)"
     }
 
@@ -249,13 +252,12 @@ final class AshAgentsModel: ObservableObject {
             guard var st = state else {
                 msgs.append(Msg(user: false, text: "Shell 64 is not available yet. Sign in with GitHub (admin) once so the seed can be cached on this device.", program: nil)); busy = false; return
             }
-            let proj = AshAgents.respond(&st, contract, goal, nowISO: ISO8601DateFormatter().string(from: Date()))
-            state = st
+            let now = ISO8601DateFormatter().string(from: Date())
+            let t = AshTeam.handle(&st, contract, teamParams, team: team, text: goal, now: now)
+            team = t; state = st
             try? st.serialize().write(to: dir.appendingPathComponent("shell64.state.ash"), atomically: true, encoding: .utf8)
-            if let data = try? JSONEncoder().encode(proj) { try? data.write(to: dir.appendingPathComponent("project-\(proj.project).json")) }
-            var lines = ["Project \(proj.project): Chief feels \(proj.chiefEmotion)."]
-            for t in proj.tasks { lines.append("• \(t.id) [\(t.tool)/\(t.shell)] \(t.hits) Shell 64 hits") }
-            msgs.append(Msg(user: false, text: lines.joined(separator: "\n"), program: proj.tasks.map { $0.program }.joined(separator: "\n")))
+            if let data = try? JSONEncoder().encode(t) { try? data.write(to: dir.appendingPathComponent("team-\(t.project).json")) }
+            msgs.append(Msg(user: false, text: AshTeam.report(t), program: AshTeam.program(t)))
             status = "Shell 64: \(st.recs.count) records (optimized on device)"
             busy = false
         }
@@ -270,7 +272,7 @@ struct AgentsConsoleView: View {
     var body: some View {
         let chrome = themeVM.chrome
         VStack(spacing: 0) {
-            Text("AGENTS · Chief / Assistant Chiefs / Managers")
+            Text("AGENTS · Autumn (Team Lead) / Assistant Lead / Team")
                 .font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundColor(chrome.accent)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(12)
             ScrollView {
