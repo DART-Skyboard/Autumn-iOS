@@ -1,0 +1,50 @@
+name: ASC Upload Purchase Review Screenshot
+on:
+  workflow_dispatch:
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - name: Upload
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 << 'PY'
+          import os, time, json, jwt, requests, hashlib
+          from pathlib import Path
+          KEY_ID="NQXQ595W59"; ISSUER=os.environ["ASC_ISSUER_ID"]
+          SUB="6820697120"; IAP="6820697660"
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          tok=jwt.encode({"iss":ISSUER,"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"}, key, algorithm="ES256", headers={"alg":"ES256","kid":KEY_ID,"typ":"JWT"})
+          H={"Authorization":f"Bearer {tok}","Content-Type":"application/json"}
+          B="https://api.appstoreconnect.apple.com"
+          data=Path(".asc/support-review.png").read_bytes()
+          md5=hashlib.md5(data).hexdigest()
+          def up(kind, relname, reltype, rid):
+            r=requests.post(f"{B}/v1/{kind}",headers=H,data=json.dumps({"data":{"type":kind,"attributes":{"fileName":"support-review.png","fileSize":len(data)},"relationships":{relname:{"data":{"type":reltype,"id":rid}}}}}))
+            print(">>",kind,r.status_code)
+            if r.status_code>=400: print(r.text[:800]); return
+            d=r.json()["data"]; sid=d["id"]
+            for op in d["attributes"]["uploadOperations"]:
+              hs={h["name"]:h["value"] for h in op["requestHeaders"]}
+              pr=requests.request(op["method"],op["url"],headers=hs,data=data[op["offset"]:op["offset"]+op["length"]])
+              print("   chunk",pr.status_code)
+            c=requests.patch(f"{B}/v1/{kind}/{sid}",headers=H,data=json.dumps({"data":{"type":kind,"id":sid,"attributes":{"uploaded":True,"sourceFileChecksum":md5}}}))
+            print("   commit",c.status_code, c.text[:300] if c.status_code>=400 else "")
+          up("subscriptionAppStoreReviewScreenshots","subscription","subscriptions",SUB)
+          up("inAppPurchaseAppStoreReviewScreenshots","inAppPurchaseV2","inAppPurchases",IAP)
+          time.sleep(10)
+          for p in (f"/v1/subscriptions/{SUB}",f"/v2/inAppPurchases/{IAP}"):
+            x=requests.get(B+p,headers=H).json()
+            print(">> STATE",p,x["data"]["attributes"].get("state"))
+          PY
