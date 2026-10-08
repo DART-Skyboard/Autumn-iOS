@@ -249,7 +249,8 @@ final class AshAgentsModel: ObservableObject {
         guard !goal.isEmpty, !busy else { return }
         msgs.append(Msg(user: true, text: goal, program: nil)); busy = true
         Task {
-            if !AutumnTeamRelay.url.isEmpty && !(await GitHubClient.shared.hasToken()) {
+            let signedIn = await GitHubClient.shared.hasToken()
+            if !AutumnTeamRelay.url.isEmpty && !signedIn {
                 do {
                     let r = try await AutumnTeamRelay.ask(goal, team: relayTeam)
                     relayTeam = r.team
