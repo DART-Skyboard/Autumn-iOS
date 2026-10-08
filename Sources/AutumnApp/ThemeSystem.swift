@@ -301,17 +301,17 @@ public final class ThemeViewModel: ObservableObject {
     @Published public private(set) var art: ArtSelection?
 
     public init() {
-        loadPaletteAndArt()
         if let k = UserDefaults.standard.string(forKey: AutumnSettingsSync.themeKey),
            let t = AutumnTheme.allCases.first(where: { $0.key == k }) {
             current = t
         } else {
             current = .void
         }
-        if current == .custom && activePalette == nil { current = .void }
         let n = UserDefaults.standard.integer(forKey: AutumnSettingsSync.scrimKey)
         let all = AutumnScrim.allCases
         scrim = (n >= 0 && n < all.count) ? all[n] : .frost
+        loadPaletteAndArt()
+        if current == .custom && activePalette == nil { current = .void }
     }
 
     // MARK: palettes
