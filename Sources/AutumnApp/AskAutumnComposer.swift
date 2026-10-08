@@ -140,20 +140,7 @@ struct AskAutumnComposer: UIViewRepresentable {
         }
 
         func installAccessory(on tv: UITextView, accent: UIColor) {
-            let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
-            bar.barStyle = .black
-            bar.isTranslucent = true
-            let spacer = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
-            let hide = UIBarButtonItem(
-                image: UIImage(systemName: "keyboard.chevron.compact.down"),
-                style: .plain,
-                target: self,
-                action: #selector(hideKeyboard)
-            )
-            hide.tintColor = accent
-            hide.accessibilityLabel = "Hide keyboard"
-            bar.items = [spacer, hide]
-            tv.inputAccessoryView = bar
+            tv.inputAccessoryView = KeyboardAccessory.make(accent: accent, target: self, action: #selector(hideKeyboard))
         }
 
         @objc func hideKeyboard() {

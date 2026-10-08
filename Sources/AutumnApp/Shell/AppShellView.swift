@@ -88,7 +88,7 @@ public struct AppShellView: View {
             if let seed = note.object as? String { appNav.mathSeed = seed }
             appNav.showMathSolver = true
         }
-        .onAppear { circuit.start(); KeyboardDismissWindow.shared.accent = UIColor(themeVM.chrome.accent) }
+        .onAppear { circuit.start(); KeyboardAccessory.accent = UIColor(themeVM.chrome.accent) }
         .onChange(of: circuit.live) { _ in
             if !circuit.allows(authVM) { appNav.showAdmin = false }
         }
