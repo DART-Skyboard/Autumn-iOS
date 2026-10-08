@@ -1,9 +1,10 @@
 import Foundation
 import SwiftUI
+import AutumnServices
 
 // LEATR project agents for Autumn iOS. Swift port of leatr-ash scripts/ash/{ash-shell64,ash-canvas,ash-agents}.js.
 // Deterministic cascades over Shell 64 (reflexive variable state, integers only). No outside AI, no network model calls.
-// Reads the public Shell 64 seed + agents contract from leatr-ash raw; keeps optimized state locally on the device.
+// Reads the Shell 64 state + agents contract from the private leatr-ash repo via the admin's GitHub token; keeps optimized state locally on the device.
 
 struct AshRec {
     var idx: Int
@@ -208,8 +209,10 @@ final class AshAgentsModel: ObservableObject {
 
     private var state: AshShell64State?
     private var contract = AshContract()
-    private let seedURL = URL(string: "https://raw.githubusercontent.com/DART-Skyboard/leatr-ash/main/Training/shell64/shell64.state.ash")!
-    private let contractURL = URL(string: "https://raw.githubusercontent.com/DART-Skyboard/leatr-ash/main/scripts/ash/agents.ash")!
+    // leatr-ash is a private repo: raw.githubusercontent.com always 404s, so read through the authenticated Contents API
+    // (the admin's own GitHub sign-in token, same as the Training catalogs). Live state first, then the condensed seed.
+    private let statePaths = ["ashtree/shell64/state.ash", "Training/shell64/shell64.state.ash"]
+    private let contractPath = "scripts/ash/agents.ash"
 
     private var dir: URL {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("ashagents", isDirectory: true)
@@ -217,12 +220,13 @@ final class AshAgentsModel: ObservableObject {
         return d
     }
 
-    private func fetch(_ url: URL, cache: String) async -> String? {
+    private func fetch(_ paths: [String], cache: String) async -> String? {
         let f = dir.appendingPathComponent(cache + ".seed")
-        var req = URLRequest(url: url); req.timeoutInterval = 20
-        if let (d, resp) = try? await URLSession.shared.data(for: req), (resp as? HTTPURLResponse)?.statusCode == 200,
-           let s = String(data: d, encoding: .utf8), !s.isEmpty {
-            try? s.write(to: f, atomically: true, encoding: .utf8); return s
+        for path in paths {
+            if let file = try? await GitHubClient.shared.readFile(owner: "DART-Skyboard", repo: "leatr-ash", path: path, ref: "main"),
+               let s = file.decodedContent, !s.isEmpty {
+                try? s.write(to: f, atomically: true, encoding: .utf8); return s
+            }
         }
         return try? String(contentsOf: f, encoding: .utf8)
     }
@@ -231,8 +235,8 @@ final class AshAgentsModel: ObservableObject {
         if state != nil && !reset { return }
         let local = dir.appendingPathComponent("shell64.state.ash")
         if !reset, let t = try? String(contentsOf: local, encoding: .utf8) { state = AshShell64State.parse(t) }
-        else if let t = await fetch(seedURL, cache: "shell64") { state = AshShell64State.parse(t); try? t.write(to: local, atomically: true, encoding: .utf8) }
-        if let c = await fetch(contractURL, cache: "agents") { contract = AshContract.parse(c) }
+        else if let t = await fetch(statePaths, cache: "shell64") { state = AshShell64State.parse(t); try? t.write(to: local, atomically: true, encoding: .utf8) }
+        if let c = await fetch([contractPath], cache: "agents") { contract = AshContract.parse(c) }
         status = state.map { "Shell 64: \($0.recs.count) records" } ?? "Shell 64 unavailable (offline, no cache)"
     }
 
@@ -243,7 +247,7 @@ final class AshAgentsModel: ObservableObject {
         Task {
             await load()
             guard var st = state else {
-                msgs.append(Msg(user: false, text: "Shell 64 is not available yet. Connect once so the seed can be cached.", program: nil)); busy = false; return
+                msgs.append(Msg(user: false, text: "Shell 64 is not available yet. Sign in with GitHub (admin) once so the seed can be cached on this device.", program: nil)); busy = false; return
             }
             let proj = AshAgents.respond(&st, contract, goal, nowISO: ISO8601DateFormatter().string(from: Date()))
             state = st

@@ -17,6 +17,8 @@ public struct AppShellView: View {
     @EnvironmentObject var circuit: AdminCircuitMonitor
     @EnvironmentObject var journalVM: JournalViewModel
     @State private var keyboardUp = false
+    /// Whether Ask Autumn (which has its own accessory button) owns focus.
+    @State private var askAutumnFocused = false
 
     public var body: some View {
         GeometryReader { geo in
@@ -57,6 +59,26 @@ public struct AppShellView: View {
                 if appNav.showLatexCanvas { LatexCanvasOverlay() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottomTrailing) {
+                // Same collapse-keyboard chip Ask Autumn gets on its accessory bar, for every other overlay
+                // (Admin/AGENTS, Math solver, Latex, Mist, ...). Hidden while Ask Autumn is focused (it has its own).
+                if keyboardUp && !askAutumnFocused {
+                    Button {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .font(.system(size: 20))
+                            .foregroundColor(themeVM.chrome.accent)
+                            .frame(width: 52, height: 44)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().stroke(themeVM.chrome.accent.opacity(0.45), lineWidth: 1))
+                    }
+                    .accessibilityLabel("Hide keyboard")
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 8)  // container bottom already sits on the keyboard (keyboard safe area)
+                    .transition(.opacity)
+                }
+            }
         }
         // Chat/input stack must NOT ignore the keyboard. Removing this lets the
         // Ask Autumn bar rest directly above the system keyboard.
@@ -64,6 +86,11 @@ public struct AppShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardUp = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { _ in askAutumnFocused = false }
+        .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidBeginEditingNotification)) { note in
+            askAutumnFocused = note.object is AskAutumnTextView
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidEndEditingNotification)) { _ in askAutumnFocused = false }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardUp = false
         }
