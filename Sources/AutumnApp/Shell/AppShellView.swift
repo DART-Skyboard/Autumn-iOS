@@ -60,26 +60,6 @@ public struct AppShellView: View {
                 if appNav.showLatexCanvas { LatexCanvasOverlay() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .bottomTrailing) {
-                // Same collapse-keyboard chip Ask Autumn gets on its accessory bar, for every other overlay
-                // (Admin/AGENTS, Math solver, Latex, Mist, ...). Hidden while Ask Autumn is focused (it has its own).
-                if keyboardUp && !askAutumnFocused {
-                    Button {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    } label: {
-                        Image(systemName: "keyboard.chevron.compact.down")
-                            .font(.system(size: 20))
-                            .foregroundColor(themeVM.chrome.accent)
-                            .frame(width: 52, height: 44)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .overlay(Capsule().stroke(themeVM.chrome.accent.opacity(0.45), lineWidth: 1))
-                    }
-                    .accessibilityLabel("Hide keyboard")
-                    .padding(.trailing, 12)
-                    .padding(.bottom, 8)  // container bottom already sits on the keyboard (keyboard safe area)
-                    .transition(.opacity)
-                }
-            }
         }
         // Chat/input stack must NOT ignore the keyboard. Removing this lets the
         // Ask Autumn bar rest directly above the system keyboard.
@@ -108,7 +88,7 @@ public struct AppShellView: View {
             if let seed = note.object as? String { appNav.mathSeed = seed }
             appNav.showMathSolver = true
         }
-        .onAppear { circuit.start() }
+        .onAppear { circuit.start(); KeyboardDismissWindow.shared.accent = UIColor(themeVM.chrome.accent) }
         .onChange(of: circuit.live) { _ in
             if !circuit.allows(authVM) { appNav.showAdmin = false }
         }

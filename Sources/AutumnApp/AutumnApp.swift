@@ -50,6 +50,7 @@ struct AutumnApp: App {
                 .preferredColorScheme(.dark)
                 .environment(\.managedObjectContext, persistence.context)
                 .onAppear {
+                    KeyboardDismissWindow.shared.start()
                     chatVM.memoryOwner = authVM.sessionUID
                     chatVM.sessionSID = authVM.sessionSID
                     sceneVM.bindIdentity(uid: authVM.sessionUID, sid: authVM.sessionSID)
