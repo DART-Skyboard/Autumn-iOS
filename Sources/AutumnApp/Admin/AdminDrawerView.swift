@@ -17,15 +17,15 @@ public struct AdminDrawerView: View {
         "═══ AUTUMN ADMIN — PUBLIC-APP DRAWER ═══",
         "You are operating in the admin drawer. The admin is Justin (dartsolarpunk)."
     ]
+    @State private var kbH: CGFloat = 0
     @State private var dragOffset: CGSize = .zero
     @GestureState private var liveDrag: CGSize = .zero
 
     public var body: some View {
         let chrome = themeVM.chrome
-        GeometryReader { geo in
-        // geo is the area above the keyboard: while it is up the panel fits inside it (input + content stay
-        // visible), and it springs back to full size when the keyboard collapses.
-        let fitH = max(240, geo.size.height - 60 - 8 - max(0, dragOffset.height + liveDrag.height))
+        // While the keyboard is up the panel fits above it (input + content stay visible) and springs back when it collapses.
+        let safeTop = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.safeAreaInsets.top ?? 50
+        let fitH = kbH > 0 ? max(220, UIScreen.main.bounds.height - kbH - safeTop - 60 - 12 - max(0, dragOffset.height + liveDrag.height)) : CGFloat.infinity
         ZStack(alignment: .topLeading) {
             Color.clear
                 .contentShape(Rectangle())
@@ -90,8 +90,13 @@ public struct AdminDrawerView: View {
             .padding(.leading, 16).padding(.top, 60)
             .offset(x: dragOffset.width + liveDrag.width, y: dragOffset.height + liveDrag.height)
         }
-        .animation(.easeInOut(duration: 0.25), value: fitH)
+        .animation(.easeInOut(duration: 0.25), value: kbH)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { n in
+            if let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
+                kbH = max(0, UIScreen.main.bounds.height - end.minY)
+            }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in kbH = 0 }
     }
 
     private var dataTab: some View {

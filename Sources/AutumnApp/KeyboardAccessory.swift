@@ -8,7 +8,6 @@ import UIKit
 enum KeyboardAccessory {
     /// Updated from the theme so the bar matches Ask Autumn's.
     static var accent: UIColor = .systemTeal
-    private static var installed = false
 
     static func make(accent: UIColor, target: Any?, action: Selector) -> UIToolbar {
         let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
@@ -25,44 +24,6 @@ enum KeyboardAccessory {
 
     static func hide() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-
-    @MainActor private final class Target: NSObject { @objc func tap() { KeyboardAccessory.hide() } }
-    private static let target = Target()
-
-    static func installEverywhere() {
-        guard !installed else { return }
-        installed = true
-        let nc = NotificationCenter.default
-        nc.addObserver(forName: UITextField.textDidBeginEditingNotification, object: nil, queue: .main) { n in
-            MainActor.assumeIsolated { attach(n.object as? UIResponder & UITextInput) }
-        }
-        for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardDidShowNotification] {
-            nc.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { attachToCurrentResponder() }
-            }
-        }
-        nc.addObserver(forName: UITextView.textDidBeginEditingNotification, object: nil, queue: .main) { n in
-            MainActor.assumeIsolated { attach(n.object as? UIResponder & UITextInput) }
-        }
-    }
-
-    /// Fallback that doesn't depend on begin-editing notifications: when the keyboard appears, find whoever
-    /// is first responder (SwiftUI TextField/TextEditor in Admin, overlays, sheets) and give it the same bar.
-    private static func attachToCurrentResponder() {
-        FirstResponderProbe.found = nil
-        UIApplication.shared.sendAction(#selector(UIResponder.autumnProbeFirstResponder), to: nil, from: nil, for: nil)
-        attach(FirstResponderProbe.found as? (UIResponder & UITextInput))
-    }
-
-    private static func attach(_ r: (UIResponder & UITextInput)?) {
-        if let f = r as? UITextField, f.inputAccessoryView == nil {
-            f.inputAccessoryView = make(accent: accent, target: target, action: #selector(Target.tap))
-            f.reloadInputViews()
-        } else if let v = r as? UITextView, v.inputAccessoryView == nil {
-            v.inputAccessoryView = make(accent: accent, target: target, action: #selector(Target.tap))
-            v.reloadInputViews()
-        }
     }
 }
 
