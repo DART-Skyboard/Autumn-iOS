@@ -1,0 +1,61 @@
+name: ASC Attach Build + Submit
+on:
+  workflow_dispatch:
+    inputs:
+      build_id: {description: "ASC build id", required: true}
+      submit: {description: "true to submit for review", default: "false"}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - name: Attach and (optionally) submit
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          BUILD_ID: ${{ inputs.build_id }}
+          SUBMIT: ${{ inputs.submit }}
+        run: |
+          python3 << 'PY'
+          import os, time, json, jwt, requests
+          from pathlib import Path
+          KEY_ID="NQXQ595W59"; ISSUER=os.environ["ASC_ISSUER_ID"]; APP="6775076737"
+          VER="505c5b67-ca53-4c77-b866-dce823c0aaaa"; SUB="6820697120"; IAP="6820697660"
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          tok=jwt.encode({"iss":ISSUER,"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"}, key, algorithm="ES256", headers={"alg":"ES256","kid":KEY_ID,"typ":"JWT"})
+          H={"Authorization":f"Bearer {tok}","Content-Type":"application/json"}
+          B="https://api.appstoreconnect.apple.com"
+          def call(m,p,params=None,body=None):
+            r=requests.request(m,B+p,headers=H,params=params,data=json.dumps(body) if body else None,timeout=90)
+            print(">>",m,p,r.status_code)
+            if r.status_code>=400: print("   ERR",r.text[:1200]); return None
+            return r.json() if r.text else {}
+          rel=lambda t,i:{"data":{"type":t,"id":i}}
+          call("PATCH",f"/v1/appStoreVersions/{VER}/relationships/build",body=rel("builds",os.environ["BUILD_ID"]))
+          v=call("GET",f"/v1/appStoreVersions/{VER}")
+          print(">> VERSION", json.dumps({k:v["data"]["attributes"].get(k) for k in ("versionString","appStoreState","appVersionState")}))
+          loc=call("GET",f"/v1/appStoreVersions/{VER}/appStoreVersionLocalizations") or {"data":[]}
+          for l in loc["data"]: print(">> LOC", l["attributes"]["locale"], {k:bool(l["attributes"].get(k)) for k in ("description","keywords","whatsNew","supportUrl","marketingUrl")})
+          r=call("GET",f"/v1/appStoreVersions/{VER}/appStoreReviewDetail")
+          if r and r.get("data"): print(">> REVIEWDETAIL", {k:bool(x) for k,x in r["data"]["attributes"].items()})
+          else: print(">> REVIEWDETAIL missing")
+          s=call("GET",f"/v1/subscriptions/{SUB}/appStoreReviewScreenshot"); print(">> SUB screenshot", bool(s and s.get("data")))
+          i=call("GET",f"/v2/inAppPurchases/{IAP}/appStoreReviewScreenshot"); print(">> IAP screenshot", bool(i and i.get("data")))
+          for p in (f"/v1/subscriptions/{SUB}",f"/v2/inAppPurchases/{IAP}"):
+            x=call("GET",p); print(">> STATE",p,x["data"]["attributes"].get("state"))
+          if os.environ["SUBMIT"]=="true":
+            call("POST","/v1/subscriptionSubmissions",body={"data":{"type":"subscriptionSubmissions","relationships":{"subscription":rel("subscriptions",SUB)}}})
+            call("POST","/v1/inAppPurchaseSubmissions",body={"data":{"type":"inAppPurchaseSubmissions","relationships":{"inAppPurchaseV2":rel("inAppPurchases",IAP)}}})
+            rs=call("POST","/v1/reviewSubmissions",body={"data":{"type":"reviewSubmissions","attributes":{"platform":"IOS"},"relationships":{"app":rel("apps",APP)}}})
+            if rs:
+              rid=rs["data"]["id"]
+              call("POST","/v1/reviewSubmissionItems",body={"data":{"type":"reviewSubmissionItems","relationships":{"reviewSubmission":rel("reviewSubmissions",rid),"appStoreVersion":rel("appStoreVersions",VER)}}})
+              call("PATCH",f"/v1/reviewSubmissions/{rid}",body={"data":{"type":"reviewSubmissions","id":rid,"attributes":{"submitted":True}}})
+          PY
