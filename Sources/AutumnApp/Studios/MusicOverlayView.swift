@@ -46,7 +46,7 @@ public struct MusicOverlayView: View {
                 MusicPanel()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(width: min(380, UIScreen.main.bounds.width - 24), height: min(560, UIScreen.main.bounds.height * 0.72))
+            .frame(width: min(380, AppGeometry.bounds.width - 24), height: min(560, AppGeometry.bounds.height * 0.72))
             .background(.ultraThinMaterial)
             .background(Color.white.opacity(0.06))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#ff5fa8").opacity(0.3), lineWidth: 1))

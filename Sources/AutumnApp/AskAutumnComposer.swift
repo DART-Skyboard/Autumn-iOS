@@ -111,7 +111,7 @@ struct AskAutumnComposer: UIViewRepresentable {
         /// wraps) and writes it back to InputBar's @State so .frame(height:) uses
         /// a real value instead of SwiftUI guessing within the min/maxHeight range.
         func measureHeight(_ textView: UITextView) {
-            let width = textView.bounds.width > 0 ? textView.bounds.width : UIScreen.main.bounds.width - 140
+            let width = textView.bounds.width > 0 ? textView.bounds.width : AppGeometry.bounds.width - 140
             let fitSize = textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
             let clamped = min(96, max(40, fitSize.height))
             if abs(parent.measuredHeight - clamped) > 0.5 {

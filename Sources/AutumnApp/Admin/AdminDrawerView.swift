@@ -25,7 +25,7 @@ public struct AdminDrawerView: View {
         let chrome = themeVM.chrome
         // While the keyboard is up the panel fits above it (input + content stay visible) and springs back when it collapses.
         let safeTop = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.safeAreaInsets.top ?? 50
-        let fitH = kbH > 0 ? max(220, UIScreen.main.bounds.height - kbH - safeTop - 60 - 12 - max(0, dragOffset.height + liveDrag.height)) : CGFloat.infinity
+        let fitH = kbH > 0 ? max(220, AppGeometry.bounds.height - kbH - safeTop - 60 - 12 - max(0, dragOffset.height + liveDrag.height)) : CGFloat.infinity
         ZStack(alignment: .topLeading) {
             Color.clear
                 .contentShape(Rectangle())
@@ -81,7 +81,7 @@ public struct AdminDrawerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(width: min(380, UIScreen.main.bounds.width - 24), height: min(600, UIScreen.main.bounds.height * 0.75, fitH))
+            .frame(width: min(380, AppGeometry.bounds.width - 24), height: min(600, AppGeometry.bounds.height * 0.75, fitH))
             .background(.ultraThinMaterial)
             .background(Color.white.opacity(0.06))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(chrome.accent.opacity(0.3), lineWidth: 1))
@@ -93,7 +93,7 @@ public struct AdminDrawerView: View {
         .animation(.easeInOut(duration: 0.25), value: kbH)
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { n in
             if let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
-                kbH = max(0, UIScreen.main.bounds.height - end.minY)
+                kbH = AppGeometry.keyboardOverlap(end)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in kbH = 0 }

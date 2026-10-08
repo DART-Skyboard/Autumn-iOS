@@ -38,12 +38,13 @@ final class KeyboardDismissWindow {
     private func changed(_ n: Notification) {
         guard let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
               let sc = scene() else { return }
-        let screen = sc.screen.bounds
-        guard end.height > 80, end.minY < screen.height - 40 else { window?.isHidden = true; return }
-        lastTop = end.minY
+        let screen = AppGeometry.bounds
+        let kb = AppGeometry.inWindow(end)
+        guard end.height > 80, AppGeometry.keyboardOverlap(end) > 80 else { window?.isHidden = true; return }
+        lastTop = kb.minY
         let w = ensureWindow(sc)
         let d: CGFloat = 56
-        holder?.frame = CGRect(x: screen.width - d - 14, y: end.minY - d - 10, width: d, height: d)
+        holder?.frame = CGRect(x: screen.width - d - 14, y: kb.minY - d - 10, width: d, height: d)
         w.isHidden = false
         refreshVisibility()
         DispatchQueue.main.async { [weak self] in self?.refreshVisibility() }

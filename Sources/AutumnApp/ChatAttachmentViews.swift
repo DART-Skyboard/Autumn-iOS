@@ -12,7 +12,7 @@ struct PendingAttachmentStrip: View {
 
     /// ~28–32% of screen width, capped ~140pt (was 56 — too small on device).
     private var pendingSize: CGFloat {
-        let w = UIScreen.main.bounds.width
+        let w = AppGeometry.bounds.width
         return min(140, max(120, w * 0.30))
     }
 

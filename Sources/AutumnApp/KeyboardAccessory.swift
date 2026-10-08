@@ -10,7 +10,7 @@ enum KeyboardAccessory {
     static var accent: UIColor = .systemTeal
 
     static func make(accent: UIColor, target: Any?, action: Selector) -> UIToolbar {
-        let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
+        let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: AppGeometry.bounds.width, height: 44))
         bar.barStyle = .black
         bar.isTranslucent = true
         let spacer = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)

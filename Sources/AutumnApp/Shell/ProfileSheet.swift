@@ -213,9 +213,9 @@ public struct ProfileSheet: View {
                 }
                 } // end inner VStack
                 }
-                .frame(maxHeight: min(560, UIScreen.main.bounds.height * 0.68))
+                .frame(maxHeight: min(560, AppGeometry.bounds.height * 0.68))
             }
-            .frame(width: min(320, UIScreen.main.bounds.width - 32))
+            .frame(width: min(320, AppGeometry.bounds.width - 32))
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)

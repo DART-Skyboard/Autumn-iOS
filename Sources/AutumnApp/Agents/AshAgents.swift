@@ -329,7 +329,7 @@ struct AgentsOverlay: View {
                 }.padding(12)
                 AgentsConsoleView()
             }
-            .frame(width: min(380, UIScreen.main.bounds.width - 24), height: min(600, UIScreen.main.bounds.height * 0.75))
+            .frame(width: min(380, AppGeometry.bounds.width - 24), height: min(600, AppGeometry.bounds.height * 0.75))
             .background(.ultraThinMaterial)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(chrome.accent.opacity(0.3), lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 12))
