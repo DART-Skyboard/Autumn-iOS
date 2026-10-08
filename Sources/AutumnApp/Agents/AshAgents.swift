@@ -249,21 +249,21 @@ final class AshAgentsModel: ObservableObject {
         guard !goal.isEmpty, !busy else { return }
         msgs.append(Msg(user: true, text: goal, program: nil)); busy = true
         Task {
-            let signedIn = await GitHubClient.shared.hasToken()
-            if !AutumnTeamRelay.url.isEmpty && !signedIn {
+            // Admin (token that can read leatr-ash): direct path below. Everyone else: the read-only Shell 64 door in the Apps Script.
+            if await GitHubClient.shared.hasToken() { await load() }
+            if state == nil {
                 do {
                     let r = try await AutumnTeamRelay.ask(goal, team: relayTeam)
                     relayTeam = r.team
                     msgs.append(Msg(user: false, text: r.text, program: r.program))
                     status = "Autumn's knowledge base (read-only; your data stays on your device)"
                 } catch {
-                    msgs.append(Msg(user: false, text: "Autumn's knowledge base is not reachable right now.", program: nil))
+                    msgs.append(Msg(user: false, text: "Autumn's knowledge base is not reachable right now. Try again in a moment.", program: nil))
                 }
                 busy = false; return
             }
-            await load()
             guard var st = state else {
-                msgs.append(Msg(user: false, text: "Shell 64 is not available yet. Sign in with GitHub (admin) once so the seed can be cached on this device.", program: nil)); busy = false; return
+                msgs.append(Msg(user: false, text: "Shell 64 is not available yet. Try again in a moment.", program: nil)); busy = false; return
             }
             let now = ISO8601DateFormatter().string(from: Date())
             let t = AshTeam.handle(&st, contract, teamParams, team: team, text: goal, now: now)
@@ -308,6 +308,32 @@ struct AgentsConsoleView: View {
                 Button("SEND") { model.send(input); input = "" }.font(.system(size: 11, weight: .bold, design: .monospaced)).disabled(model.busy)
             }.padding(10)
         }
-        .task { await model.load() }
+        .task { if await GitHubClient.shared.hasToken() { await model.load() } }
+    }
+}
+
+/// Public AGENTS overlay (every user): Autumn leads a team over her knowledge base; read-only, nothing you say is learned.
+struct AgentsOverlay: View {
+    @EnvironmentObject var themeVM: ThemeViewModel
+    @EnvironmentObject var appNav: AppNavigation
+
+    var body: some View {
+        let chrome = themeVM.chrome
+        ZStack {
+            Color.black.opacity(0.35).ignoresSafeArea().onTapGesture { appNav.showAgents = false }
+            VStack(spacing: 0) {
+                HStack {
+                    Text("AGENTS").font(.system(size: 13, weight: .bold, design: .monospaced)).tracking(2).foregroundColor(chrome.accent)
+                    Spacer()
+                    Button("✕") { appNav.showAgents = false }.foregroundColor(.white.opacity(0.6))
+                }.padding(12)
+                AgentsConsoleView()
+            }
+            .frame(width: min(380, UIScreen.main.bounds.width - 24), height: min(600, UIScreen.main.bounds.height * 0.75))
+            .background(.ultraThinMaterial)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(chrome.accent.opacity(0.3), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
+        }
     }
 }

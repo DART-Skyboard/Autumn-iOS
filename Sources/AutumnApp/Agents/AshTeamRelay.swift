@@ -1,23 +1,21 @@
 import Foundation
+import AutumnServices
 
-/// Public users reach Autumn's PRIVATE knowledge base only through the read-only Shell 64 relay (leatr-ash services/shell64-relay).
-/// The relay never writes and never learns from user prompts/data; the team state stays on this device and is sent back each time.
-/// Empty `url` = relay not deployed yet: agents stay admin-only.
+/// Everyone (not just the admin) reaches Autumn's PRIVATE knowledge base through the existing Apps Script web app (`shell64team`
+/// action in presence.gs). It is read-only and one-way: it never writes, never stores user prompts or data, never learns from them,
+/// and returns only the derived team plan (record keys). The team state stays on this device and is sent back with the next message.
 enum AutumnTeamRelay {
-    static let url = ""   // e.g. "https://leatr-shell64-relay.onrender.com"
-
     struct Reply { let text: String; let program: String; let team: Data }
 
     static func ask(_ text: String, team: Data?) async throws -> Reply {
-        guard let endpoint = URL(string: url.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/team") else { throw URLError(.badURL) }
+        guard let endpoint = URL(string: AutumnConfig.gasURL) else { throw URLError(.badURL) }
         var req = URLRequest(url: endpoint); req.httpMethod = "POST"; req.timeoutInterval = 25
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        var body: [String: Any] = ["text": text]
+        req.setValue("text/plain", forHTTPHeaderField: "Content-Type")      // same simple-request shape the other GAS calls use
+        var body: [String: Any] = ["action": "shell64team", "text": text]
         if let team, let obj = try? JSONSerialization.jsonObject(with: team) { body["team"] = obj }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200,
-              let o = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let (data, _) = try await URLSession.shared.data(for: req)
+        guard let o = try JSONSerialization.jsonObject(with: data) as? [String: Any], (o["ok"] as? Bool) == true,
               let t = o["text"] as? String, let p = o["program"] as? String, let tm = o["team"],
               let td = try? JSONSerialization.data(withJSONObject: tm) else { throw URLError(.badServerResponse) }
         return Reply(text: t, program: p, team: td)

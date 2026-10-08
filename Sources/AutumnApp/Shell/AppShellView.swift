@@ -56,6 +56,7 @@ public struct AppShellView: View {
                 if appNav.studio == .music { MusicOverlayView() }
                 if let studio = appNav.studio, studio != .music { StudioHostView(kind: studio) }
                 if appNav.showMathSolver { MathSolverOverlay() }
+                if appNav.showAgents { AgentsOverlay() }
                 if appNav.showLatexCanvas { LatexCanvasOverlay() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -564,6 +565,7 @@ public final class AppNavigation: ObservableObject {
     @Published public var showRadar = false
     @Published public var showAshCanvas = false
     @Published public var showMathSolver = false
+    @Published public var showAgents = false
     @Published public var showLatexCanvas = false
     @Published public var latexSeed = ""
     @Published public var mathSeed = ""

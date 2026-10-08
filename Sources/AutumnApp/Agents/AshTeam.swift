@@ -141,6 +141,7 @@ enum AshTeam {
 
     static func tick(_ st: inout AshShell64State, _ c: AshContract, _ tp: TeamParams, _ t: inout AshTeamState, now: String) {
         t.round += 1
+        var fin = 0
         let snapIds = t.members.map { $0.id }
         let monitor = t.members.first { $0.role == "Triangulator" }?.id ?? t.members.first { $0.role == "AssistantLead" }?.id
         let beforeWorking = t.members.filter { $0.task?.status == "working" }.count
@@ -161,7 +162,7 @@ enum AshTeam {
                     note(&t, t.members[mi].id, "\(task.topic) has no records -> switch to \(alt)")
                     task = mkTask(c, alt, task.verb); t.members[mi].touched = []; recs = recsFor(st, alt)
                 } else {
-                    task.status = "done"; task.emotion = "sad"; t.members[mi].task = task
+                    task.status = "done"; fin += 1; task.emotion = "sad"; t.members[mi].task = task
                     note(&t, t.members[mi].id, "no Shell 64 records for \(task.topic)"); continue
                 }
             }
@@ -179,7 +180,7 @@ enum AshTeam {
             task.step += 1
             if co.count > 1 && task.step == 1 { note(&t, t.members[mi].id, "co-working \(task.topic) with \(co.count - 1) other(s)") }
             if task.step >= tp.stepsPerTask {
-                task.status = "done"; task.emotion = task.hits > 0 ? "happy" : "sad"
+                task.status = "done"; fin += 1; task.emotion = task.hits > 0 ? "happy" : "sad"
                 note(&t, t.members[mi].id, "finished \(task.topic) (\(task.hits) hits)")
             }
             t.members[mi].task = task
@@ -195,7 +196,7 @@ enum AshTeam {
             spawn(&t, role: "Worker", task: mkTask(c, q.topic, q.verb), why: "Assistant Lead saw backlog")
         }
         let lw = active(t).count
-        if t.round > 1 && lw != beforeWorking { note(&t, "assist", "lead sees \(lw) working, board had \(beforeWorking) -> re-synced") }
+        if t.round > 1 && lw != beforeWorking - fin { note(&t, "assist", "lead sees \(lw) working, board had \(beforeWorking) -> re-synced") }
         t.updated = now
     }
 
