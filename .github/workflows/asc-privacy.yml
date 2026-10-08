@@ -1,0 +1,36 @@
+name: ASC Privacy URL Check
+on:
+  workflow_dispatch:
+    inputs:
+      set_url: {description: "Privacy URL to set (blank = read only)", default: ""}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          SETURL: ${{ inputs.set_url }}
+        run: |
+          python3 << 'PY'
+          import os,time,json,jwt,requests
+          from pathlib import Path
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          tok=jwt.encode({"iss":os.environ["ASC_ISSUER_ID"],"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"},key,algorithm="ES256",headers={"alg":"ES256","kid":"NQXQ595W59","typ":"JWT"})
+          H={"Authorization":f"Bearer {tok}","Content-Type":"application/json"}; B="https://api.appstoreconnect.apple.com"
+          infos=requests.get(f"{B}/v1/apps/6775076737/appInfos",headers=H).json()["data"]
+          for i in infos:
+            print(">> APPINFO",i["id"],i["attributes"].get("state"))
+            for l in requests.get(f"{B}/v1/appInfos/{i['id']}/appInfoLocalizations",headers=H).json()["data"]:
+              print(">> LOC",l["id"],l["attributes"]["locale"],"privacy=",l["attributes"].get("privacyPolicyUrl"))
+              if os.environ["SETURL"] and l["attributes"]["locale"]=="en-US":
+                r=requests.patch(f"{B}/v1/appInfoLocalizations/{l['id']}",headers=H,data=json.dumps({"data":{"type":"appInfoLocalizations","id":l["id"],"attributes":{"privacyPolicyUrl":os.environ["SETURL"]}}}))
+                print(">> SET",r.status_code,r.text[:300])
+          PY
