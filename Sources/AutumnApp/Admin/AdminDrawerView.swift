@@ -72,6 +72,7 @@ public struct AdminDrawerView: View {
                     case .ash: ashTab
                     case .messages: AdminMailboxView(inboxOnly: false)
                     case .analytics: AnalyticsExportPanel()
+                    case .agents: AgentsConsoleView()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
