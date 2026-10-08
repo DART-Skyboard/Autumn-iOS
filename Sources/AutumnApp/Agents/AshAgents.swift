@@ -210,6 +210,7 @@ final class AshAgentsModel: ObservableObject {
 
     private var state: AshShell64State?
     private var team: AshTeamState?
+    private var relayTeam: Data?   // public mode: team state held on this device, sent back to the read-only relay each time
     private var teamParams = TeamParams()
     private var contract = AshContract()
     // leatr-ash is a private repo: raw.githubusercontent.com always 404s, so read through the authenticated Contents API
@@ -248,6 +249,17 @@ final class AshAgentsModel: ObservableObject {
         guard !goal.isEmpty, !busy else { return }
         msgs.append(Msg(user: true, text: goal, program: nil)); busy = true
         Task {
+            if !AutumnTeamRelay.url.isEmpty && !GitHubClient.shared.hasToken() {
+                do {
+                    let r = try await AutumnTeamRelay.ask(goal, team: relayTeam)
+                    relayTeam = r.team
+                    msgs.append(Msg(user: false, text: r.text, program: r.program))
+                    status = "Autumn's knowledge base (read-only; your data stays on your device)"
+                } catch {
+                    msgs.append(Msg(user: false, text: "Autumn's knowledge base is not reachable right now.", program: nil))
+                }
+                busy = false; return
+            }
             await load()
             guard var st = state else {
                 msgs.append(Msg(user: false, text: "Shell 64 is not available yet. Sign in with GitHub (admin) once so the seed can be cached on this device.", program: nil)); busy = false; return
