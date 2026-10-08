@@ -37,9 +37,22 @@ enum KeyboardAccessory {
         nc.addObserver(forName: UITextField.textDidBeginEditingNotification, object: nil, queue: .main) { n in
             MainActor.assumeIsolated { attach(n.object as? UIResponder & UITextInput) }
         }
+        for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardDidShowNotification] {
+            nc.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { attachToCurrentResponder() }
+            }
+        }
         nc.addObserver(forName: UITextView.textDidBeginEditingNotification, object: nil, queue: .main) { n in
             MainActor.assumeIsolated { attach(n.object as? UIResponder & UITextInput) }
         }
+    }
+
+    /// Fallback that doesn't depend on begin-editing notifications: when the keyboard appears, find whoever
+    /// is first responder (SwiftUI TextField/TextEditor in Admin, overlays, sheets) and give it the same bar.
+    private static func attachToCurrentResponder() {
+        FirstResponderProbe.found = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.autumnProbeFirstResponder), to: nil, from: nil, for: nil)
+        attach(FirstResponderProbe.found as? (UIResponder & UITextInput))
     }
 
     private static func attach(_ r: (UIResponder & UITextInput)?) {
@@ -51,4 +64,9 @@ enum KeyboardAccessory {
             v.reloadInputViews()
         }
     }
+}
+
+enum FirstResponderProbe { nonisolated(unsafe) static var found: UIResponder? }
+extension UIResponder {
+    @objc func autumnProbeFirstResponder() { FirstResponderProbe.found = self }
 }
