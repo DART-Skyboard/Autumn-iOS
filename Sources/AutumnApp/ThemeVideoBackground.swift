@@ -1,11 +1,12 @@
 import SwiftUI
 import AVFoundation
 import AVKit
+import ImageIO
 
-/// Looping, muted, aspect-fill theme video. Sits behind the scrim (web #backdrop-video:
-/// loop muted autoplay playsinline). VOID overlay hides it; CLEAR still plays and loops.
+/// Looping, muted, aspect-fill art video (the user's own file). Sits behind the scrim.
+/// VOID overlay hides it; CLEAR still plays and loops.
 struct ThemeVideoBackground: UIViewRepresentable {
-    let resourceName: String?
+    let fileURL: URL?
     var videoOn: Bool
 
     func makeUIView(context: Context) -> PlayerView {
@@ -18,7 +19,7 @@ struct ThemeVideoBackground: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PlayerView, context: Context) {
-        uiView.apply(resourceName: resourceName, videoOn: videoOn)
+        uiView.apply(fileURL: fileURL, videoOn: videoOn)
     }
 
     static func dismantleUIView(_ uiView: PlayerView, coordinator: ()) {
@@ -35,9 +36,9 @@ struct ThemeVideoBackground: UIViewRepresentable {
         private var endObs: NSObjectProtocol?
         private var activeObs: NSObjectProtocol?
 
-        func apply(resourceName: String?, videoOn: Bool) {
+        func apply(fileURL: URL?, videoOn: Bool) {
             Self.ensureAmbientSession()
-            if !videoOn || resourceName == nil {
+            if !videoOn || fileURL == nil {
                 alpha = 0
                 isHidden = true
                 queue?.pause()
@@ -45,12 +46,13 @@ struct ThemeVideoBackground: UIViewRepresentable {
             }
             isHidden = false
             alpha = 1
-            let name = resourceName!
+            let url = fileURL!
+            let name = url.path
             if name == currentName {
                 ensurePlaying()
                 return
             }
-            guard let url = Self.locate(name) else {
+            guard FileManager.default.fileExists(atPath: url.path) else {
                 teardown()
                 return
             }
@@ -123,14 +125,39 @@ struct ThemeVideoBackground: UIViewRepresentable {
             try? s.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
             try? s.setActive(true, options: [])
         }
+    }
+}
 
-        private static func locate(_ name: String) -> URL? {
-            let bundle = Bundle.main
-            if let u = bundle.url(forResource: name, withExtension: "mp4") { return u }
-            if let u = bundle.url(forResource: name, withExtension: "mp4", subdirectory: "Themes") { return u }
-            if let u = bundle.url(forResource: name, withExtension: "mp4", subdirectory: "Resources/Themes") { return u }
-            if let u = bundle.url(forResource: name, withExtension: "mp4", subdirectory: "Resources") { return u }
-            return nil
+/// Still-image art (PNG / JPEG / HEIC / TGA / BMP / GIF / TIFF...), downsampled so large files stay light.
+struct ArtImageBackground: View {
+    let url: URL?
+    @State private var image: UIImage?
+
+    var body: some View {
+        GeometryReader { geo in
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: url) {
+            guard let url else { image = nil; return }
+            let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
+                guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+                let opts: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 2800
+                ]
+                guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+                return UIImage(cgImage: cg)
+            }.value
+            image = loaded
         }
     }
 }

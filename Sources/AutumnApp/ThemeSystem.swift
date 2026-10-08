@@ -1,6 +1,9 @@
 import SwiftUI
 import UIKit
 import AutumnServices
+import AVFoundation
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Theme engine matching web THEMES in index.html:
 /// VOID DAY NIGHT STEALTH DEPARTURE ASH TREE ARIEL SKYBOARD LOUNGE SUMMIT AUTO
@@ -16,6 +19,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
     case lounge = "LOUNGE"
     case summit = "SUMMIT"
     case auto = "AUTO"
+    case custom = "CUSTOM"
 
     public var id: String { rawValue }
 
@@ -32,6 +36,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .lounge: return "lounge"
         case .summit: return "summit"
         case .auto: return "system"
+        case .custom: return "custom"
         }
     }
 
@@ -48,6 +53,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .lounge: return "🛋"
         case .summit: return "🏔"
         case .auto: return "◈"
+        case .custom: return "◐"
         }
     }
 
@@ -64,8 +70,12 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .lounge: return Color(hex: "#e8a86a")
         case .summit: return Color(hex: "#5fd4ff")
         case .auto: return Color(hex: "#ffb347")
+        case .custom: return AutumnPaletteRuntime.accentColor
         }
     }
+
+    /// Built-in palettes offered by the PALETTE button (the old named themes, now colour-only).
+    public static var presets: [AutumnTheme] { allCases.filter { $0 != .auto && $0 != .custom } }
 
     public var resolved: AutumnTheme {
         if self == .auto {
@@ -87,6 +97,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .lounge: return Color(hex: "#0a0604")
         case .summit: return Color(hex: "#050a10")
         case .auto: return Color(hex: "#020814")
+        case .custom: return AutumnPaletteRuntime.bg1Color
         }
     }
 
@@ -103,6 +114,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .lounge: return Color(hex: "#1a1008").opacity(0.88)
         case .summit: return Color(hex: "#0f1620").opacity(0.88)
         case .auto: return Color(hex: "#0d1f3c").opacity(0.85)
+        case .custom: return AutumnPaletteRuntime.bg2Color.opacity(0.88)
         }
     }
 
@@ -114,24 +126,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         LinearGradient(colors: [base, surface], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    /// Bundle resource name (no extension). VOID and unresolved AUTO have none.
-    public var videoResourceName: String? {
-        switch resolved {
-        case .void: return nil
-        case .day: return "autumnanimation"
-        case .night: return "autumnnight"
-        case .stealth: return "dartalley"
-        case .departure: return "autumndeparture"
-        case .ashTree: return "ashtree"
-        case .ariel: return "ariel"
-        case .skyboard: return "skyboard"
-        case .lounge: return "lounge"
-        case .summit: return "summit"
-        case .auto: return "autumnanimation"
-        }
-    }
-
-    /// Web WASH_RGB for scrim tint on video.
+    /// Web WASH_RGB for scrim tint over the background.
     public var washRGB: (r: Double, g: Double, b: Double) {
         switch resolved {
         case .void: return (0, 0, 0)
@@ -144,6 +139,7 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .skyboard: return (4/255.0, 12/255.0, 22/255.0)
         case .lounge: return (10/255.0, 6/255.0, 2/255.0)
         case .summit: return (5/255.0, 10/255.0, 16/255.0)
+        case .custom: return AutumnPaletteRuntime.washRGB
         }
     }
 
@@ -175,8 +171,59 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
             return LinearGradient(colors: [Color(hex: "#020814"), Color(hex: "#061018")], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .void:
             return LinearGradient(colors: [Color(hex: "#000000"), Color(hex: "#0c0c0e")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .custom:
+            return LinearGradient(colors: [AutumnPaletteRuntime.bg1Color, AutumnPaletteRuntime.bg2Color], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
+}
+
+/// A user colour palette: background gradient (top-left -> bottom-right) plus accent. Saved to the profile.
+public struct AutumnPalette: Codable, Identifiable, Equatable {
+    public var id: String
+    public var name: String
+    public var bg1: String
+    public var bg2: String
+    public var accent: String
+    public init(id: String = UUID().uuidString, name: String, bg1: String, bg2: String, accent: String) {
+        self.id = id; self.name = name; self.bg1 = bg1; self.bg2 = bg2; self.accent = accent
+    }
+    public var c1: Color { Color(hex: bg1) }
+    public var c2: Color { Color(hex: bg2) }
+    public var ca: Color { Color(hex: accent) }
+    public var gradient: LinearGradient { LinearGradient(colors: [c1, c2], startPoint: .topLeading, endPoint: .bottomTrailing) }
+    /// Starting point for editing: the colours of a built-in preset.
+    public static func from(_ t: AutumnTheme) -> AutumnPalette {
+        let r = t.resolved
+        return AutumnPalette(id: "draft", name: t.rawValue.capitalized, bg1: r.base.hexString, bg2: r.surface.hexString, accent: t.accent.hexString)
+    }
+}
+
+/// Colours used when the current look is a saved/custom palette (AutumnTheme.custom reads these).
+public enum AutumnPaletteRuntime {
+    nonisolated(unsafe) static var active = AutumnPalette(id: "draft", name: "CUSTOM", bg1: "#05070d", bg2: "#14203a", accent: "#7ecfff")
+    static var bg1Color: Color { active.c1 }
+    static var bg2Color: Color { active.c2 }
+    static var accentColor: Color { active.ca }
+    static var washRGB: (r: Double, g: Double, b: Double) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(active.c1).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (Double(r) * 0.6, Double(g) * 0.6, Double(b) * 0.6)
+    }
+}
+
+/// The single piece of user art behind the UI: a video (MP4/MOV...) or a still image (PNG/JPEG/HEIC/TGA...).
+public struct ArtSelection: Equatable {
+    public enum Kind: String { case video, image }
+    public var kind: Kind
+    public var name: String
+    public var fileName: String
+    var defaultsString: String { "\(kind.rawValue)|\(name)|\(fileName)" }
+    init?(defaultsString s: String) {
+        let p = s.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+        guard p.count == 3, let k = Kind(rawValue: p[0]) else { return nil }
+        kind = k; name = p[1]; fileName = p[2]
+    }
+    init(kind: Kind, name: String, fileName: String) { self.kind = kind; self.name = name; self.fileName = fileName }
 }
 
 /// Overlay engine: FROST STEAM CLEAR HAZE DUSK DEEP VOID — matching web LEVELS.
@@ -249,16 +296,186 @@ public final class ThemeViewModel: ObservableObject {
         }
     }
 
+    @Published public private(set) var customPalettes: [AutumnPalette] = []
+    @Published public private(set) var activeCustomID: String?
+    @Published public private(set) var art: ArtSelection?
+
     public init() {
+        loadPaletteAndArt()
         if let k = UserDefaults.standard.string(forKey: AutumnSettingsSync.themeKey),
            let t = AutumnTheme.allCases.first(where: { $0.key == k }) {
             current = t
         } else {
             current = .void
         }
+        if current == .custom && activePalette == nil { current = .void }
         let n = UserDefaults.standard.integer(forKey: AutumnSettingsSync.scrimKey)
         let all = AutumnScrim.allCases
         scrim = (n >= 0 && n < all.count) ? all[n] : .frost
+    }
+
+    // MARK: palettes
+    public var activePalette: AutumnPalette? { customPalettes.first { $0.id == activeCustomID } }
+
+    /// Name shown on the PALETTE button.
+    public var paletteLabel: String {
+        if current == .custom { return (activePalette?.name ?? "CUSTOM").uppercased() }
+        return current.resolved.rawValue
+    }
+
+    private func loadPaletteAndArt() {
+        let d = UserDefaults.standard
+        if let json = d.string(forKey: AutumnSettingsSync.palettesKey), let data = json.data(using: .utf8),
+           let list = try? JSONDecoder().decode([AutumnPalette].self, from: data) {
+            customPalettes = list
+        } else { customPalettes = [] }
+        activeCustomID = d.string(forKey: AutumnSettingsSync.paletteKey)
+        if let p = activePalette { AutumnPaletteRuntime.active = p }
+        if let str = d.string(forKey: AutumnSettingsSync.artKey), let a = ArtSelection(defaultsString: str),
+           FileManager.default.fileExists(atPath: Self.artDirectory.appendingPathComponent(a.fileName).path) {
+            art = a
+        } else { art = nil }
+    }
+
+    private func persistPalettes() {
+        let d = UserDefaults.standard
+        if let data = try? JSONEncoder().encode(customPalettes), let json = String(data: data, encoding: .utf8) {
+            d.set(json, forKey: AutumnSettingsSync.palettesKey)
+        }
+        if let id = activeCustomID { d.set(id, forKey: AutumnSettingsSync.paletteKey) } else { d.removeObject(forKey: AutumnSettingsSync.paletteKey) }
+        AutumnSettingsSync.noteLocalChange()
+    }
+
+    /// PALETTE button: presets first, then the user's saved palettes, then around again.
+    public func cyclePalette() {
+        enum E { case preset(AutumnTheme), custom(AutumnPalette) }
+        let entries: [E] = AutumnTheme.presets.map { E.preset($0) } + customPalettes.map { E.custom($0) }
+        var idx = -1
+        for (i, e) in entries.enumerated() {
+            switch e {
+            case .preset(let t): if current == t { idx = i }
+            case .custom(let p): if current == .custom && activeCustomID == p.id { idx = i }
+            }
+        }
+        switch entries[(idx + 1) % entries.count] {
+        case .preset(let t): current = t
+        case .custom(let p): applyCustom(p)
+        }
+    }
+
+    public func applyPreset(_ t: AutumnTheme) {
+        activeCustomID = nil
+        persistPalettes()
+        current = t
+    }
+
+    public func applyCustom(_ p: AutumnPalette) {
+        AutumnPaletteRuntime.active = p
+        activeCustomID = p.id
+        persistPalettes()
+        objectWillChange.send()
+        if current != .custom { current = .custom }
+    }
+
+    /// Live preview while editing (not saved to the list).
+    public func previewPalette(_ p: AutumnPalette) {
+        AutumnPaletteRuntime.active = p
+        objectWillChange.send()
+        if current != .custom { suppressVaultNote = true; current = .custom; suppressVaultNote = false }
+    }
+
+    /// Undo a preview.
+    public func restore(theme: AutumnTheme, customID: String?) {
+        activeCustomID = customID
+        if let p = activePalette { AutumnPaletteRuntime.active = p }
+        objectWillChange.send()
+        suppressVaultNote = true
+        current = (theme == .custom && activePalette == nil) ? .void : theme
+        suppressVaultNote = false
+    }
+
+    @discardableResult
+    public func saveCustom(name: String, bg1: String, bg2: String, accent: String, id: String?) -> AutumnPalette {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = clean.isEmpty ? "Custom \(customPalettes.count + 1)" : clean
+        if let id, let i = customPalettes.firstIndex(where: { $0.id == id }) {
+            customPalettes[i].name = label; customPalettes[i].bg1 = bg1; customPalettes[i].bg2 = bg2; customPalettes[i].accent = accent
+            applyCustom(customPalettes[i])
+            return customPalettes[i]
+        }
+        let p = AutumnPalette(name: label, bg1: bg1, bg2: bg2, accent: accent)
+        customPalettes.append(p)
+        applyCustom(p)
+        return p
+    }
+
+    public func deleteCustom(id: String) {
+        customPalettes.removeAll { $0.id == id }
+        if activeCustomID == id {
+            activeCustomID = nil
+            if current == .custom { current = .void }
+        }
+        persistPalettes()
+    }
+
+    // MARK: art
+    public static var artDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("Art", isDirectory: true)
+    }
+    public var artURL: URL? { art.map { Self.artDirectory.appendingPathComponent($0.fileName) } }
+    /// Art shows unless the VOID overlay is selected (then the palette background shows alone).
+    public var showsArt: Bool { art != nil && scrim != .voidOverlay }
+
+    /// Copy the picked file into the app's storage (so it is remembered and reloaded every launch), validate it, and use it.
+    /// Returns an error message, or nil on success.
+    public func importArt(from picked: URL) async -> String? {
+        let scoped = picked.startAccessingSecurityScopedResource()
+        defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
+        let ext = picked.pathExtension.lowercased()
+        let type = UTType(filenameExtension: ext)
+        let isVideo = type?.conforms(to: .movie) == true || ["mp4", "m4v", "mov"].contains(ext)
+        let kind: ArtSelection.Kind = isVideo ? .video : .image
+        let dir = Self.artDirectory
+        let fileName = "art-\(Int(Date().timeIntervalSince1970)).\(ext.isEmpty ? (isVideo ? "mp4" : "png") : ext)"
+        let dest = dir.appendingPathComponent(fileName)
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
+                try FileManager.default.copyItem(at: picked, to: dest)
+            }.value
+        } catch {
+            return "Couldn't copy that file: \(error.localizedDescription)"
+        }
+        // Validate before replacing the current art.
+        if kind == .video {
+            let asset = AVURLAsset(url: dest)
+            let ok = (try? await asset.load(.isPlayable)) ?? false
+            let tracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
+            if !ok || tracks.isEmpty {
+                try? FileManager.default.removeItem(at: dest)
+                return "That video can't be played here. Use MP4 or MOV (H.264 / HEVC)."
+            }
+        } else {
+            guard let src = CGImageSourceCreateWithURL(dest as CFURL, nil), CGImageSourceGetCount(src) > 0 else {
+                try? FileManager.default.removeItem(at: dest)
+                return "That image format isn't supported. Use PNG, JPEG, HEIC, TGA, BMP, GIF or TIFF."
+            }
+        }
+        if let old = art { try? FileManager.default.removeItem(at: dir.appendingPathComponent(old.fileName)) }
+        let sel = ArtSelection(kind: kind, name: picked.lastPathComponent, fileName: fileName)
+        art = sel
+        UserDefaults.standard.set(sel.defaultsString, forKey: AutumnSettingsSync.artKey)
+        AutumnSettingsSync.noteLocalChange()
+        return nil
+    }
+
+    public func clearArt() {
+        if let old = art { try? FileManager.default.removeItem(at: Self.artDirectory.appendingPathComponent(old.fileName)) }
+        art = nil
+        UserDefaults.standard.removeObject(forKey: AutumnSettingsSync.artKey)
+        AutumnSettingsSync.noteLocalChange()
     }
 
     public func cycleTheme() {
@@ -282,7 +499,9 @@ public final class ThemeViewModel: ObservableObject {
         let nextScrim = (n >= 0 && n < all.count) ? all[n] : scrim
         suppressVaultNote = true
         defer { suppressVaultNote = false }
-        if nextTheme != current { current = nextTheme }
+        loadPaletteAndArt()
+        objectWillChange.send()
+        if nextTheme != current { current = (nextTheme == .custom && activePalette == nil) ? .void : nextTheme }
         if nextScrim != scrim { scrim = nextScrim }
     }
 
@@ -329,5 +548,15 @@ extension UIColor {
             return UIColor(color)
         }
         return UIColor.cyan
+    }
+}
+
+
+extension Color {
+    /// "#rrggbb" (alpha dropped).
+    var hexString: String {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "#%02x%02x%02x", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
     }
 }

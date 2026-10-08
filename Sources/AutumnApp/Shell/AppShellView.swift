@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import UIKit
 import AutumnServices
 import LEATRCore
@@ -17,21 +18,34 @@ public struct AppShellView: View {
     @EnvironmentObject var circuit: AdminCircuitMonitor
     @EnvironmentObject var journalVM: JournalViewModel
     @State private var keyboardUp = false
+    @State private var showArtDialog = false
+    @State private var showArtImporter = false
+    @State private var artMessage: String?
     /// Whether Ask Autumn (which has its own accessory button) owns focus.
     @State private var askAutumnFocused = false
+
+    private static var artTypes: [UTType] {
+        [.movie, .image, .mpeg4Movie, .quickTimeMovie] + ["tga", "bmp", "gif", "tiff", "heic"].compactMap { UTType(filenameExtension: $0) }
+    }
 
     public var body: some View {
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
             ZStack {
                 // 1. Theme video or solid (web #backdrop-video z-index:-2)
-                themeVM.chrome.base.ignoresSafeArea()
-                ThemeVideoBackground(
-                    resourceName: themeVM.chrome.videoResourceName,
-                    videoOn: themeVM.videoOn
-                )
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+                // Palette background (gradient) — always there; the user's ART sits on top when set.
+                themeVM.chrome.voidGradient.ignoresSafeArea()
+                if themeVM.showsArt, let art = themeVM.art {
+                    if art.kind == .video {
+                        ThemeVideoBackground(fileURL: themeVM.artURL, videoOn: true)
+                            .ignoresSafeArea()
+                            .allowsHitTesting(false)
+                    } else {
+                        ArtImageBackground(url: themeVM.artURL)
+                            .ignoresSafeArea()
+                            .allowsHitTesting(false)
+                    }
+                }
 
                 // 2. Scrim ON the video, BEHIND all UI (web #vid-scrim z-index:-1)
                 scrimWash.allowsHitTesting(false)
@@ -57,6 +71,7 @@ public struct AppShellView: View {
                 if let studio = appNav.studio, studio != .music { StudioHostView(kind: studio) }
                 if appNav.showMathSolver { MathSolverOverlay() }
                 if appNav.showAgents { AgentsOverlay() }
+                if appNav.showPalette { PaletteEditorOverlay() }
                 if appNav.showLatexCanvas { LatexCanvasOverlay() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -64,6 +79,25 @@ public struct AppShellView: View {
         // Chat/input stack must NOT ignore the keyboard. Removing this lets the
         // Ask Autumn bar rest directly above the system keyboard.
         .preferredColorScheme(themeVM.current == .day ? .light : .dark)
+        .confirmationDialog(themeVM.art.map { "ART — \($0.name)" } ?? "ART — no art set", isPresented: $showArtDialog, titleVisibility: .visible) {
+            Button(themeVM.art == nil ? "Choose a video or image…" : "Choose a different file…") { showArtImporter = true }
+            if themeVM.art != nil { Button("Remove art (palette background only)", role: .destructive) { themeVM.clearArt() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("MP4 / MOV video, or a PNG, JPEG, HEIC, TGA, BMP, GIF or TIFF image. It is remembered and loads every time.")
+        }
+        .fileImporter(isPresented: $showArtImporter, allowedContentTypes: Self.artTypes, allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                Task { artMessage = await themeVM.importArt(from: url) }
+            case .failure(let err):
+                artMessage = err.localizedDescription
+            }
+        }
+        .alert("Art", isPresented: Binding(get: { artMessage != nil }, set: { if !$0 { artMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(artMessage ?? "") }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardUp = true
         }
@@ -260,7 +294,8 @@ public struct AppShellView: View {
             .layoutPriority(0)
             Spacer(minLength: 4)
             scrimPill
-            themePill
+            artPill
+            palettePill
             livePill
             profileChip
         }
@@ -282,7 +317,8 @@ public struct AppShellView: View {
             }
             .padding(.top, 10)
             scrimPill
-            themePill
+            artPill
+            palettePill
             livePill
             profileChip
             Divider().background(chrome.accent.opacity(0.2))
@@ -319,14 +355,31 @@ public struct AppShellView: View {
         .layoutPriority(2)
     }
 
-    private var themePill: some View {
+    /// ART: the one background video/image the user supplies (remembered; shown instead of the old named video themes).
+    private var artPill: some View {
         let chrome = themeVM.chrome
-        return Button { themeVM.cycleTheme() } label: {
-            headerChip(text: themeVM.current.rawValue, color: chrome.accent)
+        let has = themeVM.art != nil
+        return Button { showArtDialog = true } label: {
+            headerChip(text: "ART", color: has ? chrome.accent : Color.white.opacity(0.6), dot: has)
         }
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(2)
+        .accessibilityLabel("Art background")
+    }
+
+    /// PALETTE: tap cycles presets and your saved palettes; long-press (or HUD tools > PALETTE) opens the editor.
+    private var palettePill: some View {
+        let chrome = themeVM.chrome
+        return headerChip(text: themeVM.paletteLabel, color: chrome.accent)
+            .contentShape(Capsule())
+            .onTapGesture { themeVM.cyclePalette() }
+            .onLongPressGesture(minimumDuration: 0.45) { appNav.showPalette = true }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Palette \(themeVM.paletteLabel)")
+            .accessibilityAddTraits(.isButton)
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(2)
     }
 
     private var scrimPill: some View {
@@ -428,15 +481,6 @@ public struct AppShellView: View {
     }
 }
 
-extension ThemeViewModel {
-    /// Video plays unless VOID theme or VOID overlay (web setBackdropVideoOn).
-    public var videoOn: Bool {
-        guard chrome.videoResourceName != nil else { return false }
-        return scrim != .voidOverlay
-    }
-}
-
-
 /// Dark root SIWA host — AppleSignInButton tap starts auth (same gesture). Profile only opens this cover.
 struct RootAppleSignInCover: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -533,6 +577,7 @@ public final class AppNavigation: ObservableObject {
     @Published public var showProfile = false
     @Published public var showFeedback = false
     @Published public var showAdmin = false
+    @Published public var showPalette = false
     /// Root fullScreenCover for SIWA — Profile must not host AppleSignInButton nested.
     @Published public var showAppleSignIn = false
     /// When true, RootView shows WelcomeView (fresh Apple/GitHub/Guest) instead of shell.

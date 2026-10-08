@@ -158,8 +158,8 @@ public struct SettingsView: View {
 
                 // Theme
                 Section {
-                    Picker("Theme", selection: $themeVM.current) {
-                        ForEach(AutumnTheme.allCases) { theme in
+                    Picker("Palette", selection: $themeVM.current) {
+                        ForEach(AutumnTheme.presets) { theme in
                             Text(theme.rawValue).tag(theme)
                         }
                     }

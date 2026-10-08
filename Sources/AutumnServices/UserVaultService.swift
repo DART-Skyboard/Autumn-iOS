@@ -477,6 +477,9 @@ public enum AutumnSettingsSync {
     public static let scrimKey = "_aut_scrim"
     public static let adminKey = "_aut_admin_enabled"
     public static let liveFeedKey = "autumn_live_feed"
+    public static let palettesKey = "_aut_palettes"
+    public static let paletteKey = "_aut_palette"
+    public static let artKey = "_aut_art"
 
     public static let didRestoreNotification = Notification.Name("AutumnSettingsDidRestore")
     public static let localChangeNotification = Notification.Name("AutumnSettingsLocalChange")
@@ -500,6 +503,10 @@ public enum AutumnSettingsSync {
         if UserDefaults.standard.object(forKey: liveFeedKey) != nil {
             s["liveFeed"] = UserDefaults.standard.bool(forKey: liveFeedKey)
         }
+        // Palettes (JSON list), the active palette id, and the art choice (the art FILE stays on the device).
+        if let v = UserDefaults.standard.string(forKey: palettesKey) { s["palettes"] = v }
+        if let v = UserDefaults.standard.string(forKey: paletteKey) { s["palette"] = v }
+        if let v = UserDefaults.standard.string(forKey: artKey) { s["art"] = v }
         return s
     }
 
@@ -522,6 +529,9 @@ public enum AutumnSettingsSync {
         if let live = settings["liveFeed"] as? Bool {
             UserDefaults.standard.set(live, forKey: liveFeedKey)
         }
+        if let v = settings["palettes"] as? String { UserDefaults.standard.set(v, forKey: palettesKey) }
+        if let v = settings["palette"] as? String { UserDefaults.standard.set(v, forKey: paletteKey) }
+        if let v = settings["art"] as? String { UserDefaults.standard.set(v, forKey: artKey) }
         NotificationCenter.default.post(name: didRestoreNotification, object: nil)
     }
 

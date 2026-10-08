@@ -35,6 +35,7 @@ struct HUDToolsPanel: View {
             tool("MUSIC", key: .music)
             Button { appNav.showMathSolver = true; appNav.showHUDTools = false } label: { row("MATH SOLVER") }
             Button { appNav.showAgents = true; appNav.showHUDTools = false } label: { row("AGENTS") }
+            Button { appNav.showPalette = true; appNav.showHUDTools = false } label: { row("PALETTES") }
             Button { appNav.showLatexCanvas = true; appNav.showHUDTools = false } label: { row("LATEX") }
             tool("ARC EDGE", key: .arcEdge)
             tool("ARCLAKE", key: .arcLake)
