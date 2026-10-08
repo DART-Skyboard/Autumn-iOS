@@ -27,7 +27,7 @@ enum KeyboardAccessory {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
-    private final class Target: NSObject { @objc func tap() { KeyboardAccessory.hide() } }
+    @MainActor private final class Target: NSObject { @objc func tap() { KeyboardAccessory.hide() } }
     private static let target = Target()
 
     static func installEverywhere() {
