@@ -79,6 +79,10 @@ public struct AppShellView: View {
         // Chat/input stack must NOT ignore the keyboard. Removing this lets the
         // Ask Autumn bar rest directly above the system keyboard.
         .preferredColorScheme(themeVM.current == .day ? .light : .dark)
+        .sheet(isPresented: $appNav.showSupport) {
+            SupportSheet(accentColor: themeVM.chrome.accent, appName: "Autumn")
+                .presentationDragIndicator(.visible)
+        }
         .confirmationDialog(themeVM.art.map { "ART — \($0.name)" } ?? "ART — no art set", isPresented: $showArtDialog, titleVisibility: .visible) {
             Button(themeVM.art == nil ? "Choose a video or image…" : "Choose a different file…") { showArtImporter = true }
             if themeVM.art != nil { Button("Remove art (palette background only)", role: .destructive) { themeVM.clearArt() } }
@@ -578,6 +582,7 @@ public final class AppNavigation: ObservableObject {
     @Published public var showFeedback = false
     @Published public var showAdmin = false
     @Published public var showPalette = false
+    @Published public var showSupport = false
     /// Root fullScreenCover for SIWA — Profile must not host AppleSignInButton nested.
     @Published public var showAppleSignIn = false
     /// When true, RootView shows WelcomeView (fresh Apple/GitHub/Guest) instead of shell.

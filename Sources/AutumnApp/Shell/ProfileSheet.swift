@@ -207,6 +207,15 @@ public struct ProfileSheet: View {
                     }
                 }
 
+                Button { appNav.showProfile = false; appNav.showSupport = true } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "heart.fill").font(.system(size: 12))
+                        Text("Support Autumn · $4.99").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(chrome.accent)
+                    .frame(maxWidth: .infinity).padding(12)
+                }
+
                 Button { showSignOutChoices = true } label: {
                     Text("Sign Out").font(.system(size: 13)).foregroundColor(.red)
                         .frame(maxWidth: .infinity).padding(14)

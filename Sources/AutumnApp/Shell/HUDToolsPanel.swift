@@ -36,6 +36,7 @@ struct HUDToolsPanel: View {
             Button { appNav.showMathSolver = true; appNav.showHUDTools = false } label: { row("MATH SOLVER") }
             Button { appNav.showAgents = true; appNav.showHUDTools = false } label: { row("AGENTS") }
             Button { appNav.showPalette = true; appNav.showHUDTools = false } label: { row("PALETTES") }
+            Button { appNav.showSupport = true; appNav.showHUDTools = false } label: { row("SUPPORT") }
             Button { appNav.showLatexCanvas = true; appNav.showHUDTools = false } label: { row("LATEX") }
             tool("ARC EDGE", key: .arcEdge)
             tool("ARCLAKE", key: .arcLake)
