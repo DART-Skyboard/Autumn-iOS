@@ -1,0 +1,72 @@
+name: ASC IAP + Version Audit (read-only)
+on:
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - name: Audit (GET only)
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 << 'PY'
+          import os, time, json, jwt, requests
+          from pathlib import Path
+          KEY_ID="NQXQ595W59"; ISSUER=os.environ["ASC_ISSUER_ID"]
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          token=jwt.encode({"iss":ISSUER,"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"}, key, algorithm="ES256", headers={"alg":"ES256","kid":KEY_ID,"typ":"JWT"})
+          H={"Authorization":f"Bearer {token}"}
+          def get(path, params=None):
+            r=requests.get("https://api.appstoreconnect.apple.com"+path, headers=H, params=params, timeout=90)
+            print("GET", path, r.status_code)
+            if r.status_code>=400:
+              print(r.text[:1500]); return None
+            return r.json()
+          apps=get("/v1/apps", {"filter[bundleId]":"com.dartmeadow.autumn"})
+          app=(apps or {}).get("data",[{}])[0]; aid=app.get("id"); print("APP", aid, (app.get("attributes") or {}).get("name"))
+          print("=== SUBSCRIPTION GROUPS ===")
+          g=get(f"/v1/apps/{aid}/subscriptionGroups", {"limit":50})
+          for grp in (g or {}).get("data",[]):
+            print("GROUP", grp["id"], json.dumps(grp["attributes"]))
+            subs=get(f"/v1/subscriptionGroups/{grp['id']}/subscriptions", {"limit":50})
+            for s in (subs or {}).get("data",[]):
+              a=s["attributes"]; print("  SUB", s["id"], json.dumps({k:a.get(k) for k in ("name","productId","state","subscriptionPeriod","groupLevel","reviewNote")}))
+              loc=get(f"/v1/subscriptions/{s['id']}/subscriptionLocalizations")
+              for l in (loc or {}).get("data",[]): print("     LOC", json.dumps(l["attributes"]))
+              pr=get(f"/v1/subscriptions/{s['id']}/prices", {"limit":3,"include":"subscriptionPricePoint","fields[subscriptionPricePoints]":"customerPrice"})
+              print("     PRICES", len((pr or {}).get("data",[])))
+              ss=get(f"/v1/subscriptions/{s['id']}/appStoreReviewScreenshot")
+              print("     REVIEW_SCREENSHOT", "yes" if (ss or {}).get("data") else "none")
+          print("=== IN-APP PURCHASES (v2) ===")
+          i=get(f"/v1/apps/{aid}/inAppPurchasesV2", {"limit":50})
+          for p in (i or {}).get("data",[]):
+            a=p["attributes"]; print("IAP", p["id"], json.dumps({k:a.get(k) for k in ("name","productId","inAppPurchaseType","state","reviewNote")}))
+            loc=get(f"/v2/inAppPurchases/{p['id']}/inAppPurchaseLocalizations")
+            for l in (loc or {}).get("data",[]): print("   LOC", json.dumps(l["attributes"]))
+            ss=get(f"/v2/inAppPurchases/{p['id']}/appStoreReviewScreenshot")
+            print("   REVIEW_SCREENSHOT", "yes" if (ss or {}).get("data") else "none")
+            pp=get(f"/v2/inAppPurchases/{p['id']}/iapPriceSchedule")
+            print("   PRICE_SCHEDULE", "yes" if (pp or {}).get("data") else "none")
+          print("=== APP STORE VERSIONS ===")
+          v=get(f"/v1/apps/{aid}/appStoreVersions", {"limit":5})
+          for x in (v or {}).get("data",[]):
+            a=x["attributes"]; print("VERSION", x["id"], json.dumps({k:a.get(k) for k in ("versionString","appStoreState","platform","releaseType")}))
+            b=get(f"/v1/appStoreVersions/{x['id']}/build")
+            bb=(b or {}).get("data")
+            print("   BUILD", json.dumps(((bb or {}).get("attributes") or {}).get("version")) if bb else "none attached")
+          print("=== LATEST BUILDS ===")
+          b=get("/v1/builds", {"filter[app]":aid,"sort":"-uploadedDate","limit":3,"fields[builds]":"version,uploadedDate,processingState,usesNonExemptEncryption"})
+          for x in (b or {}).get("data",[]): print("BUILD", x["id"], json.dumps(x["attributes"]))
+          print("=== REVIEW SUBMISSIONS ===")
+          rs=get("/v1/reviewSubmissions", {"filter[app]":aid,"limit":5})
+          for x in (rs or {}).get("data",[]): print("SUBMISSION", x["id"], json.dumps(x["attributes"]))
+          PY
