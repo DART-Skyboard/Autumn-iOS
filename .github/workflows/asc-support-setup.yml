@@ -1,0 +1,96 @@
+name: ASC Support Products Setup
+on:
+  workflow_dispatch:
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - name: Create group, monthly sub, donation IAP under Autumn AI (idempotent)
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 << 'PY'
+          import os, time, json, jwt, requests
+          from pathlib import Path
+          KEY_ID="NQXQ595W59"; ISSUER=os.environ["ASC_ISSUER_ID"]; APP="6775076737"
+          MONTHLY="com.dartmeadow.autumn.support.monthly"; DON="com.dartmeadow.autumn.support.donation"
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          token=jwt.encode({"iss":ISSUER,"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"}, key, algorithm="ES256", headers={"alg":"ES256","kid":KEY_ID,"typ":"JWT"})
+          H={"Authorization":f"Bearer {token}","Content-Type":"application/json"}
+          B="https://api.appstoreconnect.apple.com"
+          def call(m,path,params=None,body=None):
+            r=requests.request(m,B+path,headers=H,params=params,data=json.dumps(body) if body else None,timeout=90)
+            print(m,path,r.status_code)
+            if r.status_code>=400: print("  ",r.text[:900]); return None
+            return r.json() if r.text else {}
+          def rel(t,i): return {"data":{"type":t,"id":i}}
+          # --- group
+          gs=call("GET",f"/v1/apps/{APP}/subscriptionGroups",{"limit":50}) or {"data":[]}
+          grp=next((g for g in gs["data"] if g["attributes"]["referenceName"]=="Autumn Support"),None)
+          if not grp:
+            grp=(call("POST","/v1/subscriptionGroups",body={"data":{"type":"subscriptionGroups","attributes":{"referenceName":"Autumn Support"},"relationships":{"app":rel("apps",APP)}}}) or {}).get("data")
+          gid=grp["id"]; print("GROUP",gid)
+          ls=call("GET",f"/v1/subscriptionGroups/{gid}/subscriptionGroupLocalizations") or {"data":[]}
+          if not ls["data"]:
+            call("POST","/v1/subscriptionGroupLocalizations",body={"data":{"type":"subscriptionGroupLocalizations","attributes":{"locale":"en-US","name":"Autumn Support","customAppName":"Autumn AI"},"relationships":{"subscriptionGroup":rel("subscriptionGroups",gid)}}})
+          # --- subscription
+          ss=call("GET",f"/v1/subscriptionGroups/{gid}/subscriptions",{"limit":50}) or {"data":[]}
+          sub=next((s for s in ss["data"] if s["attributes"]["productId"]==MONTHLY),None)
+          if not sub:
+            sub=(call("POST","/v1/subscriptions",body={"data":{"type":"subscriptions","attributes":{"name":"Monthly Supporter","productId":MONTHLY,"subscriptionPeriod":"ONE_MONTH","groupLevel":1,"reviewNote":"Optional monthly donation to support early alpha development of Autumn AI. Unlocks no features. Open Profile > Support Autumn to view."},"relationships":{"group":rel("subscriptionGroups",gid)}}}) or {}).get("data")
+          sid=sub["id"]; print("SUB",sid)
+          ls=call("GET",f"/v1/subscriptions/{sid}/subscriptionLocalizations") or {"data":[]}
+          if not ls["data"]:
+            call("POST","/v1/subscriptionLocalizations",body={"data":{"type":"subscriptionLocalizations","attributes":{"locale":"en-US","name":"Monthly Supporter","description":"Support Autumn's early development"},"relationships":{"subscription":rel("subscriptions",sid)}}})
+          # --- territories
+          terrs=[]; url="/v1/territories"; params={"limit":200}
+          t=call("GET",url,params)
+          terrs=[x["id"] for x in (t or {}).get("data",[])]
+          print("territories",len(terrs))
+          call("POST","/v1/subscriptionAvailabilities",body={"data":{"type":"subscriptionAvailabilities","attributes":{"availableInNewTerritories":True},"relationships":{"subscription":rel("subscriptions",sid),"availableTerritories":{"data":[{"type":"territories","id":x} for x in terrs]}}}})
+          # --- subscription price
+          existing=call("GET",f"/v1/subscriptions/{sid}/prices",{"limit":5}) or {"data":[]}
+          if not existing["data"]:
+            pp=call("GET",f"/v1/subscriptions/{sid}/pricePoints",{"filter[territory]":"USA","limit":200}) or {"data":[]}
+            usa=next((p for p in pp["data"] if p["attributes"].get("customerPrice")=="4.99"),None)
+            print("USA price point",usa and usa["id"])
+            if usa:
+              call("POST","/v1/subscriptionPrices",body={"data":{"type":"subscriptionPrices","attributes":{"preserveCurrentPrice":False},"relationships":{"subscription":rel("subscriptions",sid),"subscriptionPricePoint":rel("subscriptionPricePoints",usa["id"]),"territory":rel("territories","USA")}}})
+              eq=call("GET",f"/v1/subscriptionPricePoints/{usa['id']}/equalizations",{"limit":200,"include":"territory"}) or {"data":[]}
+              n=0
+              for p in eq["data"]:
+                tid=p["relationships"]["territory"]["data"]["id"]
+                if tid=="USA": continue
+                if call("POST","/v1/subscriptionPrices",body={"data":{"type":"subscriptionPrices","attributes":{"preserveCurrentPrice":False},"relationships":{"subscription":rel("subscriptions",sid),"subscriptionPricePoint":rel("subscriptionPricePoints",p["id"]),"territory":rel("territories",tid)}}}): n+=1
+              print("equalized territories priced",n)
+          # --- consumable IAP
+          ip=call("GET",f"/v1/apps/{APP}/inAppPurchasesV2",{"limit":50}) or {"data":[]}
+          iap=next((p for p in ip["data"] if p["attributes"]["productId"]==DON),None)
+          if not iap:
+            iap=(call("POST","/v2/inAppPurchases",body={"data":{"type":"inAppPurchases","attributes":{"name":"One-Time Support","productId":DON,"inAppPurchaseType":"CONSUMABLE","reviewNote":"Optional one-time donation to support early alpha development of Autumn AI. Unlocks no features. Open Profile > Support Autumn to view.","familySharable":False},"relationships":{"app":rel("apps",APP)}}}) or {}).get("data")
+          iid=iap["id"]; print("IAP",iid)
+          ls=call("GET",f"/v2/inAppPurchases/{iid}/inAppPurchaseLocalizations") or {"data":[]}
+          if not ls["data"]:
+            call("POST","/v1/inAppPurchaseLocalizations",body={"data":{"type":"inAppPurchaseLocalizations","attributes":{"locale":"en-US","name":"One-Time Support","description":"Support Autumn's early development"},"relationships":{"inAppPurchaseV2":rel("inAppPurchases",iid)}}})
+          call("POST","/v1/inAppPurchaseAvailabilities",body={"data":{"type":"inAppPurchaseAvailabilities","attributes":{"availableInNewTerritories":True},"relationships":{"inAppPurchase":rel("inAppPurchases",iid),"availableTerritories":{"data":[{"type":"territories","id":x} for x in terrs]}}}})
+          sch=call("GET",f"/v2/inAppPurchases/{iid}/iapPriceSchedule")
+          if not sch or not sch.get("data"):
+            pp=call("GET",f"/v2/inAppPurchases/{iid}/pricePoints",{"filter[territory]":"USA","limit":200}) or {"data":[]}
+            usa=next((p for p in pp["data"] if p["attributes"].get("customerPrice")=="4.99"),None)
+            print("IAP USA price point",usa and usa["id"])
+            if usa:
+              call("POST","/v1/inAppPurchasePriceSchedules",body={"data":{"type":"inAppPurchasePriceSchedules","relationships":{"inAppPurchase":rel("inAppPurchases",iid),"baseTerritory":rel("territories","USA"),"manualPrices":{"data":[{"type":"inAppPurchasePrices","id":"${p1}"}]}}},"included":[{"type":"inAppPurchasePrices","id":"${p1}","attributes":{"startDate":None},"relationships":{"inAppPurchasePricePoint":rel("inAppPurchasePricePoints",usa["id"])}}]})
+          # --- final state
+          for path in (f"/v1/subscriptions/{sid}",f"/v2/inAppPurchases/{iid}"):
+            r=call("GET",path)
+            if r: print("STATE",path,json.dumps({k:r["data"]["attributes"].get(k) for k in ("productId","state")}))
+          PY
