@@ -169,12 +169,6 @@ public struct ProfileSheet: View {
                 Button { appNav.studio = .privacy; appNav.showProfile = false } label: {
                     labelRow("PRIVACY")
                 }
-                Button { appNav.studio = .worldStudio; appNav.showProfile = false } label: {
-                    labelRow("WORLD STUDIO")
-                }
-                Button { appNav.studio = .arcForge; appNav.showProfile = false } label: {
-                    labelRow("ARC FORGE")
-                }
 
                 // TF156: direct shortcut to the same SYS overlay/compose
                 // sheet reachable from the right rail — same read/write
