@@ -82,7 +82,7 @@ jobs:
           if not ls["data"]:
             call("POST","/v1/inAppPurchaseLocalizations",body={"data":{"type":"inAppPurchaseLocalizations","attributes":{"locale":"en-US","name":"One-Time Support","description":"Support Autumn's early development"},"relationships":{"inAppPurchaseV2":rel("inAppPurchases",iid)}}})
           call("POST","/v1/inAppPurchaseAvailabilities",body={"data":{"type":"inAppPurchaseAvailabilities","attributes":{"availableInNewTerritories":True},"relationships":{"inAppPurchase":rel("inAppPurchases",iid),"availableTerritories":{"data":[{"type":"territories","id":x} for x in terrs]}}}})
-          sch=call("GET",f"/v2/inAppPurchases/{iid}/iapPriceSchedule")
+          sch=call("GET",f"/v2/inAppPurchases/{iid}/iapPriceSchedule/manualPrices")
           if not sch or not sch.get("data"):
             pp=call("GET",f"/v2/inAppPurchases/{iid}/pricePoints",{"filter[territory]":"USA","limit":200}) or {"data":[]}
             usa=next((p for p in pp["data"] if p["attributes"].get("customerPrice")=="4.99"),None)
