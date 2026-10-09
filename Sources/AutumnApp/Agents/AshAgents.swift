@@ -3,7 +3,7 @@ import SwiftUI
 import AutumnServices
 
 // LEATR project agents for Autumn iOS. Swift port of leatr-ash scripts/ash/{ash-shell64,ash-canvas,ash-agents}.js.
-// Deterministic cascades over Shell 64 (reflexive variable state, integers only). No outside AI, no network model calls.
+// Deterministic reflexes across Shell 64 (reflexive variable state, integers only). No outside AI, no network model calls.
 // Reads the Shell 64 state + agents contract from the private leatr-ash repo via the admin's GitHub token; keeps optimized state locally on the device.
 
 struct AshRec {
@@ -157,7 +157,7 @@ enum AshAgents {
         }
     }
 
-    /// Manager: Ash Canvas cascade over the topic (route + optimize, depth capped at 7) then compose the Ash program.
+    /// Manager: Ash Canvas reflex across the topic (route + optimize, depth capped at 7) then compose the Ash program.
     static func run(_ st: inout AshShell64State, _ task: AshTask) -> AshTask {
         var t = task
         let hits = st.find(task.topic + "/")
@@ -247,7 +247,10 @@ final class AshAgentsModel: ObservableObject {
     func send(_ text: String) {
         let goal = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !goal.isEmpty, !busy else { return }
-        msgs.append(Msg(user: true, text: goal, program: nil)); busy = true
+        msgs.append(Msg(user: true, text: goal, program: nil))
+        // Tool Radian (encode / decode / analyze / bare math) answers on this device: nothing is sent or learned.
+        if let r = AshRadian.respond(goal) { msgs.append(Msg(user: false, text: r, program: nil)); return }
+        busy = true
         Task {
             // Admin (token that can read leatr-ash): direct path below. Everyone else: the read-only Shell 64 door in the Apps Script.
             if await GitHubClient.shared.hasToken() { await load() }

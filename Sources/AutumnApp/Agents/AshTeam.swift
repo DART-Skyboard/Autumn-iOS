@@ -172,7 +172,7 @@ enum AshTeam {
             let ri = recs[(task.step * co.count + pos) % recs.count]
             let key = st.recs[ri].k
             if !t.members[mi].touched.contains(key) {
-                // Ash Canvas cascade on this one record: route (bl+1, rbli+1), depth capped at 7
+                // Ash Canvas reflex on this one record: route (bl+1, rbli+1), depth capped at 7
                 st.recs[ri].bl = min(st.recs[ri].bl + 1, 7); st.recs[ri].rbli = min(st.recs[ri].rbli + 1, 7)
                 st.recs[ri].t = task.tool; st.recs[ri].shell = task.shell
                 t.members[mi].touched.append(key); task.hits += 1
