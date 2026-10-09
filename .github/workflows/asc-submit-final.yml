@@ -1,0 +1,63 @@
+name: ASC Final Submit
+on:
+  workflow_dispatch:
+    inputs:
+      build_id: {description: "ASC build id", required: true}
+      submit: {description: "true to submit for review", default: "false"}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          BUILD_ID: ${{ inputs.build_id }}
+          SUBMIT: ${{ inputs.submit }}
+        run: |
+          python3 << 'PY'
+          import os,time,json,jwt,requests
+          from pathlib import Path
+          APP="6775076737"; VER="505c5b67-ca53-4c77-b866-dce823c0aaaa"; SUB="6820697120"; IAP="6820697660"
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          tok=jwt.encode({"iss":os.environ["ASC_ISSUER_ID"],"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"},key,algorithm="ES256",headers={"alg":"ES256","kid":"NQXQ595W59","typ":"JWT"})
+          H={"Authorization":f"Bearer {tok}","Content-Type":"application/json"}; B="https://api.appstoreconnect.apple.com"
+          def call(m,p,params=None,body=None):
+            r=requests.request(m,B+p,headers=H,params=params,data=json.dumps(body) if body else None,timeout=90)
+            print(">>",m,p,r.status_code)
+            if r.status_code>=400: print("   ERR",r.text[:1500]); return None
+            return r.json() if r.text else {}
+          rel=lambda t,i:{"data":{"type":t,"id":i}}
+          call("PATCH",f"/v1/appStoreVersions/{VER}/relationships/build",body=rel("builds",os.environ["BUILD_ID"]))
+          NEW="Support Autumn: optional one-time or monthly support from your Profile. New privacy choices (Profile > Privacy): chats, presence, usage analytics and location are all off until you turn them on. Agent, team and Tool Radian commands now work right in the main chat. Faster, steadier agent chat."
+          for l in (call("GET",f"/v1/appStoreVersions/{VER}/appStoreVersionLocalizations") or {"data":[]})["data"]:
+            call("PATCH",f"/v1/appStoreVersionLocalizations/{l['id']}",body={"data":{"type":"appStoreVersionLocalizations","id":l["id"],"attributes":{"whatsNew":NEW}}})
+          rd=call("GET",f"/v1/appStoreVersions/{VER}/appStoreReviewDetail")
+          if rd and rd.get("data"):
+            notes="No account is required: tap Continue as Guest. Optional support purchases are in Profile > Support Autumn (monthly subscription and one-time). All data sharing (journal, presence, analytics, location) is off by default and controlled in Profile > Privacy. Contact: dartmeadow@gmail.com"
+            call("PATCH",f"/v1/appStoreReviewDetails/{rd['data']['id']}",body={"data":{"type":"appStoreReviewDetails","id":rd["data"]["id"],"attributes":{"notes":notes,"demoAccountRequired":False}}})
+          for p in (f"/v1/subscriptions/{SUB}",f"/v2/inAppPurchases/{IAP}"):
+            x=call("GET",p); print(">> STATE",p,x["data"]["attributes"].get("state"))
+          subs=(call("GET",f"/v1/apps/{APP}/reviewSubmissions",{"limit":20}) or {"data":[]})["data"]
+          for s in subs:
+            its=(call("GET",f"/v1/reviewSubmissions/{s['id']}/items") or {"data":[]})["data"]
+            print(">> SUBMISSION",s["id"],s["attributes"].get("state"),"items",[(i["id"],i["attributes"].get("state")) for i in its])
+          if os.environ["SUBMIT"]=="true":
+            call("POST","/v1/subscriptionSubmissions",body={"data":{"type":"subscriptionSubmissions","relationships":{"subscription":rel("subscriptions",SUB)}}})
+            call("POST","/v1/inAppPurchaseSubmissions",body={"data":{"type":"inAppPurchaseSubmissions","relationships":{"inAppPurchaseV2":rel("inAppPurchases",IAP)}}})
+            draft=[s for s in subs if s["attributes"].get("state")=="READY_FOR_REVIEW"]
+            rid=draft[0]["id"] if draft else None
+            if not rid:
+              rs=call("POST","/v1/reviewSubmissions",body={"data":{"type":"reviewSubmissions","attributes":{"platform":"IOS"},"relationships":{"app":rel("apps",APP)}}}); rid=rs["data"]["id"] if rs else None
+            print(">> USING SUBMISSION",rid)
+            if rid:
+              call("POST","/v1/reviewSubmissionItems",body={"data":{"type":"reviewSubmissionItems","relationships":{"reviewSubmission":rel("reviewSubmissions",rid),"appStoreVersion":rel("appStoreVersions",VER)}}})
+              call("PATCH",f"/v1/reviewSubmissions/{rid}",body={"data":{"type":"reviewSubmissions","id":rid,"attributes":{"submitted":True}}})
+              r=call("GET",f"/v1/reviewSubmissions/{rid}"); print(">> FINAL STATE",r and r["data"]["attributes"].get("state"))
+          PY
