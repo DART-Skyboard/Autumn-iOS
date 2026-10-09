@@ -48,9 +48,21 @@ jobs:
           for s in subs:
             its=(call("GET",f"/v1/reviewSubmissions/{s['id']}/items") or {"data":[]})["data"]
             print(">> SUBMISSION",s["id"],s["attributes"].get("state"),"items",[(i["id"],i["attributes"].get("state")) for i in its])
+          # pricing: the app must have a price schedule; Free = the zero price point in the base territory
+          sch=requests.get(B+f"/v1/apps/{APP}/appPriceSchedule",headers=H,timeout=60); print(">> appPriceSchedule",sch.status_code)
+          have=False
+          if sch.status_code==200 and sch.json().get("data"):
+            mp=requests.get(B+f"/v1/appPriceSchedules/{sch.json()['data']['id']}/manualPrices",headers=H,timeout=60); print(">> manualPrices",mp.status_code,len(mp.json().get("data",[])) if mp.status_code==200 else mp.text[:200]); have=mp.status_code==200 and len(mp.json().get("data",[]))>0
+          if not have and os.environ["SUBMIT"]=="true":
+            pts=[];url=f"/v1/apps/{APP}/appPricePoints";params={"filter[territory]":"USA","limit":200}
+            r=requests.get(B+url,headers=H,params=params,timeout=90); print(">> appPricePoints",r.status_code)
+            free=[x for x in r.json().get("data",[]) if x["attributes"].get("customerPrice") in ("0","0.0","0.00")]
+            print(">> free points",[x["id"] for x in free])
+            if free:
+              body={"data":{"type":"appPriceSchedules","relationships":{"app":rel("apps",APP),"baseTerritory":rel("territories","USA"),"manualPrices":{"data":[{"type":"appPrices","id":"${price1}"}]}}},
+                    "included":[{"type":"appPrices","id":"${price1}","attributes":{"startDate":None},"relationships":{"appPricePoint":rel("appPricePoints",free[0]["id"])}}]}
+              call("POST","/v1/appPriceSchedules",body=body)
           if os.environ["SUBMIT"]=="true":
-            call("POST","/v1/subscriptionSubmissions",body={"data":{"type":"subscriptionSubmissions","relationships":{"subscription":rel("subscriptions",SUB)}}})
-            call("POST","/v1/inAppPurchaseSubmissions",body={"data":{"type":"inAppPurchaseSubmissions","relationships":{"inAppPurchaseV2":rel("inAppPurchases",IAP)}}})
             draft=[s for s in subs if s["attributes"].get("state")=="READY_FOR_REVIEW"]
             rid=draft[0]["id"] if draft else None
             if not rid:
@@ -58,6 +70,8 @@ jobs:
             print(">> USING SUBMISSION",rid)
             if rid:
               call("POST","/v1/reviewSubmissionItems",body={"data":{"type":"reviewSubmissionItems","relationships":{"reviewSubmission":rel("reviewSubmissions",rid),"appStoreVersion":rel("appStoreVersions",VER)}}})
+              call("POST","/v1/subscriptionSubmissions",body={"data":{"type":"subscriptionSubmissions","relationships":{"subscription":rel("subscriptions",SUB)}}})
+              call("POST","/v1/inAppPurchaseSubmissions",body={"data":{"type":"inAppPurchaseSubmissions","relationships":{"inAppPurchaseV2":rel("inAppPurchases",IAP)}}})
               call("PATCH",f"/v1/reviewSubmissions/{rid}",body={"data":{"type":"reviewSubmissions","id":rid,"attributes":{"submitted":True}}})
               r=call("GET",f"/v1/reviewSubmissions/{rid}"); print(">> FINAL STATE",r and r["data"]["attributes"].get("state"))
           PY
