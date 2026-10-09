@@ -4,6 +4,7 @@ import Foundation
 // (tool + kind + angle), decodes them for analysis, and generates a response. Integers only (angles are tenths of a degree).
 // No outside AI, no network, no eval. Nothing a user types is stored or learned.
 //   state  <tool>[f]<kind><angle>   md-0.1  mdb0.1  md0.0  mfdb0.0       limit: |angle| <= 45.0 degrees (1/8 of a diameter)
+//   One angle per data point carries its whole context. Data points may share a state; to tell them apart the same angle gains decimal places (up to 6).
 enum AshRadian {
     static let tools: [Character: String] = ["m": "Maze", "p": "Puzzle", "e": "Envelope", "h": "Hammer", "s": "Stick", "k": "Knife", "r": "Scissors"]
     static let limit = 450
@@ -13,29 +14,37 @@ enum AshRadian {
     /// kind: "-" data, "+" data that can build, "b" both, "0" neutral
     struct State: Equatable {
         var tool: Character, field: Bool, kind: Character, mag: Int, neg: Bool
+        var prec = 1   // decimal places of the angle; mag is in units of 10^-prec degrees
         var signed: Int { (neg ? -1 : 1) * mag }
+        func scaled(_ P: Int) -> Int { signed * AshRadian.pow10(P - prec) }
         var text: String {
             let k: String
             switch kind { case "-": k = "d-"; case "+": k = "d+"; case "b": k = (neg && mag > 0) ? "db-" : "db"; default: k = "d" }
-            return "\(tool)\(field ? "f" : "")\(k)\(AshRadian.tenths(mag))"
+            return "\(tool)\(field ? "f" : "")\(k)\(AshRadian.fixed(mag, prec))"
         }
     }
 
-    static func tenths(_ mag: Int) -> String { "\(mag / 10).\(mag % 10)" }
-    static func make(_ tool: Character, _ field: Bool, _ kind: Character, _ mag: Int, _ neg: Bool = false) -> State {
-        let m = kind == "0" ? 0 : max(0, min(limit, mag))
-        return State(tool: tool, field: field, kind: kind, mag: m, neg: kind == "-" ? true : (kind == "b" ? neg : false))
+    static let maxPrec = 6
+    static func pow10(_ n: Int) -> Int { var r = 1; for _ in 0..<max(0, n) { r *= 10 }; return r }
+    static func fixed(_ mag: Int, _ prec: Int) -> String {
+        let u = pow10(prec); var f = String(mag % u); while f.count < prec { f = "0" + f }
+        return "\(mag / u).\(f)"
+    }
+    static func make(_ tool: Character, _ field: Bool, _ kind: Character, _ mag: Int, _ neg: Bool = false, prec: Int = 1) -> State {
+        let m = kind == "0" ? 0 : max(0, min(45 * pow10(prec), mag))
+        return State(tool: tool, field: field, kind: kind, mag: m, neg: kind == "-" ? true : (kind == "b" ? neg : false), prec: prec)
     }
 
     static func parseState(_ s: String) -> State? {
-        guard let re = try? NSRegularExpression(pattern: "^([mpehskr])(f?)(d-|d\\+|db-?|d)(\\d{1,3}\\.\\d)$"),
+        guard let re = try? NSRegularExpression(pattern: "^([mpehskr])(f?)(d-|d\\+|db-?|d)(\\d{1,3}\\.\\d{1,6})$"),
               let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return nil }
         func g(_ i: Int) -> String { (s as NSString).substring(with: m.range(at: i)) }
-        guard let val = Double(g(4)) else { return nil }
-        let mag = Int((val * 10).rounded()); if mag > limit { return nil }
+        let parts = g(4).split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, let mag = Int(parts[0] + parts[1]) else { return nil }
+        let prec = parts[1].count; if mag > 45 * pow10(prec) { return nil }
         let kd = g(3), kind: Character = kd == "d-" ? "-" : kd == "d+" ? "+" : kd == "d" ? "0" : "b"
         if kind == "0" && mag != 0 { return nil }
-        return State(tool: Character(g(1)), field: g(2) == "f", kind: kind, mag: mag, neg: kind == "-" || kd == "db-")
+        return State(tool: Character(g(1)), field: g(2) == "f", kind: kind, mag: mag, neg: kind == "-" || kd == "db-", prec: prec)
     }
 
     // ── data-point assignment (seed table; optionally the mean with context angles = reflex states / emotion, in tenths) ──
@@ -48,11 +57,13 @@ enum AshRadian {
         if ch.isASCII && ch.isUppercase { return make("e", false, "+", 30 + u - 64) }
         return make("e", false, "b", u % 451)
     }
-    static func mean10(_ a: [Int]) -> Int { a.isEmpty ? 0 : a.reduce(0, +) / a.count }
-    static func assign(_ ch: Character, contexts: [Int] = []) -> State {
-        let s = seed(ch); if contexts.isEmpty || s.kind == "0" { return s }
-        let m = mean10([s.signed] + contexts)
-        return make(s.tool, false, s.kind, abs(m), m < 0)
+    static func mean(_ a: [Int]) -> Int { a.isEmpty ? 0 : a.reduce(0, +) / a.count }
+    /// contexts: signed tenths from the remaining reflex states / emotional contexts; prec: decimal places of the angle (1 = tenths)
+    static func assign(_ ch: Character, contexts: [Int] = [], prec: Int = 1) -> State {
+        let s = seed(ch); if s.kind == "0" { return s }
+        if contexts.isEmpty { return make(s.tool, false, s.kind, s.mag * pow10(prec - 1), s.neg, prec: prec) }
+        let m = mean(([s.signed] + contexts).map { $0 * pow10(prec - 1) })
+        return make(s.tool, false, s.kind, abs(m), m < 0, prec: prec)
     }
 
     // ── sequences (fields) ──
@@ -60,31 +71,32 @@ enum AshRadian {
         let s = t.trimmingCharacters(in: .whitespacesAndNewlines)
         return (s.hasPrefix("(") && s.hasSuffix(")") && s.count >= 2) ? String(s.dropFirst().dropLast()) : s
     }
-    static func fieldState(_ members: [State]) -> State {
+    static func fieldState(_ members: [State], prec: Int = 1) -> State {
+        let P = max(prec, members.map { $0.prec }.max() ?? 1)
         let hasMath = members.contains { $0.tool == "m" }
         let kinds = Set(members.map { $0.kind })
         let both = kinds.contains("b") || (kinds.contains("-") && kinds.contains("+"))
         let kind: Character = both ? "b" : (kinds.contains("-") ? "-" : kinds.contains("+") ? "+" : "0")
-        let m = mean10(members.map { $0.signed })
-        return make(hasMath ? "m" : "e", true, kind, abs(m), m < 0)
+        let m = mean(members.map { $0.scaled(P) })
+        return make(hasMath ? "m" : "e", true, kind, abs(m), m < 0, prec: P)
     }
     struct Encoded { let text: String; let tokens: [(ch: Character, state: String)]; let field: String? }
-    static func encode(_ text: String, contexts: [Int] = []) -> Encoded {
+    static func encode(_ text: String, contexts: [Int] = [], prec: Int = 1) -> Encoded {
         let body = stripOuter(text).filter { !$0.isWhitespace }
-        let sts = body.map { assign($0, contexts: contexts) }
-        return Encoded(text: "(\(body))", tokens: zip(body, sts).map { ($0, $1.text) }, field: sts.isEmpty ? nil : fieldState(sts).text)
+        let sts = body.map { assign($0, contexts: contexts, prec: prec) }
+        return Encoded(text: "(\(body))", tokens: zip(body, sts).map { ($0, $1.text) }, field: sts.isEmpty ? nil : fieldState(sts, prec: prec).text)
     }
 
     // ── decode ──
     static func inverse(_ s: State) -> [Character] {
         let all = Array("0123456789=") + punct + Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        return all.filter { let q = seed($0); return q.tool == s.tool && q.kind == s.kind && q.mag == s.mag && q.neg == s.neg }
+        return all.filter { let q = seed($0); return q.tool == s.tool && q.kind == s.kind && q.mag * pow10(s.prec - 1) == s.mag && q.neg == s.neg }
     }
     struct Decoded { let state: String, tool: String, field: Bool, kind: Character, deg: String, candidates: [Character], common: Bool, meaning: Character? }
     static func decode(_ str: String, table: Table = .seedTable) -> Decoded? {
         guard let s = parseState(str) else { return nil }
         let cands = inverse(s), seen = table.byState[str]?.first
-        return Decoded(state: str, tool: tools[s.tool] ?? "?", field: s.field, kind: s.kind, deg: ((s.neg && s.mag > 0) ? "-" : "") + tenths(s.mag),
+        return Decoded(state: str, tool: tools[s.tool] ?? "?", field: s.field, kind: s.kind, deg: ((s.neg && s.mag > 0) ? "-" : "") + fixed(s.mag, s.prec),
                        candidates: cands, common: (seen?.n ?? 0) >= 2, meaning: seen?.d.count == 1 ? seen?.d.first : cands.first)
     }
 
@@ -194,6 +206,7 @@ enum AshRadian {
             guard let d = decode(t.state, table: table) else { continue }
             lines.append("Data of \(d.tool) at \(d.deg) degrees - \(d.common ? "Common Context" : "New Context"), Presumably \(describe(d.meaning ?? t.ch)) = \(t.ch)")
         }
+        if let f = enc.field { lines.append("Sequence \(f) over \(enc.tokens.count) variable states: \(enc.text)") }   // second stair step: the sequence assignment
         var statement: String?
         for r in table.recs where statement == nil && r.v.dropFirst().first == "f" && r.d.count > 2 && !body.isEmpty {
             let inner = String(r.d.dropFirst().dropLast()); if inner.contains(body) { statement = inner }
