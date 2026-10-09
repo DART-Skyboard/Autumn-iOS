@@ -1,0 +1,31 @@
+name: ASC Cancel Review Submission
+on:
+  workflow_dispatch:
+    inputs:
+      submission_id: {description: "reviewSubmission id", required: true}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          RID: ${{ inputs.submission_id }}
+        run: |
+          python3 << 'PY'
+          import os,time,json,jwt,requests
+          from pathlib import Path
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          tok=jwt.encode({"iss":os.environ["ASC_ISSUER_ID"],"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"},key,algorithm="ES256",headers={"alg":"ES256","kid":"NQXQ595W59","typ":"JWT"})
+          H={"Authorization":f"Bearer {tok}","Content-Type":"application/json"}; B="https://api.appstoreconnect.apple.com"; rid=os.environ["RID"]
+          r=requests.patch(B+f"/v1/reviewSubmissions/{rid}",headers=H,data=json.dumps({"data":{"type":"reviewSubmissions","id":rid,"attributes":{"canceled":True}}}),timeout=60); print(">> CANCEL",r.status_code,r.text[:300])
+          time.sleep(5)
+          g=requests.get(B+f"/v1/reviewSubmissions/{rid}",headers=H,timeout=60); print(">> STATE",g.json()["data"]["attributes"].get("state"))
+          PY
