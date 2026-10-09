@@ -1,0 +1,47 @@
+name: ASC Version + Build Status (read-only)
+on: workflow_dispatch
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install ASC key
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8
+      - run: pip3 install --quiet 'PyJWT[crypto]>=2.8' requests
+      - env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 << 'PY'
+          import os,time,json,jwt,requests
+          from pathlib import Path
+          key=Path(os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_NQXQ595W59.p8")).read_text()
+          now=int(time.time())
+          tok=jwt.encode({"iss":os.environ["ASC_ISSUER_ID"],"iat":now,"exp":now+1200,"aud":"appstoreconnect-v1"},key,algorithm="ES256",headers={"alg":"ES256","kid":"NQXQ595W59","typ":"JWT"})
+          H={"Authorization":f"Bearer {tok}"}; B="https://api.appstoreconnect.apple.com"; APP="6775076737"
+          def g(p,params=None):
+            r=requests.get(B+p,headers=H,params=params,timeout=60)
+            if r.status_code>=400: print("ERR",p,r.status_code,r.text[:300]); return {"data":[]}
+            return r.json()
+          for v in g(f"/v1/apps/{APP}/appStoreVersions",{"limit":10})["data"]:
+            a=v["attributes"]; print("VERSION",v["id"],a.get("versionString"),a.get("appStoreState"),a.get("platform"))
+            b=g(f"/v1/appStoreVersions/{v['id']}/build").get("data")
+            print("  build:", (b["id"],b["attributes"].get("version"),b["attributes"].get("processingState")) if b else None)
+            for l in g(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations")["data"]:
+              print("  LOC",l["attributes"]["locale"],{k:bool(l["attributes"].get(k)) for k in ("description","keywords","whatsNew","supportUrl","marketingUrl")})
+              for s in g(f"/v1/appStoreVersionLocalizations/{l['id']}/appScreenshotSets")["data"]:
+                n=len(g(f"/v1/appScreenshotSets/{s['id']}/appScreenshots")["data"])
+                print("    SHOTS",s["attributes"]["screenshotDisplayType"],n)
+            r=g(f"/v1/appStoreVersions/{v['id']}/appStoreReviewDetail").get("data")
+            print("  REVIEWDETAIL",{k:bool(x) for k,x in r["attributes"].items()} if r else None)
+          print("--- recent builds")
+          for b in g("/v1/builds",{"filter[app]":APP,"sort":"-uploadedDate","limit":6})["data"]:
+            a=b["attributes"]; print("BUILD",b["id"],a.get("version"),a.get("processingState"),a.get("uploadedDate"),"expired=",a.get("expired"))
+          print("--- review submissions")
+          for s in g(f"/v1/apps/{APP}/reviewSubmissions",{"limit":5})["data"]: print("SUBMISSION",s["id"],s["attributes"].get("state"),s["attributes"].get("platform"))
+          print("--- age rating / content")
+          for i in g(f"/v1/apps/{APP}/appInfos")["data"]:
+            ar=g(f"/v1/appInfos/{i['id']}/ageRatingDeclaration").get("data"); print("AGERATING",bool(ar))
+          PY
