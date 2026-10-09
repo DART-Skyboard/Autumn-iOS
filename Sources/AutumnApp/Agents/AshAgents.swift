@@ -244,44 +244,56 @@ final class AshAgentsModel: ObservableObject {
         status = state.map { "Shell 64: \($0.recs.count) records" } ?? "Shell 64 unavailable (offline, no cache)"
     }
 
+    /// One brain, two windows: the main chat and this console call the same `answer`, share the team state and one history.
+    static let shared = AshAgentsModel()
+    static let commandRE = try! NSRegularExpression(pattern: #"\b(create|add|spawn|assign|remove|study|have)\b[^.?!]*\b(team ?members?|agents?|managers?|assistant ?chiefs?|chief)\b|^\s*/?(agents?|team|goal)\b[:\s]|\bteam lead\b|\bshell ?64 team\b"#, options: [.caseInsensitive])
+    /// True when a main-chat message is an agent / team command or a Tool Radian request.
+    static func isCommand(_ text: String) -> Bool {
+        if AshRadian.respond(text, ctx: AshRadian.live) != nil { return true }
+        return commandRE.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+    /// Main-chat exchanges are mirrored into the console history.
+    func record(_ user: String, _ reply: (text: String, program: String?)) {
+        msgs.append(Msg(user: true, text: user, program: nil)); msgs.append(Msg(user: false, text: reply.text, program: reply.program))
+    }
+
     func send(_ text: String) {
         let goal = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !goal.isEmpty, !busy else { return }
         msgs.append(Msg(user: true, text: goal, program: nil))
-        // Tool Radian (encode / decode / analyze / bare math) answers on this device: nothing is sent or learned.
-        if let r = AshRadian.respond(goal) { msgs.append(Msg(user: false, text: r, program: nil)); return }
         busy = true
         Task {
-            // Admin (token that can read leatr-ash): direct path below. Everyone else: the read-only Shell 64 door in the Apps Script.
-            if await GitHubClient.shared.hasToken() { await load() }
-            if state == nil {
-                do {
-                    let r = try await AutumnTeamRelay.ask(goal, team: relayTeam)
-                    relayTeam = r.team
-                    msgs.append(Msg(user: false, text: r.text, program: r.program))
-                    status = "Autumn's knowledge base (read-only; your data stays on your device)"
-                } catch {
-                    msgs.append(Msg(user: false, text: "Autumn's knowledge base is not reachable right now. Try again in a moment.", program: nil))
-                }
-                busy = false; return
-            }
-            guard var st = state else {
-                msgs.append(Msg(user: false, text: "Shell 64 is not available yet. Try again in a moment.", program: nil)); busy = false; return
-            }
-            let now = ISO8601DateFormatter().string(from: Date())
-            let t = AshTeam.handle(&st, contract, teamParams, team: team, text: goal, now: now)
-            team = t; state = st
-            try? st.serialize().write(to: dir.appendingPathComponent("shell64.state.ash"), atomically: true, encoding: .utf8)
-            if let data = try? JSONEncoder().encode(t) { try? data.write(to: dir.appendingPathComponent("team-\(t.project).json")) }
-            msgs.append(Msg(user: false, text: AshTeam.report(t), program: AshTeam.program(t)))
-            status = "Shell 64: \(st.recs.count) records (optimized on device)"
-            busy = false
+            let r = await answer(goal)
+            msgs.append(Msg(user: false, text: r.text, program: r.program)); busy = false
         }
+    }
+
+    func answer(_ goal: String) async -> (text: String, program: String?) {
+        // Tool Radian (encode / decode / analyze / bare math) answers on this device: nothing is sent or learned.
+        if let r = AshRadian.respond(goal, ctx: AshRadian.live) { return (r, nil) }
+        // Admin (token that can read leatr-ash): direct path below. Everyone else: the read-only Shell 64 door in the Apps Script.
+        if await GitHubClient.shared.hasToken() { await load() }
+        if state == nil {
+            do {
+                let r = try await AutumnTeamRelay.ask(goal, team: relayTeam)
+                relayTeam = r.team
+                status = "Autumn's knowledge base (read-only; your data stays on your device)"
+                return (r.text, r.program)
+            } catch { return ("Autumn's knowledge base is not reachable right now. Try again in a moment.", nil) }
+        }
+        guard var st = state else { return ("Shell 64 is not available yet. Try again in a moment.", nil) }
+        let now = ISO8601DateFormatter().string(from: Date())
+        let t = AshTeam.handle(&st, contract, teamParams, team: team, text: goal, now: now)
+        team = t; state = st
+        try? st.serialize().write(to: dir.appendingPathComponent("shell64.state.ash"), atomically: true, encoding: .utf8)
+        if let data = try? JSONEncoder().encode(t) { try? data.write(to: dir.appendingPathComponent("team-\(t.project).json")) }
+        status = "Shell 64: \(st.recs.count) records (optimized on device)"
+        return (AshTeam.report(t), AshTeam.program(t))
     }
 }
 
 struct AgentsConsoleView: View {
-    @StateObject private var model = AshAgentsModel()
+    @ObservedObject private var model = AshAgentsModel.shared
     @State private var input = ""
     @EnvironmentObject var themeVM: ThemeViewModel
 

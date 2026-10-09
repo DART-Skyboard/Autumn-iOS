@@ -51,11 +51,13 @@ public final class MISTModule: ObservableObject {
 
     private func fetchPresence() async {
         // Heartbeat this device into the shared CacheService (web writenode).
-        await AutumnGASClient.shared.writeNode(sid: localSid, uid: localUid, label: localUid)
-        await AutumnGASClient.shared.writeSession(uid: localUid, sid: localSid, extra: [
-            "type": "presence",
-            "platform": "ios"
-        ])
+        if PrivacyChoices.sharePresence {   // opt-in: only announce this device when the user chose to
+            await AutumnGASClient.shared.writeNode(sid: localSid, uid: localUid, label: localUid)
+            await AutumnGASClient.shared.writeSession(uid: localUid, sid: localSid, extra: [
+                "type": "presence",
+                "platform": "ios"
+            ])
+        }
 
         var collected: [MISTSignal] = []
         // PRIMARY: GAS readnodes — same source as web `_pollAshNodes`.

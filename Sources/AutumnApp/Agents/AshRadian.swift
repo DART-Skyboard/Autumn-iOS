@@ -1,4 +1,5 @@
 import Foundation
+import LEATRCore
 
 // Tool Radian: Swift port of scripts/ash/ash-radian.js (leatr-ash). Encodes data points into reflexive variable state
 // (tool + kind + angle), decodes them for analysis, and generates a response. Integers only (angles are tenths of a degree).
@@ -57,6 +58,49 @@ enum AshRadian {
         if ch.isASCII && ch.isUppercase { return make("e", false, "+", 30 + u - 64) }
         return make("e", false, "b", u % 451)
     }
+
+    // ── context: the 63 checks per data point ──
+    // 7 natural tools x 3 BRPN shells x 3 FRP stages (Foundation, Reflex, Performance). Each check also looks at the data point's own tool, the order of
+    // operations (its FRP stage), the emotion from the emotion hierarchy (tool, shell, buoyancy, valence), the active shell and where the reflex stands.
+    // Checks are weighted by hierarchy (Maze highest; Aerospace at the route, then Maritime, then Geological); the weighted hits become ONE signed angle
+    // (tenths of a degree, within 45.0) averaged with the seed. A neutral baseline (neutral emotion, no reflex or shell) adds nothing.
+    struct Context { var emotion: String? = nil; var shell: String? = nil; var reflexTool: Character? = nil; var reflexShell: String? = nil }
+    /// The live emotion / shell the chat currently holds: set by ChatViewModel, read by every Tool Radian entry point.
+    static var live = Context()
+    static func shortShell(_ s: BRPNShell) -> String { s == .aerospace ? "AERO" : (s == .maritime ? "MAR" : "GEO") }
+    static let toolOrder = Array("mpehskr"), shellOrder = ["AERO", "MAR", "GEO"]
+    /// name: (tool, shell, buoyancy %, sign)
+    static let emotions: [String: (Character, String, Int, Int)] = [
+        "happy": ("s", "MAR", 52, 1), "love": ("e", "MAR", 76, 1), "inspiring": ("h", "AERO", 64, 1), "inspired": ("h", "AERO", 64, 1), "determined": ("h", "AERO", 64, 1),
+        "spiritual": ("m", "GEO", 100, 1), "guiding": ("s", "MAR", 52, 1), "forgiving": ("e", "GEO", 76, 1), "excited": ("h", "AERO", 58, 1), "curious": ("p", "MAR", 60, 1),
+        "amused": ("s", "MAR", 52, 1), "thoughtful": ("p", "MAR", 60, 1), "empathetic": ("e", "GEO", 76, 1),
+        "angry": ("h", "AERO", 36, -1), "hateful": ("k", "AERO", 28, -1), "condescending": ("k", "AERO", 32, -1), "disrespectful": ("r", "GEO", 28, -1), "apathetic": ("r", "GEO", 28, -1),
+        "neutral": ("m", "GEO", 88, 0), "sad": ("r", "GEO", 32, -1), "worried": ("p", "MAR", 60, -1), "jealous": ("p", "MAR", 48, -1), "lucrative": ("k", "AERO", 44, 1),
+        "concerned": ("e", "GEO", 68, -1), "judgemental": ("k", "AERO", 40, -1), "confused": ("p", "MAR", 52, -1)]
+    static func stageOf(_ ch: Character) -> Int {
+        if ("0"..."9").contains(ch) || ("a"..."z").contains(ch) { return 0 }
+        if "+-*/%<>".contains(ch) || ("A"..."Z").contains(ch) { return 1 }
+        return 2
+    }
+    /// signed tenths, or nil for the neutral baseline
+    static func context(_ ch: Character, _ c: Context?) -> Int? {
+        guard let c = c else { return nil }
+        let emo = c.emotion.flatMap { emotions[$0.lowercased()] }
+        let hasReflex = c.reflexTool != nil
+        if (emo == nil || emo!.3 == 0) && !hasReflex && c.shell == nil { return nil }
+        let sd = seed(ch), st = stageOf(ch)
+        var hit = 0, mx = 0
+        for ti in 0..<7 { for si in 0..<3 { for fi in 0..<3 {            // the 63 checks
+            let w = (7 - ti) * (3 - si), t = toolOrder[ti], sh = shellOrder[si]
+            var n = 2, h = (t == sd.tool ? 1 : 0) + (fi == st ? 1 : 0)
+            if let e = emo { n += 2; h += (t == e.0 ? 1 : 0) + (sh == e.1 ? 1 : 0) }
+            if hasReflex { n += 1; h += (t == c.reflexTool && (c.reflexShell == nil || sh == c.reflexShell) ? 1 : 0) }
+            if let cs = c.shell { n += 1; h += (sh == cs ? 1 : 0) }
+            hit += w * h; mx += w * n
+        } } }
+        let ratio = hit * 450 / mx, buoy = emo?.2 ?? 100, sign = (emo?.3 ?? 1) < 0 ? -1 : 1
+        return sign * (ratio * buoy / 100)
+    }
     static func mean(_ a: [Int]) -> Int { a.isEmpty ? 0 : a.reduce(0, +) / a.count }
     /// contexts: signed tenths from the remaining reflex states / emotional contexts; prec: decimal places of the angle (1 = tenths)
     static func assign(_ ch: Character, contexts: [Int] = [], prec: Int = 1) -> State {
@@ -81,9 +125,9 @@ enum AshRadian {
         return make(hasMath ? "m" : "e", true, kind, abs(m), m < 0, prec: P)
     }
     struct Encoded { let text: String; let tokens: [(ch: Character, state: String)]; let field: String? }
-    static func encode(_ text: String, contexts: [Int] = [], prec: Int = 1) -> Encoded {
+    static func encode(_ text: String, contexts: [Int] = [], prec: Int = 1, ctx: Context? = nil) -> Encoded {
         let body = stripOuter(text).filter { !$0.isWhitespace }
-        let sts = body.map { assign($0, contexts: contexts, prec: prec) }
+        let sts = body.map { assign($0, contexts: context($0, ctx).map { [$0] } ?? contexts, prec: prec) }
         return Encoded(text: "(\(body))", tokens: zip(body, sts).map { ($0, $1.text) }, field: sts.isEmpty ? nil : fieldState(sts, prec: prec).text)
     }
 
@@ -199,8 +243,8 @@ enum AshRadian {
         return "a symbol"
     }
     struct Analysis { let lines: [String]; let response: String }
-    static func analyze(_ text: String, table: Table = .seedTable) -> Analysis {
-        let enc = encode(text), body = String(enc.text.dropFirst().dropLast())
+    static func analyze(_ text: String, table: Table = .seedTable, ctx: Context? = nil) -> Analysis {
+        let enc = encode(text, ctx: ctx), body = String(enc.text.dropFirst().dropLast())
         var lines: [String] = []
         for t in enc.tokens {
             guard let d = decode(t.state, table: table) else { continue }
@@ -230,7 +274,7 @@ enum AshRadian {
     }
 
     /// Chat entry point: reply text when the message is a Tool Radian request (encode / decode / analyze / bare math), else nil.
-    static func respond(_ text: String) -> String? {
+    static func respond(_ text: String, ctx: Context? = nil) -> String? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var cmd = "", arg = t
         if let re = try? NSRegularExpression(pattern: "^(encode|decode|analy[sz]e|radian)\\b[:\\s]*(.*)$", options: [.caseInsensitive]),
@@ -248,10 +292,10 @@ enum AshRadian {
             return "\(d.state) = \(d.tool)\(d.field ? " field" : ""), kind \(kind), \(d.deg) degrees" + (d.candidates.isEmpty ? "" : ", reads as " + d.candidates.map(String.init).joined(separator: " or "))
         }
         if cmd == "encode" {
-            let e = encode(arg)
+            let e = encode(arg, ctx: ctx)
             return e.tokens.map { "\($0.ch) = \($0.state)" }.joined(separator: "\n") + (e.field.map { "\n\(e.text) = \($0)" } ?? "")
         }
-        let a = analyze(arg)
+        let a = analyze(arg, ctx: ctx)
         return (a.lines.isEmpty ? "" : a.lines.joined(separator: "\n") + "\n") + "LEATR: " + a.response
     }
 }

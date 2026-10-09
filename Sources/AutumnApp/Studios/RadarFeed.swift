@@ -1,6 +1,7 @@
 import Foundation
 import CoreLocation
 import Combine
+import AutumnServices
 
 /// Live ADS-B + CelesTrak TLE for Mantis Radar. User lat/lon, never a hardcoded city
 /// except NYC as the same geo-denied fallback as mr.html.
@@ -57,6 +58,7 @@ HST
     }
 
     func start() {
+        guard PrivacyChoices.shareLocation else { hasFix = false; authSettled = true; return }   // opt-in: Profile > Privacy
         loc.requestWhenInUseAuthorization()
         loc.startUpdatingLocation()
         if let c = loc.location?.coordinate {

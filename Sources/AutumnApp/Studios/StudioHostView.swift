@@ -93,11 +93,38 @@ struct HelpStudioView: View {
 
 struct PrivacyStudioView: View {
     @EnvironmentObject var themeVM: ThemeViewModel
+    @AppStorage(PrivacyChoices.analyticsKey) private var shareAnalytics = false
+    @AppStorage(PrivacyChoices.presenceKey)  private var sharePresence  = false
+    @AppStorage(PrivacyChoices.locationKey)  private var shareLocation  = false
+    @AppStorage(PrivacyChoices.journalKey)   private var shareJournal   = false
+
+    private func choice(_ title: String, _ detail: String, _ isOn: Binding<Bool>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: isOn) { Text(title).font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundColor(.white) }
+                .tint(themeVM.chrome.accent)
+            Text(detail).font(.system(size: 11)).foregroundColor(.white.opacity(0.65)).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12).background(Color.white.opacity(0.05)).cornerRadius(10)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Autumn stores conversation history locally. Journal writes go to leatr-ash through the GAS ashwrite proxy. No PAT is stored in the client. GitHub OAuth tokens live in Keychain only. Presence nodes are anonymized. Microphone is on only when you tap voice. Feedback is reviewed by Radical Deepscale LLC and is not public.")
-                    .font(.system(size: 13)).foregroundColor(.white.opacity(0.8))
+                Text("YOUR CHOICES")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(2).foregroundColor(themeVM.chrome.accent)
+                Text("Everything below is off until you turn it on. Autumn works with all of it off: chat, agents and Tool Radian run on your device. You can change these any time.")
+                    .font(.system(size: 12)).foregroundColor(.white.opacity(0.8))
+                choice("Share my chats with Autumn's journal",
+                       "Sends what you type and Autumn's reply (with its emotion and tool) to the journal in the GitHub repo through the Apps Script. Off: chats stay on this device.", $shareJournal)
+                choice("Show me as a presence node",
+                       "Lets other sessions see this device as a node in the BRPN world, and sends presence pings with your latest message and Autumn's reply.", $sharePresence)
+                choice("Share anonymous usage analytics",
+                       "Logs which reflex stage, tool, math operation and emotion ran (no message text) to the daily analytics file.", $shareAnalytics)
+                choice("Use my location for Mantis Radar",
+                       "Uses your location to show nearby aircraft. Your coordinates, rounded to four decimals, go to the public ADS-B feeds to fetch that area.", $shareLocation)
+                Divider().background(Color.white.opacity(0.15))
+                Text("Always on this device: conversation history. GitHub sign-in tokens live in Keychain only. Microphone is used only when you tap voice, and photos only when you attach them. If you add your own Anthropic key, messages you send go to Anthropic under their policy. Feedback you submit is reviewed by Radical Deepscale LLC and is not public.")
+                    .font(.system(size: 12)).foregroundColor(.white.opacity(0.7))
                 Text("Full policy: leatr.xyz/autumn-privacy.html")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(themeVM.chrome.accent)

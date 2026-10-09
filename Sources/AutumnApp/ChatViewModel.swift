@@ -152,6 +152,17 @@ public final class ChatViewModel: ObservableObject {
             NotificationCenter.default.post(name: .autumnMathSolver, object: text)
         }
 
+        // Agent / team / Tool Radian commands are answered right here in the main chat (same handler as the Agents console).
+        if AshAgentsModel.isCommand(text) {
+            isThinking = true
+            let r = await AshAgentsModel.shared.answer(text)
+            AshAgentsModel.shared.record(text, r)
+            messages.append(ChatMessage(role: .assistant, content: r.text + (r.program.map { "\n\n[Ash program]\n" + $0 } ?? "")))
+            isThinking = false
+            sentienceState = .idle
+            return
+        }
+
         isThinking = true
         sentienceState = .reflexing
 
@@ -167,6 +178,7 @@ public final class ChatViewModel: ObservableObject {
             currentBuoyancy = turn.buoyancy
             currentTool = turn.tool
             currentShell = turn.shell
+            AshRadian.live = AshRadian.Context(emotion: currentEmotion.rawValue, shell: AshRadian.shortShell(currentShell))   // same emotion/shell feed Tool Radian from either window
             sentienceState = .idle
             var assistantMsg = ChatMessage(role: .assistant, content: weatherReply)
             assistantMsg.leatrMeta = LexicalMetadata(
@@ -182,8 +194,8 @@ public final class ChatViewModel: ObservableObject {
             let owner = memoryOwner
             let sid = sessionSID
             Task.detached(priority: .background) {
-                await AutumnGASClient.shared.writeJournal(uid: owner, thought: text, reply: weatherReply, emotion: turn.emotion.rawValue, buoyancy: turn.buoyancy)
-                await AutumnGASClient.shared.writeSession(uid: owner, sid: sid, extra: ["emotion": turn.emotion.rawValue, "tool": turn.tool.displayName])
+                if PrivacyChoices.shareJournal { await AutumnGASClient.shared.writeJournal(uid: owner, thought: text, reply: weatherReply, emotion: turn.emotion.rawValue, buoyancy: turn.buoyancy) }
+                if PrivacyChoices.sharePresence { await AutumnGASClient.shared.writeSession(uid: owner, sid: sid, extra: ["emotion": turn.emotion.rawValue, "tool": turn.tool.displayName]) }
             }
             autosaveIfNeeded()
             return
@@ -194,6 +206,7 @@ public final class ChatViewModel: ObservableObject {
         currentBuoyancy = turn.buoyancy
         currentTool = turn.tool
         currentShell = turn.shell
+        AshRadian.live = AshRadian.Context(emotion: currentEmotion.rawValue, shell: AshRadian.shortShell(currentShell))   // same emotion/shell feed Tool Radian from either window
         sentienceState = .thinking
 
         // TF154: stop button cancels the wrapping Task — checked here so a
@@ -235,19 +248,21 @@ public final class ChatViewModel: ObservableObject {
         let owner = memoryOwner
         let sid = sessionSID
         Task.detached(priority: .background) {
-            await AutumnGASClient.shared.writeJournal(
-                uid: owner,
-                thought: text,
-                reply: response,
-                emotion: turn.emotion.rawValue,
-                buoyancy: turn.buoyancy
-            )
-            await AutumnGASClient.shared.writeSession(uid: owner, sid: sid, extra: [
-                "emotion": turn.emotion.rawValue,
-                "tool": turn.tool.displayName
-            ])
-            if let gap = turn.studyGap {
-                await AutumnGASClient.shared.writeStudyGap(uid: owner, word: gap, context: text)
+            if PrivacyChoices.shareJournal {   // opt-in: Profile > Privacy
+                await AutumnGASClient.shared.writeJournal(
+                    uid: owner,
+                    thought: text,
+                    reply: response,
+                    emotion: turn.emotion.rawValue,
+                    buoyancy: turn.buoyancy
+                )
+                await AutumnGASClient.shared.writeSession(uid: owner, sid: sid, extra: [
+                    "emotion": turn.emotion.rawValue,
+                    "tool": turn.tool.displayName
+                ])
+                if let gap = turn.studyGap {
+                    await AutumnGASClient.shared.writeStudyGap(uid: owner, word: gap, context: text)
+                }
             }
             await AutumnGASClient.shared.pingPresence(
                 message: text,

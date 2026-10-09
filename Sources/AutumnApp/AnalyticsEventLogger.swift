@@ -54,6 +54,7 @@ public final class AnalyticsEventLogger {
     deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
 
     private func record(category: String, label: String, detail: String? = nil) {
+        guard PrivacyChoices.shareAnalytics else { return }   // opt-in: Profile > Privacy
         let event = AnalyticsEvent(ts: Date(), category: category, label: label, detail: detail)
         sessionEvents.append(event)
         let day = Self.dayKey(for: event.ts)

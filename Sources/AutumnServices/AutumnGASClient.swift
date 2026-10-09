@@ -130,6 +130,7 @@ public actor AutumnGASClient {
 
     /// Canvas / presence ping. Same GAS as web: stable sid + writenode (never mint presence-* ghosts).
     public func pingPresence(message: String, response: String, emotion: String, buoyancy: Double, uid: String = "ios-guest", sid: String? = nil) async {
+        guard PrivacyChoices.sharePresence else { return }   // opt-in: presence pings carry the message, so they only go out when the user chose to share
         let useSid = (sid?.isEmpty == false) ? sid! : uid
         await writeNode(sid: useSid, uid: uid, label: uid)
         await writeSession(uid: uid, sid: useSid, extra: [
