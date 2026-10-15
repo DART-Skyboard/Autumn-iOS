@@ -319,6 +319,11 @@ public struct AdminMailboxView: View {
             if open {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(e.msg).font(.system(size: 12)).foregroundColor(.white).fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)   // long-press to select part of the message
+                    HStack(spacing: 6) {
+                        mini("COPY") { copyEntry(e) }
+                        mini("FORWARD") { forwardEntry(e) }
+                    }
                     HStack(spacing: 6) {
                         if folder != .inbox { mini("UNREAD") { Task { await moveOne(e, to: .inbox) } } }
                         if folder != .analysis { mini("ANALYSIS") { Task { await moveOne(e, to: .analysis) } } }
@@ -332,6 +337,31 @@ public struct AdminMailboxView: View {
             }
         }
         .overlay(Rectangle().frame(height: 1).foregroundColor(chrome.accent.opacity(0.08)), alignment: .bottom)
+    }
+
+    /// Plain-text version of a message: date, category, sender, then the body.
+    private func entryText(_ e: FeedbackEntry) -> String {
+        "Date: \(e.ts)\nType: \(e.cat)\nFrom: \(e.user)\n\n\(e.msg)"
+    }
+    private func copyEntry(_ e: FeedbackEntry) {
+        UIPasteboard.general.string = entryText(e)
+        status = "Message copied to clipboard."
+    }
+    /// Opens the phone's default mail app with the message ready to address.
+    private func forwardEntry(_ e: FeedbackEntry) {
+        var c = URLComponents(string: "mailto:")
+        c?.queryItems = [
+            URLQueryItem(name: "subject", value: "Fwd: \(e.cat) — \(e.user)"),
+            URLQueryItem(name: "body", value: entryText(e))
+        ]
+        if let url = c?.url {
+            UIApplication.shared.open(url) { ok in
+                if !ok { Task { @MainActor in
+                    UIPasteboard.general.string = entryText(e)
+                    status = "No mail app available — message copied instead."
+                } }
+            }
+        }
     }
 
     private func mini(_ label: String, warn: Bool = false, danger: Bool = false, action: @escaping () -> Void) -> some View {
