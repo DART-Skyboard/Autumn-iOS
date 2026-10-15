@@ -319,7 +319,6 @@ public struct AdminMailboxView: View {
             if open {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(e.msg).font(.system(size: 12)).foregroundColor(.white).fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)   // long-press to select part of the message
                     HStack(spacing: 6) {
                         mini("COPY") { copyEntry(e) }
                         mini("FORWARD") { forwardEntry(e) }
@@ -374,6 +373,7 @@ public struct AdminMailboxView: View {
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(
                     danger ? Color(hex: "#c80000").opacity(0.3) : themeVM.chrome.accent.opacity(0.22), lineWidth: 1))
         }
+        .buttonStyle(.borderless)   // inside a List row, default-style buttons merge: a tap anywhere fired them all
         .disabled(busy)
     }
 
