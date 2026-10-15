@@ -344,7 +344,7 @@ public struct AdminMailboxView: View {
         "Date: \(e.ts)\nType: \(e.cat)\nFrom: \(e.user)\n\n\(e.msg)"
     }
     private func copyEntry(_ e: FeedbackEntry) {
-        UIPasteboard.general.string = entryText(e)
+        UIPasteboard.general.string = e.msg   // just the message text, nothing added
         status = "Message copied to clipboard."
     }
     /// Opens the phone's default mail app with the message ready to address.
