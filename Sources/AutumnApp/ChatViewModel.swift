@@ -44,17 +44,9 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
-    // TF115: AnthropicClaudeProvider lives in AutumnServices/ClaudeIntegration/,
-    // isolated so it can be deleted entirely (this switch case included) without
-    // touching Autumn's own network (GrammarEngine/LEATROnlyProvider). Note: this
-    // selection currently has no effect on actual replies — send() below calls
-    // GrammarEngine.processForChat() directly rather than going through
-    // reasoningProvider; wiring that up is a separate, not-yet-done follow-up.
     public func configure(apiKey: String?) {
-        // Grammar-first. Optional cloud is enrichment only and never replaces Core Cognition.
-        if let key = apiKey, !key.isEmpty {
-            reasoningProvider = AnthropicClaudeProvider(apiKey: key)
-        } else if #available(iOS 26.0, *) {
+        // Autumn runs only on her own LEATR engine (Apple Intelligence where available).
+        if #available(iOS 26.0, *) {
             reasoningProvider = AppleIntelligenceProvider()
         } else {
             reasoningProvider = LEATROnlyProvider()

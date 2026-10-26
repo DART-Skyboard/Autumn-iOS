@@ -2,10 +2,7 @@ import Foundation
 import LEATRCore
 
 // MARK: — ReasoningProvider Protocol
-// Swappable: on-device Foundation Models (primary) or remote Claude (fallback)
-// TF115: AnthropicClaudeProvider now lives in ClaudeIntegration/ — Autumn's one
-// optional external collaborator, isolated so it can be removed entirely
-// without touching this protocol, LEATROnlyProvider, or anything else here.
+// Swappable: on-device Foundation Models or the LEATR-only provider
 public protocol ReasoningProvider: Actor {
     func respond(
         to prompt: String,

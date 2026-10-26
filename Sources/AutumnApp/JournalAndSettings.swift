@@ -124,8 +124,6 @@ public struct SettingsView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var themeVM: ThemeViewModel
     @EnvironmentObject var chatVM: ChatViewModel
-    @State private var apiKeyInput = ""
-    @State private var showAPIKey = false
     @State private var dataConsent = true
     @State private var showGitHubSheet = false
 
@@ -236,39 +234,6 @@ public struct SettingsView: View {
                 }
                 .listRowBackground(themeVM.current.surface)
 
-                // AI backend
-                Section {
-                    HStack {
-                        Text("Anthropic API Key (optional)")
-                            .foregroundColor(themeVM.current.textSecondary)
-                            .font(.system(size: 13))
-                        Spacer()
-                    }
-                    HStack {
-                        if showAPIKey {
-                            TextField("sk-ant-…", text: $apiKeyInput)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                        } else {
-                            SecureField("sk-ant-…", text: $apiKeyInput)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                        }
-                        Button { showAPIKey.toggle() } label: {
-                            Image(systemName: showAPIKey ? "eye.slash" : "eye")
-                                .foregroundColor(themeVM.current.accent)
-                        }
-                    }
-                    Button("Save API Key") {
-                        KeychainService.shared.save(key: "anthropic_api_key", value: apiKeyInput)
-                        chatVM.configure(apiKey: apiKeyInput)
-                    }
-                    .foregroundColor(themeVM.current.accent)
-                } header: {
-                    Text("AI BACKEND").settingsHeader(theme: themeVM.current)
-                }
-                .listRowBackground(themeVM.current.surface)
-
                 // Data sharing
                 Section {
                     Toggle("Share usage analytics (Sigma)", isOn: $dataConsent)
@@ -294,13 +259,6 @@ public struct SettingsView: View {
                 .listRowBackground(themeVM.current.surface)
             }
             .scrollContentBackground(.hidden)
-        }
-        .onAppear {
-            let saved = KeychainService.shared.load(key: "anthropic_api_key") ?? ""
-            if !saved.isEmpty {
-                apiKeyInput = saved
-                chatVM.configure(apiKey: saved)
-            }
         }
         // Keep device-flow poll alive on swipe-dismiss; Cancel/✕ calls cancelGitHubAuth.
         .sheet(isPresented: $showGitHubSheet) {

@@ -33,9 +33,7 @@ struct AutumnPolicyOverlay: View {
                             "DART Meadow Technologies does not collect or sell your data.")
                         section("AI Processing",
                             "Conversations use the LEATR/BRPN neural framework locally. " +
-                            "If you provide an Anthropic API key, messages are sent to " +
-                            "Anthropic's servers per their privacy policy. No data is " +
-                            "stored on DART Meadow servers.")
+                            "No data is stored on DART Meadow servers.")
                         section("Presence & BRPN",
                             "The BRPN world scene displays anonymized presence nodes for " +
                             "active users. No personally identifiable information is " +

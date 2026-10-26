@@ -123,7 +123,7 @@ struct PrivacyStudioView: View {
                 choice("Use my location for Mantis Radar",
                        "Uses your location to show nearby aircraft. Your coordinates, rounded to four decimals, go to the public ADS-B feeds to fetch that area.", $shareLocation)
                 Divider().background(Color.white.opacity(0.15))
-                Text("Always on this device: conversation history. GitHub sign-in tokens live in Keychain only. Microphone is used only when you tap voice, and photos only when you attach them. If you add your own Anthropic key, messages you send go to Anthropic under their policy. Feedback you submit is reviewed by Radical Deepscale LLC and is not public.")
+                Text("Always on this device: conversation history. GitHub sign-in tokens live in Keychain only. Microphone is used only when you tap voice, and photos only when you attach them. Feedback you submit is reviewed by Radical Deepscale LLC and is not public.")
                     .font(.system(size: 12)).foregroundColor(.white.opacity(0.7))
                 Text("Full policy: leatr.xyz/autumn-privacy.html")
                     .font(.system(size: 11, design: .monospaced))

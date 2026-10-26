@@ -39,9 +39,7 @@ struct PolicyGateView: View {
 
                         policySection("AI Processing",
                             "Conversations use the LEATR/BRPN neural framework locally. " +
-                            "If you provide an Anthropic API key, messages are processed " +
-                            "by Anthropic per their privacy policy. No data is stored " +
-                            "on DART Meadow servers without your authorization.")
+                            "No data is stored on DART Meadow servers without your authorization.")
 
                         policySection("Presence & BRPN World Scene",
                             "The BRPN world scene shows anonymized presence nodes for " +
