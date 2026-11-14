@@ -57,5 +57,5 @@ public enum AutumnConfig {
         "https://raw.githubusercontent.com/DART-Skyboard/leatr-ash/training/Training"
 
     /// Public Movement quote proxy already published on movement-conjecture.html (not a secret).
-    public static let movementQuoteGAS = "https://script.google.com/macros/s/AKfycbwTBiGJ3YTibAGAsrC5sZMuQO-PqY0yK8gmmc7zvp1zXnaWQJvaZoRFCi2xLiI7QgSwfA/exec"
+    public static let movementQuoteGAS = "https://script.google.com/macros/s/AKfycbyzkQxLR5miUXP6oDw-1AR1GIjgpzlw9iLw0gO_ZTeLfL849LWbNX7WVz_kf7yLWBKA_w/exec"
 }
