@@ -58,14 +58,15 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
     public override init() {
         super.init()
         synthesizer.delegate = self
-        setupAudioSession()
-    }
-
-    // MARK: - Audio Session
-    private func setupAudioSession() {
-        try? AVAudioSession.sharedInstance().setCategory(
-            .playback, mode: .spokenAudio, options: .duckOthers)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // Audio-ducking fix: NO session category/activation here. This init runs at
+        // launch (ChatViewModel holds AutumnTTS.shared), and the old
+        // `.playback + .duckOthers + setActive(true)` dimmed the user's music ~50%.
+        synthesizer.usesApplicationAudioSession = true
+        NotificationCenter.default.addObserver(
+            forName: .autumnAudioShouldStop, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.synthesizer.stopSpeaking(at: .immediate)
+        }
     }
 
     // MARK: - Speak
@@ -85,6 +86,8 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
         }
         utterance.volume     = 1.0
         utterance.postUtteranceDelay = 0.1
+        // Session goes live only for the duration of speech (.playback + .mixWithOthers).
+        AutumnAudioSession.begin(.speech)
         synthesizer.speak(utterance)
     }
 
@@ -146,5 +149,21 @@ public final class AutumnTTS: NSObject, AVSpeechSynthesizerDelegate, @unchecked 
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
         didStart utterance: AVSpeechUtterance) { onSpeakingStart?() }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
-        didFinish utterance: AVSpeechUtterance) { onSpeakingFinish?() }
+        didFinish utterance: AVSpeechUtterance) {
+        endSessionIfIdle()
+        onSpeakingFinish?()
+    }
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+        didCancel utterance: AVSpeechUtterance) {
+        endSessionIfIdle()
+    }
+
+    /// Deactivate (notifyOthersOnDeactivation) once nothing is queued — `speak` stops the
+    /// previous utterance first, so its didCancel must not tear down the new one.
+    private func endSessionIfIdle() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.synthesizer.isSpeaking else { return }
+            AutumnAudioSession.end(.speech)
+        }
+    }
 }

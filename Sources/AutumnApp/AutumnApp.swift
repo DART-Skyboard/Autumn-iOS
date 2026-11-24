@@ -26,6 +26,9 @@ struct AutumnApp: App {
 
     init() {
         AutumnAutonomy.shared.registerTasks()
+        // Audio-ducking fix: idle = .ambient + .mixWithOthers, never activated at launch.
+        AutumnAudioSession.configureIdle()
+        AutumnAudioSession.installLifecycleObserver()
     }
 
     var body: some Scene {

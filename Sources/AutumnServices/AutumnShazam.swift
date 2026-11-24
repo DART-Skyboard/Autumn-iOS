@@ -15,6 +15,9 @@ public final class AutumnShazam: NSObject, SHSessionDelegate, Sendable {
     public override init() {
         super.init()
         session.delegate = self
+        NotificationCenter.default.addObserver(
+            forName: .autumnAudioShouldStop, object: nil, queue: .main
+        ) { [weak self] _ in self?.stopListening() }
     }
 
     // MARK: - Listen
@@ -22,10 +25,17 @@ public final class AutumnShazam: NSObject, SHSessionDelegate, Sendable {
         let inputNode   = audioEngine.inputNode
         let format      = inputNode.outputFormat(forBus: 0)
         let signature   = SHSignatureGenerator()
-        inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
+        AutumnAudioSession.begin(.shazam)
+        inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
             try? signature.append(buffer, at: nil)
         }
-        try audioEngine.start()
+        do {
+            try audioEngine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            AutumnAudioSession.end(.shazam)
+            throw error
+        }
         // Generate and match after 5 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             guard let self else { return }
@@ -38,6 +48,7 @@ public final class AutumnShazam: NSObject, SHSessionDelegate, Sendable {
     public func stopListening() {
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
+        AutumnAudioSession.end(.shazam)
     }
 
     // MARK: - Delegate
