@@ -329,7 +329,11 @@ public struct ShardOverlay: View {
             status = "DESIGN YOUR SHARD FIRST"
             return
         }
-        sceneVM.spawnShard(color: UIColor.fromSwiftUI(color))
+        // Web _spawnShardAt: crystal tinted from the last 6 textile colours.
+        let textileColors: [UIColor] = shapes.suffix(6).compactMap { shape in
+            UInt32(shape.color.trimmingCharacters(in: CharacterSet.alphanumerics.inverted), radix: 16).map { ThreeJSGeometry.hex($0) }
+        }
+        sceneVM.spawnShard(colors: textileColors.isEmpty ? [UIColor.fromSwiftUI(color)] : textileColors)
         sceneVM.emitMist(fromLocal: true)
         Task {
             let payload: [String: Any] = [

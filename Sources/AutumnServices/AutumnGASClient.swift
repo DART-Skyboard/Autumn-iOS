@@ -121,6 +121,21 @@ public actor AutumnGASClient {
         return json["nodes"] as? [[String: Any]] ?? []
     }
 
+    /// Web js/mist-module.js `_poll` — `GET ?action=mistevents` → `{ events: [...] }`.
+    /// Same shared MIST event stream leatr.xyz polls every 2 s.
+    public func readMistEvents() async -> [[String: Any]] {
+        guard let url = URL(string: gasURL + "?action=mistevents") else { return [] }
+        guard let json = await getJSON(url) else { return [] }
+        return json["events"] as? [[String: Any]] ?? []
+    }
+
+    /// Web js/mist-module.js `_write` — `{ action: 'mistwrite', uid, payload }`.
+    @discardableResult
+    public func mistWrite(uid: String, payload: [String: Any]) async -> Bool {
+        let body: [String: Any] = ["action": "mistwrite", "uid": uid, "payload": payload]
+        return await postPlain(body)
+    }
+
     /// Web `?action=sessions` — GitHub-backed sessions + mist/ashstar heartbeat.
     public func readSessions() async -> [[String: Any]] {
         guard let url = URL(string: gasURL + "?action=sessions") else { return [] }

@@ -73,16 +73,16 @@ public struct MISTOverlay: View {
                         Button("⬡ SIGMA SOLVE") {
                             if cubicMode {
                                 cubeVM.sigmaSolve()
-                                mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
-                                sceneVM.emitMist(fromLocal: true)
+                                mist.emitSolve(uid: authVM.sessionUID, slot: difficulty - 1) // web SLOT 0 ★ / 1 ♥ / 2 ◈
+                                sceneVM.emitMist(slot: difficulty - 1)
                                 status = cubeVM.animatedSolve ? "SIGMA WALK" : "SIGMA REMAINDER"
                             } else if var m = maze, let sol = MazeEngine.solveMaze(m) {
                                 dragPath = sol
                                 m.solved = true
                                 maze = m
                                 ball = nil
-                                mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
-                                sceneVM.emitMist(fromLocal: true)
+                                mist.emitSolve(uid: authVM.sessionUID, slot: difficulty - 1) // web SLOT 0 ★ / 1 ♥ / 2 ◈
+                                sceneVM.emitMist(slot: difficulty - 1)
                                 status = "✓ PATH"
                             }
                         }
@@ -236,8 +236,8 @@ public struct MISTOverlay: View {
             maze = m
             ball = center(m.exit)
             status = "✓ WELL DONE"
-            mist.emitSolve(uid: authVM.sessionUID, slot: difficulty)
-            sceneVM.emitMist(fromLocal: true)
+            mist.emitSolve(uid: authVM.sessionUID, slot: difficulty - 1) // web SLOT 0 ★ / 1 ♥ / 2 ◈
+            sceneVM.emitMist(slot: difficulty - 1)
         }
     }
 }

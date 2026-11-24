@@ -117,6 +117,9 @@ extension MISTSession: GKMatchDelegate {
             // Peer solved a maze — add their node to BRPN scene
             if let sessionID = event.payload["sessionID"] {
                 BRPNSceneViewModel.shared?.addRemoteNode(uid: sessionID)
+                // Peer solve arrives as incoming mist at this orb (web _phaseReceive).
+                let slot = Int(event.payload["slot"] ?? "") ?? 2
+                BRPNSceneViewModel.shared?.receiveMist(slot: slot, fromSid: sessionID)
             }
         case .brpnNode:
             if let sid = event.payload["sessionID"],

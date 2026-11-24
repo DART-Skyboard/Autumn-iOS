@@ -18,6 +18,16 @@ public final class MISTModule: ObservableObject {
     public var localSid: String = "ios-guest"
 
     private var timer: Timer?
+    /// Web js/mist-module.js POLL_MS = 2000 — MIST events only (cheap GAS cache read).
+    /// Presence heartbeats stay on the slower `timer` so GAS write quota is unchanged.
+    private var mistTimer: Timer?
+    private var mistPollInFlight = false
+    private let instanceId = "ios_" + String(Int(Date().timeIntervalSince1970 * 1000), radix: 36) + "_" + String(Int.random(in: 0x10000...0xfffff), radix: 36)
+    private let mistStaleMs: Double = 600_000
+    private let reactCooldownMs: Double = 4_000
+    private var seenMistKeys: Set<String> = []
+    private var lastReact: [String: Double] = [:]
+    private var mySolves: [(uid: String, ts: Double)] = []
 
     public struct MISTSignal: Identifiable {
         /// Session node id (sid preferred) — matches web `_sessionGroups` key.
@@ -47,6 +57,72 @@ public final class MISTModule: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.fetchPresence() }
         }
+        mistTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.pollMistEvents() }
+        }
+    }
+
+    // MARK: — MIST event poll (web `_poll` → `_processEvents`)
+    private func pollMistEvents() async {
+        guard !mistPollInFlight else { return }
+        mistPollInFlight = true
+        defer { mistPollInFlight = false }
+        let events = await AutumnGASClient.shared.readMistEvents()
+        processMistEvents(events)
+    }
+
+    private func numberValue(_ any: Any?) -> Double? {
+        if let d = any as? Double { return d }
+        if let i = any as? Int { return Double(i) }
+        if let s = any as? String { return Double(s) }
+        return nil
+    }
+
+    private func processMistEvents(_ events: [[String: Any]]) {
+        guard !events.isEmpty else { return }
+        let now = Date().timeIntervalSince1970 * 1000
+        for ev in events {
+            guard let uid = ev["uid"] as? String, !uid.isEmpty, let ts = numberValue(ev["ts"]) else { continue }
+            if let iid = ev["instanceId"] as? String, iid == instanceId { continue }
+            if now - ts > mistStaleMs { continue }
+            let type = (ev["type"] as? String) ?? "solve"
+            let key = "\(uid):\(Int64(ts)):\(type)"
+            if seenMistKeys.contains(key) { continue }
+            seenMistKeys.insert(key)
+            if seenMistKeys.count > 400 { seenMistKeys = Set(seenMistKeys.suffix(250)) }
+            let slot = Int(numberValue(ev["slot"]) ?? 0)
+            let toUids = ev["toUids"] as? [String]
+            if type == "ashstar" {
+                ingestAshStars(ev)
+                continue
+            }
+            if type == "reaction", ev["replyTo"] != nil {
+                // Bystander / sender feedback: the reacting node lights up.
+                if uid != localSid { BRPNSceneViewModel.shared?.observeMist(slot: slot, sid: uid, toSids: toUids) }
+                continue
+            }
+            guard type == "solve", uid != localSid else { continue }
+            // Every viewer sees the sender's node fire (bystander view)…
+            BRPNSceneViewModel.shared?.observeMist(slot: slot, sid: uid, toSids: toUids)
+            // …and, when this orb is a target, mist arrives inward here.
+            receiveSolve(from: uid, slot: slot, toUids: toUids, now: now)
+        }
+    }
+
+    /// Web `_phaseReceive` — incoming mist at this orb + reaction write (4 s cooldown per sender).
+    private func receiveSolve(from uid: String, slot: Int, toUids: [String]?, now: Double) {
+        if let toUids, !toUids.isEmpty,
+           !toUids.contains(where: { $0 == localSid || $0 == localUid || $0 == "all" || localSid.hasPrefix($0) }) { return }
+        if let last = lastReact[uid], now - last < reactCooldownMs { return }
+        lastReact[uid] = now
+        BRPNSceneViewModel.shared?.receiveMist(slot: slot, fromSid: uid)
+        guard PrivacyChoices.sharePresence else { return } // reactions announce this device — opt-in only
+        let payload: [String: Any] = [
+            "type": "reaction", "uid": localSid, "slot": slot, "ts": now,
+            "replyTo": uid, "score": 1.0, "instanceId": instanceId, "platform": "ios"
+        ]
+        let sid = localSid
+        Task { await AutumnGASClient.shared.mistWrite(uid: sid, payload: payload) }
     }
 
     private func fetchPresence() async {
@@ -219,6 +295,20 @@ public final class MISTModule: ObservableObject {
     }
 
     public func emitSolve(uid: String, slot: Int) {
+        // Shared web MIST stream (`mistwrite`) — slot 0 ★ / 1 ♥ / 2 ◈, uid = session sid
+        // so other viewers find this orb's node.
+        let ts = Date().timeIntervalSince1970 * 1000
+        let webSlot = max(0, min(2, slot))
+        let labels = ["★ STAR SOLVED", "♥ HEART SOLVED", "◈ MIST SOLVED"]
+        let emotions = ["inspired", "empathetic", "spiritual"]
+        let sid = localSid
+        mySolves.append((sid, ts))
+        if mySolves.count > 20 { mySolves.removeFirst(mySolves.count - 20) }
+        let webPayload: [String: Any] = [
+            "type": "solve", "uid": sid, "slot": webSlot, "ts": ts, "instanceId": instanceId,
+            "label": labels[webSlot], "emotion": emotions[webSlot], "platform": "ios"
+        ]
+        Task { await AutumnGASClient.shared.mistWrite(uid: sid, payload: webPayload) }
         let payload: [String: Any] = [
             "type": "solve",
             "uid": uid,
