@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import simd
 import Combine
 import LEATRCore
 import AutumnServices
@@ -111,7 +112,6 @@ public final class BRPNSceneViewModel: ObservableObject {
     /// Remote buoyancy orbs keyed by session id (sid) — web `_sessionGroups`.
     private var sessionGroupNodes: [String: SCNNode] = [:]
     private var splineGroup: SCNNode?
-    private var splineSamples: [[SCNVector3]] = []
     private var presenceTimer: Timer?
     private var mantisNodes: [SCNNode] = []
     /// TF134: holds the live-data subscriptions that actually feed
@@ -179,6 +179,18 @@ public final class BRPNSceneViewModel: ObservableObject {
         let amb = SCNNode()
         amb.light = { let l = SCNLight(); l.type = .ambient; l.intensity = 280; l.color = UIColor.white; return l }()
         scene.rootNode.addChildNode(amb)
+        // Key + rim lights — only Phong materials (the Ash Shard crystal) react;
+        // every constant wireframe material keeps its exact web colour.
+        let key = SCNNode()
+        key.light = { let l = SCNLight(); l.type = .omni; l.intensity = 900; l.color = UIColor.white; return l }()
+        key.position = SCNVector3(2.5, 3, 4)
+        key.name = "brpnKeyLight"
+        scene.rootNode.addChildNode(key)
+        let rim = SCNNode()
+        rim.light = { let l = SCNLight(); l.type = .directional; l.intensity = 520; l.color = ThreeJSGeometry.hex(0x66e0ff); return l }()
+        rim.eulerAngles = SCNVector3(Float(-0.4), Float.pi + 0.6, Float(0))
+        rim.name = "brpnRimLight"
+        scene.rootNode.addChildNode(rim)
 
         // Camera — JS: PerspectiveCamera(50,…,0.1,100) position.set(0,1.5,5) lookAt(0,0,0)
         let cam = SCNCamera()
@@ -197,6 +209,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         for (i, radius) in shellRadii.enumerated() {
             let geo = ThreeJSGeometry.icosahedron(radius: radius, detail: 1)
             geo.materials = [ThreeJSGeometry.wireMat(shellColors[i], opacity: CGFloat(0.18 + Float(i) * 0.08))]
+            BRPNShaderFX.makeLuminous(geo.firstMaterial, rimPower: 2.4, rimGain: 1.7, energyGain: 0.9, energyFreq: 5.5 + Float(i))
             let mesh = SCNNode(geometry: geo)
             mesh.name = "shell_\(i)" // GEO / MAR / AERO
             scene.rootNode.addChildNode(mesh)
@@ -207,6 +220,7 @@ public final class BRPNSceneViewModel: ObservableObject {
         let cg = SCNSphere(radius: 0.18)
         cg.segmentCount = 12
         cg.materials = [ThreeJSGeometry.wireMat(ThreeJSGeometry.hex(0x00ffcc), opacity: 0.18)]
+        BRPNShaderFX.makeLuminous(cg.firstMaterial, rimPower: 1.8, rimGain: 2.0, energyGain: 1.1, energyFreq: 14)
         coreNode = SCNNode(geometry: cg)
         coreNode.name = "core"
         scene.rootNode.addChildNode(coreNode)
@@ -234,6 +248,16 @@ public final class BRPNSceneViewModel: ObservableObject {
         }
 
         spawnToolShapes()
+
+        // Plasma splines, MIST / Ash Shard FX, audio arcs (BRPNEffects.swift).
+        animator.fx.install(in: scene.rootNode)
+        splineGroup = animator.fx.splineRoot
+        animator.fx.onShardArrived = { [weak self] receive in
+            self?.pulseShells(receive ? 1.5 : 0.6)
+        }
+        // Shell 64 x-ray activity node (readnodes.shell64 → Shell64NodeLayer.swift).
+        animator.shell64.install(in: scene.rootNode)
+        animator.shell64.setLiveFeed(liveFeedEnabled)
 
         animator.configure(
             shells: shells,
@@ -330,10 +354,12 @@ public final class BRPNSceneViewModel: ObservableObject {
         )
         if let shell = ThreeJSGeometry.lineSegments(pair.shell, color: ThreeJSGeometry.hex(0x00ffcc), opacity: 0.9) {
             shell.name = "mazeShell"
+            BRPNShaderFX.makeEnergyLine(shell.geometry?.firstMaterial, gain: 0.9, freq: 7)
             mazeOrbGroup.addChildNode(shell)
         }
         if let pass = ThreeJSGeometry.lineSegments(pair.passages, color: ThreeJSGeometry.hex(0x00d9ff), opacity: 0.4) {
             pass.name = "mazePassages"
+            BRPNShaderFX.makeEnergyLine(pass.geometry?.firstMaterial, gain: 0.6, freq: 7)
             mazeOrbGroup.addChildNode(pass)
         }
 
@@ -491,6 +517,7 @@ public final class BRPNSceneViewModel: ObservableObject {
 
     public func applyLiveFeedVisibility() {
         let hide = !liveFeedEnabled
+        animator.shell64.setLiveFeed(liveFeedEnabled)   // LIVE FEED off → Shell 64 groups gone at once
         for n in sessionGroupNodes.values { n.isHidden = hide }
         splineGroup?.isHidden = hide
         if hide {
@@ -512,6 +539,7 @@ public final class BRPNSceneViewModel: ObservableObject {
                 sessionGroupNodes[k]?.removeFromParentNode()
                 sessionGroupNodes.removeValue(forKey: k)
                 sessionOrder.removeAll { $0 == k }
+                animator.fx.unregisterSession(k)
                 activeNodes = max(1, activeNodes - 1)
             } else { break }
         }
@@ -520,14 +548,42 @@ public final class BRPNSceneViewModel: ObservableObject {
         let colorKey = uid.isEmpty ? sid : uid
         let colors = uidShellColors(uid: colorKey)
         let miniR: [Float] = [1.9 * 0.28, 1.4 * 0.28, 0.9 * 0.28]
+        var miniShells: [SCNNode] = []
         for (i, r) in miniR.enumerated() {
             let geo = ThreeJSGeometry.icosahedron(radius: r, detail: 1)
             geo.materials = [ThreeJSGeometry.wireMat(colors[i], opacity: CGFloat(0.22 + Float(i) * 0.06))]
-            group.addChildNode(SCNNode(geometry: geo))
+            BRPNShaderFX.makeLuminous(geo.firstMaterial, rimPower: 2.2, rimGain: 1.5, energyGain: 0.7, energyFreq: 9)
+            let shellNode = SCNNode(geometry: geo)
+            group.addChildNode(shellNode)
+            miniShells.append(shellNode)
         }
         let cg = SCNSphere(radius: 0.032); cg.segmentCount = 6
         cg.materials = [ThreeJSGeometry.wireMat(colors[0], opacity: 0.55)]
+        BRPNShaderFX.makeLuminous(cg.firstMaterial, rimPower: 1.6, rimGain: 1.8, energyGain: 0.6, energyFreq: 12)
         group.addChildNode(SCNNode(geometry: cg))
+        // JS: sigmatic torus — TorusGeometry(radii[0]*1.35, 0.009, 4, 16), opacity animated.
+        let sig = BRPNFXGeometry.torusNode(ringRadius: CGFloat(miniR[0] * 1.35), pipe: 0.009, radialSegments: 4, tubular: 16,
+                                           material: { let m = ThreeJSGeometry.basicMat(colors[0], opacity: 1)
+                                                       BRPNShaderFX.makeLuminous(m, rimPower: 1.6, rimGain: 1.5, energyGain: 0.5, energyFreq: 10)
+                                                       return m }())
+        sig.holder.opacity = 0
+        group.addChildNode(sig.holder)
+        // JS: receiver — RingGeometry(0.036, 0.056, 8) DoubleSide, flashes on incoming pulse.
+        let ringGeo = SCNTube(innerRadius: 0.036, outerRadius: 0.056, height: 0.002)
+        ringGeo.radialSegmentCount = 8
+        let rm = ThreeJSGeometry.basicMat(colors[1], opacity: 1)
+        rm.isDoubleSided = true
+        ringGeo.materials = [rm]
+        let recvInner = SCNNode(geometry: ringGeo)
+        recvInner.eulerAngles.x = .pi / 2
+        let recv = SCNNode()
+        recv.addChildNode(recvInner)
+        recv.opacity = 0
+        group.addChildNode(recv)
+        animator.fx.registerSession(BRPNFXSystem.SessionFX(
+            sid: sid, shells: miniShells, sig: sig.holder, recv: recv,
+            h: uidHash(colorKey), resonance: patternScore(localSid, sid)
+        ))
         group.position = SCNVector3(pos.x, pos.y, pos.z)
         group.isHidden = !liveFeedEnabled
         scene.rootNode.addChildNode(group)
@@ -542,6 +598,7 @@ public final class BRPNSceneViewModel: ObservableObject {
     }
 
     private func removeRemoteNode(sid: String) {
+        animator.fx.unregisterSession(sid)
         sessionGroupNodes[sid]?.removeFromParentNode()
         sessionGroupNodes.removeValue(forKey: sid)
         sessionOrder.removeAll { $0 == sid }
@@ -705,66 +762,333 @@ public final class BRPNSceneViewModel: ObservableObject {
         return true
     }
 
+    // MARK: — Ash Shard  (js/ash-shard-module.js _spawnShardAt)
     public func spawnShard(color: UIColor) {
+        spawnShard(colors: [color])
+    }
+
+    /// Frosted crystal assembly riding an arc line to the chosen live orbs
+    /// (or the first live orb / a solo fallback point), 280-frame life,
+    /// 3 expanding burst rings on arrival.
+    public func spawnShard(colors rawColors: [UIColor], toSids: [String]? = nil, receive: Bool = false) {
         rebuildSplines()
-        let geo = SCNBox(width: 0.08, height: 0.11, length: 0.04, chamferRadius: 0.012)
-        geo.materials = [ThreeJSGeometry.basicMat(color, opacity: 0.55)]
-        let node = SCNNode(geometry: geo)
-        node.name = "shard"
-        scene.rootNode.addChildNode(node)
-        applyMindMapVisibility(to: node)
-        let dest: SCNVector3
-        if let last = sessionGroupNodes.values.first { dest = last.position }
-        else { dest = SCNVector3(1.6, 0.9, -1.1) }
-        let path = sampledSpline(from: SCNVector3(0, 0, 0), to: dest)
-        var actions: [SCNAction] = []
-        for i in 1..<path.count { actions.append(SCNAction.move(to: path[i], duration: 0.1)) }
-        actions.append(SCNAction.fadeOut(duration: 0.35))
-        actions.append(SCNAction.removeFromParentNode())
-        node.runAction(SCNAction.group([
-            SCNAction.repeatForever(SCNAction.rotateBy(x: 1, y: 0.4, z: 0.8, duration: 1.6)),
-            SCNAction.sequence(actions)
-        ]))
+        let palette = rawColors.isEmpty ? [ThreeJSGeometry.hex(0x00e5ff), ThreeJSGeometry.hex(0xbf5fff)] : Array(rawColors.suffix(6))
+        let mainCol = palette[0]
+        let accentCol = palette[min(1, palette.count - 1)]
+        var dests: [SIMD3<Float>] = []
+        if let toSids, !toSids.isEmpty {
+            dests = toSids.compactMap { sessionGroupNodes[$0]?.position.brpnSIMD }
+        }
+        if dests.isEmpty, let first = sessionGroupNodes.values.first { dests = [first.position.brpnSIMD] }
+        if dests.isEmpty { dests = [SIMD3<Float>(1.6, 0.9, -1.1)] }
+        for dest in dests.prefix(8) {
+            let from: SIMD3<Float> = receive ? dest : .zero
+            let to: SIMD3<Float> = receive ? .zero : dest
+            animator.fx.addShard(makeShard(from: from, to: to, main: mainCol, accent: accentCol, palette: palette, receive: receive))
+        }
         pulseShells(0.45)
     }
 
-    public func rebuildSplines() {
-        splineGroup?.removeFromParentNode()
-        let g = SCNNode(); g.name = "splines"
-        splineSamples.removeAll()
-        var targets: [SCNVector3] = sessionGroupNodes.values.map { $0.position }
-        if targets.isEmpty {
-            targets = [SCNVector3(2.2, 0.8, -1.2), SCNVector3(-1.8, 1.1, 1.4)]
+    private func makeShard(from: SIMD3<Float>, to: SIMD3<Float>, main: UIColor, accent: UIColor,
+                           palette: [UIColor], receive: Bool) -> BRPNFXSystem.ShardGroup {
+        let root = SCNNode(); root.name = "ashShard"
+        let body = SCNNode()
+        // Primary crystal spire — ConeGeometry(0.13, 0.55, 6), Phong, emissive 0.35, opacity 0.52.
+        let cone = SCNCone(topRadius: 0, bottomRadius: 0.13, height: 0.55)
+        cone.radialSegmentCount = 6
+        cone.materials = [BRPNShaderFX.crystal(main, emissive: 0.35, shininess: 80)]
+        let spinner = SCNNode()
+        let shard = SCNNode(geometry: cone)
+        shard.eulerAngles.z = .pi / 2 // point forward along travel
+        spinner.addChildNode(shard)
+        spinner.opacity = 0.52
+        body.addChildNode(spinner)
+        // Inner crystal core — OctahedronGeometry(0.065), bright, opacity 0.8.
+        let innerGeo = ThreeJSGeometry.octahedron(radius: 0.065, detail: 0)
+        let im = ThreeJSGeometry.basicMat(accent, opacity: 1)
+        im.isDoubleSided = true
+        BRPNShaderFX.makeLuminous(im, rimPower: 1.4, rimGain: 2.0, energyGain: 0.5, energyFreq: 16)
+        innerGeo.materials = [im]
+        let inner = SCNNode(geometry: innerGeo)
+        inner.opacity = 0.8
+        body.addChildNode(inner)
+        // Frosted outer shell — IcosahedronGeometry(0.18, 1), opacity 0.12, shininess 200.
+        let shellGeo = ThreeJSGeometry.icosahedron(radius: 0.18, detail: 1)
+        shellGeo.materials = [BRPNShaderFX.crystal(main, emissive: 0.15, shininess: 140)]
+        let shell = SCNNode(geometry: shellGeo)
+        shell.opacity = 0.12
+        body.addChildNode(shell)
+        body.position = SCNVector3(from)
+        root.addChildNode(body)
+        // Travel path + faint arc line (opacity 0.22).
+        let mid = (from + to) * 0.5 + SIMD3<Float>(Float.random(in: -0.6...0.6), 0.8 + Float.random(in: 0...0.6), Float.random(in: -0.6...0.6))
+        let curve = BRPNCurve([from, mid, to])
+        let arcNode = SCNNode(geometry: BRPNFXGeometry.polyline(curve.sample(40)))
+        arcNode.geometry?.materials = [BRPNShaderFX.glowLine(main)]
+        arcNode.opacity = 0.22
+        root.addChildNode(arcNode)
+        let g = BRPNFXSystem.ShardGroup(node: root, body: body, shard: spinner, inner: inner, shell: shell, arc: arcNode,
+                                        curve: curve, toPos: to, mainColor: main, receive: receive)
+        // Trailing tetrahedra — 10 when sending, 8 when receiving.
+        let count = receive ? 8 : 10
+        for i in 0..<count {
+            let tg = ThreeJSGeometry.tetrahedron(radius: 0.025 + Float.random(in: 0..<0.025), detail: 0)
+            let tm = ThreeJSGeometry.basicMat(palette[i % palette.count], opacity: 1)
+            tm.isDoubleSided = true
+            tg.materials = [tm]
+            let tn = SCNNode(geometry: tg)
+            tn.position = SCNVector3(from)
+            tn.opacity = 0.5
+            root.addChildNode(tn)
+            g.trail.append((tn, Float(i) * 0.08, SIMD3<Float>(Float.random(in: 0..<0.1), Float.random(in: 0..<0.1), Float.random(in: 0..<0.08))))
         }
-        let origin = SCNVector3(0, 0, 0)
-        for t in targets {
-            let samples = sampledSpline(from: origin, to: t)
-            splineSamples.append(samples)
-            if let line = ThreeJSGeometry.lineSegments(polylineFloats(samples), color: UIColor(red: 0, green: 0.9, blue: 1, alpha: 0.35), opacity: 0.35) {
-                g.addChildNode(line)
-            }
-        }
-        scene.rootNode.addChildNode(g)
-        splineGroup = g
+        return g
     }
 
-    public func emitMist(fromLocal: Bool) {
-        rebuildSplines()
-        let curves = splineSamples.isEmpty ? [sampledSpline(from: SCNVector3(0, 0, 0), to: SCNVector3(1.5, 1.0, -1.0))] : splineSamples
-        for samples in curves.prefix(6) {
-            let s = SCNSphere(radius: 0.03); s.segmentCount = 6
-            s.materials = [ThreeJSGeometry.basicMat(UIColor(red: 0, green: 0.9, blue: 1, alpha: 1), opacity: 0.9)]
-            let n = SCNNode(geometry: s)
-            n.position = samples.first ?? SCNVector3(0, 0, 0)
-            scene.rootNode.addChildNode(n)
-            var acts: [SCNAction] = []
-            let seq = fromLocal ? samples : samples.reversed()
-            for p in seq.dropFirst() { acts.append(SCNAction.move(to: p, duration: 0.08)) }
-            acts.append(SCNAction.fadeOut(duration: 0.3))
-            acts.append(SCNAction.removeFromParentNode())
-            n.runAction(SCNAction.sequence(acts))
+    // MARK: — Plasma splines  (index.html rebuild block in _pollAshNodes + _makePlasmaSpline)
+    private var plasmaSpecs: [BRPNPlasmaSpec] = []
+    private var plasmaKey = ""
+
+    /// Web `_sessionPatternScore` (hash-distance resonance part).
+    func patternScore(_ a: String, _ b: String) -> Float {
+        max(0, min(1, 1 - abs(uidHash(a) - uidHash(b)) * 2.5))
+    }
+
+    public func rebuildSplines() {
+        let sids = sessionOrder.filter { sessionGroupNodes[$0] != nil }
+        let key = sids.joined(separator: "|")
+        if key == plasmaKey && !plasmaSpecs.isEmpty { return }
+        if key == plasmaKey && sids.isEmpty { return }
+        plasmaKey = key
+        var specs: [BRPNPlasmaSpec] = []
+        let origin = SIMD3<Float>(0, 0, 0)
+        for (ai, a) in sids.enumerated() {
+            guard specs.count < 30, let pa = sessionGroupNodes[a]?.position.brpnSIMD else { continue }
+            for b in sids[(ai + 1)...] {
+                guard specs.count < 30, let pb = sessionGroupNodes[b]?.position.brpnSIMD else { continue }
+                if simd_distance(pa, pb) > 5.5 { continue }
+                let res = patternScore(a, b)
+                let col = ThreeJSGeometry.hex(res > 0.6 ? 0x00e5ff : (res > 0.3 ? 0xa78bfa : 0x4488ff))
+                specs.append(BRPNPlasmaSpec(key: a + ":" + b, aSid: a, bSid: b, curve: plasmaCurve(pa, pb, res),
+                                            color: col, resonance: res, isLocal: false))
+            }
+            if specs.count < 30 && simd_distance(origin, pa) < 6.0 {
+                let res = patternScore(localSid, a)
+                let col = ThreeJSGeometry.hex(res > 0.5 ? 0x00ffcc : 0x0088ff)
+                specs.append(BRPNPlasmaSpec(key: "local:" + a, aSid: nil, bSid: a, curve: plasmaCurve(origin, pa, res),
+                                            color: col, resonance: res, isLocal: true))
+            }
         }
-        pulseShells(0.35)
+        plasmaSpecs = specs
+        animator.fx.setPlasma(specs)
+        splineGroup?.isHidden = !liveFeedEnabled
+    }
+
+    /// Web `_makePlasmaSpline` control points — perpendicular bulge scaled by resonance.
+    private func plasmaCurve(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ resonance: Float) -> BRPNCurve {
+        let mid = (a + b) * 0.5
+        let axis = b - a
+        var perp = SIMD3<Float>(-axis.z, axis.x, axis.y)
+        let pl = simd_length(perp)
+        perp = pl > 0.0001 ? perp / pl : SIMD3<Float>(0, 1, 0)
+        let bulge = (0.6 + resonance * 1.2) * simd_length(axis) * 0.22
+        let cp1 = mid + perp * (bulge * (0.5 + Float.random(in: 0..<0.5)))
+        let cp2 = mid - perp * (bulge * (0.3 + Float.random(in: 0..<0.4)))
+        return BRPNCurve([a, cp1, cp2, b])
+    }
+
+    // MARK: — MIST  (js/mist-module.js SIGNAL PHASES + GEOMETRY)
+    /// Slot colours — web SLOT[0..2]: ★ star 0xffdd00, ♥ heart 0xff4488, ◈ mist 0x00e5ff.
+    static func mistColor(slot: Int) -> UIColor {
+        switch slot {
+        case 0: return ThreeJSGeometry.hex(0xffdd00)
+        case 1: return ThreeJSGeometry.hex(0xff4488)
+        default: return ThreeJSGeometry.hex(0x00e5ff)
+        }
+    }
+
+    /// Back-compat entry point: local solve = outgoing, otherwise incoming at this orb.
+    public func emitMist(fromLocal: Bool) {
+        if fromLocal { emitMist(slot: 2) } else { receiveMist(slot: 2, fromSid: nil) }
+    }
+
+    /// Web `_phaseSend` visual — mist flows OUT from this orb along plasma curves
+    /// to the chosen orbs (or everyone connected).
+    public func emitMist(slot: Int, toSids: [String]? = nil, color: UIColor? = nil) {
+        rebuildSplines()
+        let s = max(0, min(2, slot))
+        var routes: [(curve: BRPNCurve, senderT: Float)] = plasmaSpecs
+            .filter { $0.isLocal && (toSids == nil || toSids!.isEmpty || toSids!.contains($0.bSid)) }
+            .map { (curve: $0.curve, senderT: Float(0)) }
+        if routes.isEmpty { routes = fallbackCurves(from: .zero, toSids: toSids) }
+        spawnMistOutgoing(slot: s, routes: routes, color: color)
+        pulseShells(Self.mistPulse(s) * 0.4)
+    }
+
+    /// Web `_phaseReceive` visual — mist converges INWARD at this orb, plus an arrival ring.
+    public func receiveMist(slot: Int, fromSid: String?) {
+        rebuildSplines()
+        let s = max(0, min(2, slot))
+        var routes: [(curve: BRPNCurve, senderT: Float)] = []
+        if let fromSid {
+            routes = plasmaSpecs.filter { $0.isLocal && $0.bSid == fromSid }.map { (curve: $0.curve, senderT: Float(1)) }
+        }
+        if routes.isEmpty { routes = plasmaSpecs.filter { $0.isLocal }.map { (curve: $0.curve, senderT: Float(1)) } }
+        if routes.isEmpty {
+            let outer: [SIMD3<Float>] = [SIMD3<Float>(2.5, 1.2, -1.5), SIMD3<Float>(-2, 1.8, 1.2), SIMD3<Float>(1, -2.5, 1)]
+            routes = outer.map { (op: SIMD3<Float>) -> (curve: BRPNCurve, senderT: Float) in
+                let mid = op * 0.5 + SIMD3<Float>(Float.random(in: -0.3...0.3), Float.random(in: -0.3...0.3), 0)
+                return (curve: BRPNCurve([op, mid, .zero]), senderT: Float(0))
+            }
+        }
+        spawnMistIncoming(slot: s, routes: routes, toPos: .zero)
+        pulseShells(Self.mistPulse(s) * 0.4)
+    }
+
+    /// Web `_phaseObserve` / `_doObserve` — bystanders see a remote node's send or reaction
+    /// as an outgoing burst from that node. Buffered until the node exists (10 retries).
+    public func observeMist(slot: Int, sid: String, toSids: [String]? = nil) {
+        guard let pos = sessionGroupNodes[sid]?.position.brpnSIMD else {
+            pendingMistObs.append((slot, sid, toSids, 0))
+            return
+        }
+        rebuildSplines()
+        let s = max(0, min(2, slot))
+        var routes: [(curve: BRPNCurve, senderT: Float)] = []
+        for sp in plasmaSpecs {
+            if sp.bSid == sid { routes.append((curve: sp.curve, senderT: Float(1))) }
+            else if sp.aSid == sid { routes.append((curve: sp.curve, senderT: Float(0))) }
+        }
+        if routes.isEmpty {
+            routes = fallbackCurves(from: pos, toSids: toSids)
+            if toSids == nil || toSids!.isEmpty {
+                routes.append((curve: BRPNCurve([pos, SIMD3<Float>(0, 0.8, 0), .zero]), senderT: Float(0)))
+            }
+        }
+        spawnMistOutgoing(slot: s, routes: routes, color: nil)
+    }
+
+    private var pendingMistObs: [(slot: Int, sid: String, toSids: [String]?, retries: Int)] = []
+
+    private func retryPendingMistObs() {
+        guard !pendingMistObs.isEmpty else { return }
+        let pending = pendingMistObs
+        pendingMistObs = []
+        for ev in pending {
+            if sessionGroupNodes[ev.sid] != nil {
+                observeMist(slot: ev.slot, sid: ev.sid, toSids: ev.toSids)
+            } else if ev.retries < 10 {
+                pendingMistObs.append((ev.slot, ev.sid, ev.toSids, ev.retries + 1))
+            }
+        }
+    }
+
+    private static func mistPulse(_ slot: Int) -> Float { [1.4, 1.6, 1.0][max(0, min(2, slot))] }
+
+    /// Web `_fallbackCurves` — from a position to the chosen (or all) orbs, else two defaults.
+    private func fallbackCurves(from: SIMD3<Float>, toSids: [String]?) -> [(curve: BRPNCurve, senderT: Float)] {
+        var targets: [SIMD3<Float>] = []
+        if let toSids, !toSids.isEmpty {
+            targets = toSids.compactMap { sessionGroupNodes[$0]?.position.brpnSIMD }
+        } else {
+            targets = sessionGroupNodes.values.map { $0.position.brpnSIMD }.filter { simd_distance($0, from) > 0.01 }
+        }
+        if targets.isEmpty { targets = [SIMD3<Float>(2.5, 1.2, -1.5), SIMD3<Float>(-2, 1.8, 1.2)] }
+        return targets.prefix(8).map { (tp: SIMD3<Float>) -> (curve: BRPNCurve, senderT: Float) in
+            let mid = (from + tp) * 0.5 + SIMD3<Float>(Float.random(in: -0.4...0.4), 1 + Float.random(in: 0..<0.6), Float.random(in: -0.4...0.4))
+            return (curve: BRPNCurve([from, mid, tp]), senderT: Float(0))
+        }
+    }
+
+    /// Web `_mistGeo` — ★ octahedron / ♥ sphere / ◈ tetrahedron, wireframe.
+    private func mistGeometry(slot: Int, scale: Float, color: UIColor, opacity: Float) -> SCNNode {
+        let geo: SCNGeometry
+        switch slot {
+        case 0:
+            geo = ThreeJSGeometry.octahedron(radius: (0.07 + Float.random(in: 0..<0.08)) * scale, detail: 0)
+        case 1:
+            let sph = SCNSphere(radius: CGFloat((0.045 + Float.random(in: 0..<0.03)) * scale))
+            sph.segmentCount = 5
+            geo = sph
+        default:
+            geo = ThreeJSGeometry.tetrahedron(radius: (0.06 + Float.random(in: 0..<0.07)) * scale, detail: 0)
+        }
+        geo.materials = [BRPNShaderFX.glowWire(color)]
+        let n = SCNNode(geometry: geo)
+        n.opacity = CGFloat(opacity)
+        return n
+    }
+
+    private func spawnMistOutgoing(slot: Int, routes: [(curve: BRPNCurve, senderT: Float)], color: UIColor?) {
+        let col = color ?? Self.mistColor(slot: slot)
+        let root = SCNNode(); root.name = "mistOut"
+        let g = BRPNFXSystem.MistGroup(node: root, slot: slot, maxAge: 200, noLoop: false)
+        let perSpline = slot == 0 ? 5 : (slot == 1 ? 4 : 6)
+        let baseOp: Float = slot == 0 ? 0.9 : (slot == 1 ? 0.85 : 0.7)
+        for r in routes {
+            let dir: Float = r.senderT == 0 ? 1 : -1
+            for i in 0..<perSpline {
+                let startT = max(0, min(1, r.senderT + dir * Float(i) / Float(perSpline) * 0.12))
+                let n = mistGeometry(slot: slot, scale: 0.85, color: col, opacity: baseOp)
+                n.position = SCNVector3(r.curve.point(startT))
+                root.addChildNode(n)
+                let spd = (0.005 + Float.random(in: 0..<0.004)) * (slot == 1 ? 1.15 : 1)
+                g.objs.append(BRPNFXSystem.MistObj(node: n, curve: r.curve, t: startT, spd: spd, dir: dir, senderT: r.senderT,
+                                                   rot: SIMD3<Float>(Float.random(in: 0..<0.05), Float.random(in: 0..<0.04), Float.random(in: 0..<0.03))))
+            }
+        }
+        addMistRoutes(g, routes: routes, color: col)
+        animator.fx.addMist(g)
+    }
+
+    private func spawnMistIncoming(slot: Int, routes: [(curve: BRPNCurve, senderT: Float)], toPos: SIMD3<Float>) {
+        let col = Self.mistColor(slot: slot)
+        let root = SCNNode(); root.name = "mistIn"
+        let g = BRPNFXSystem.MistGroup(node: root, slot: slot, maxAge: 200, noLoop: false)
+        let perSpline = slot == 0 ? 5 : (slot == 1 ? 4 : 6)
+        let baseOp: Float = slot == 0 ? 0.85 : (slot == 1 ? 0.8 : 0.65)
+        for r in routes {
+            // Start at the far (sender) end and travel toward the target end.
+            let dir: Float = r.senderT == 1 ? -1 : 1
+            for i in 0..<perSpline {
+                let startT = max(0, min(1, r.senderT - dir * Float(i) / Float(perSpline) * 0.12))
+                let n = mistGeometry(slot: slot, scale: 0.78, color: col, opacity: baseOp)
+                n.position = SCNVector3(r.curve.point(startT))
+                root.addChildNode(n)
+                g.objs.append(BRPNFXSystem.MistObj(node: n, curve: r.curve, t: startT, spd: 0.005 + Float.random(in: 0..<0.004),
+                                                   dir: dir, senderT: r.senderT,
+                                                   rot: SIMD3<Float>(Float.random(in: 0..<0.05), Float.random(in: 0..<0.04), Float.random(in: 0..<0.03))))
+            }
+        }
+        // Arrival ring — TorusGeometry(0.12, 0.014, 4, 16) wireframe, expands 0.6%/frame.
+        let ring = BRPNFXGeometry.torusNode(ringRadius: 0.12, pipe: 0.014, radialSegments: 4, tubular: 16,
+                                            material: BRPNShaderFX.glowWire(col))
+        ring.holder.position = SCNVector3(toPos)
+        ring.holder.eulerAngles = SCNVector3(Float.random(in: 0..<Float.pi), Float.random(in: 0..<Float.pi), 0)
+        ring.holder.opacity = 0
+        root.addChildNode(ring.holder)
+        g.rings.append((ring.holder, 0.006))
+        addMistRoutes(g, routes: routes, color: col)
+        animator.fx.addMist(g)
+    }
+
+    /// Faint route arcs (opacity 0.18) — first 6 curves.
+    private func addMistRoutes(_ g: BRPNFXSystem.MistGroup, routes: [(curve: BRPNCurve, senderT: Float)], color: UIColor) {
+        for r in routes.prefix(6) {
+            guard let geo = BRPNFXGeometry.polyline(r.curve.sample(36)) else { continue }
+            geo.materials = [BRPNShaderFX.glowLine(color)]
+            let n = SCNNode(geometry: geo)
+            n.opacity = 0.18
+            g.node.addChildNode(n)
+            g.routes.append(n)
+        }
+    }
+
+    /// Audio-reactive arcs follow Autumn's TTS automatically; call this for other
+    /// in-app playback. Purely visual — never touches AVAudioSession or the mic.
+    public func setAudioPlayback(_ active: Bool) {
+        animator.fx.externalAudioActive = active
+        if active { pulseShells(0.8) }
     }
 
     private func sampledSpline(from a: SCNVector3, to b: SCNVector3, steps: Int = 12) -> [SCNVector3] {
@@ -822,6 +1146,10 @@ public final class BRPNSceneViewModel: ObservableObject {
         }
         applyLiveFeedVisibility()
         if liveFeedEnabled { rebuildSplines() }
+        retryPendingMistObs()
+        // Shell 64: same 5 s readnodes poll (MISTModule.refresh above) — no extra request.
+        let shell64Summary = await AutumnGASClient.shared.latestShell64()
+        animator.shell64.feed(shell64Summary, liveFeed: liveFeedEnabled)
         maybeAutumnStar()
         // TF160: the fourth thing asked for alongside the three live feeds
         // — the real state of user-to-user buoyancy interaction in the
@@ -967,6 +1295,10 @@ final class BRPNAnimator {
     // rotated the (now-hidden) shells/maze/core directly, never the camera
     // itself. Same rotation formula as core, just applied to this instead.
     var mindMapGroup: SCNNode?
+    /// Plasma splines, session rings, audio arcs, MIST + Ash Shard FX (BRPNEffects.swift).
+    let fx = BRPNFXSystem()
+    /// Shell 64 x-ray figures + nested emblem driven by readnodes.shell64 (Shell64NodeLayer.swift).
+    let shell64 = Shell64NodeLayer()
 
     var rotX: Float = 0
     var rotY: Float = 0
@@ -1190,6 +1522,9 @@ final class BRPNAnimator {
         }
         mantis = keep
         mantisLock.unlock()
+
+        fx.tick(frame: orbFrame, thinking: isThinking, activity: min(1, shellPulse / 3))
+        shell64.tick()
 
         shellPulse *= 0.994
 

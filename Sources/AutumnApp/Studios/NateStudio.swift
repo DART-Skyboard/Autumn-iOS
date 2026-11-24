@@ -229,8 +229,11 @@ final class NateViewModel: ObservableObject {
         engine.attach(node)
         engine.connect(node, to: engine.mainMixerNode, format: fmt)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: .duckOthers)
-            try AVAudioSession.sharedInstance().setActive(true)
+            // Tone is a user action: .playback + .mixWithOthers (no .duckOthers).
+            guard AutumnAudioSession.begin(.tone) else {
+                log = "Audio error: session unavailable"
+                return
+            }
             try engine.start()
             self.engine = engine
             self.src = node
@@ -242,6 +245,7 @@ final class NateViewModel: ObservableObject {
                 }
             }
         } catch {
+            AutumnAudioSession.end(.tone)
             log = "Audio error: \(error.localizedDescription)"
         }
     }
@@ -252,6 +256,7 @@ final class NateViewModel: ObservableObject {
         engine = nil
         src = nil
         playing = false
+        AutumnAudioSession.end(.tone)
     }
 
     func syncTone() { analyze() }

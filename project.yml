@@ -72,6 +72,10 @@ targets:
       - path: Sources/AutumnApp/Resources/ne_110m_admin_0_boundary_lines_land.geojson
         type: file
         buildPhase: resources
+      # Shell 64 x-ray node (4 huddled figures + emblem), loaded by Shell64NodeLayer.
+      - path: Sources/AutumnApp/Resources/shell64-node.usdz
+        type: file
+        buildPhase: resources
     info:
       path: Sources/AutumnApp/Info.plist
       properties:

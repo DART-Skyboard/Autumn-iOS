@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import AVKit
 import ImageIO
+import AutumnServices
 
 /// Looping, muted, aspect-fill art video (the user's own file). Sits behind the scrim.
 /// VOID overlay hides it; CLEAR still plays and loops.
@@ -118,12 +119,13 @@ struct ThemeVideoBackground: UIViewRepresentable {
             currentName = nil
         }
 
-        /// Don't steal the mic session. Muted video is ambient so TTS/voice still work.
+        /// Muted ART video never activates the session (that was a launch-time activation).
+        /// Only ensure the idle `.ambient` + `.mixWithOthers` category when no voice/mic/tone
+        /// action owns the session, so background music keeps playing at full volume.
         private static func ensureAmbientSession() {
             let s = AVAudioSession.sharedInstance()
-            if s.category == .playAndRecord { return }
-            try? s.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
-            try? s.setActive(true, options: [])
+            if s.category == .playAndRecord || s.category == .playback { return }
+            AutumnAudioSession.configureIdle()
         }
     }
 }

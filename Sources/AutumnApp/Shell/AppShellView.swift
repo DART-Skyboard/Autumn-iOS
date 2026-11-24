@@ -33,8 +33,9 @@ public struct AppShellView: View {
             let landscape = geo.size.width > geo.size.height
             ZStack {
                 // 1. Theme video or solid (web #backdrop-video z-index:-2)
-                // Palette background (gradient) — always there; the user's ART sits on top when set.
-                themeVM.chrome.voidGradient.ignoresSafeArea()
+                // Theme default atmosphere (web css/theme-backdrops.css) — always there;
+                // the user's ART image/video sits on top when set (flow unchanged).
+                ThemeBackdropView(theme: themeVM.chrome).ignoresSafeArea()
                 if themeVM.showsArt, let art = themeVM.art {
                     if art.kind == .video {
                         ThemeVideoBackground(fileURL: themeVM.artURL, videoOn: true)
@@ -372,18 +373,19 @@ public struct AppShellView: View {
         .accessibilityLabel("Art background")
     }
 
-    /// PALETTE: tap cycles presets and your saved palettes; long-press (or HUD tools > PALETTE) opens the editor.
+    /// PALETTE: a single tap opens the palette menu (presets, your saved palettes, create/edit).
+    /// It never cycles themes, so a short press can't change the theme by accident.
     private var palettePill: some View {
         let chrome = themeVM.chrome
-        return headerChip(text: themeVM.paletteLabel, color: chrome.accent)
-            .contentShape(Capsule())
-            .onTapGesture { themeVM.cyclePalette() }
-            .onLongPressGesture(minimumDuration: 0.45) { appNav.showPalette = true }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Palette \(themeVM.paletteLabel)")
-            .accessibilityAddTraits(.isButton)
-            .fixedSize(horizontal: true, vertical: false)
-            .layoutPriority(2)
+        return Button { appNav.showPalette = true } label: {
+            headerChip(text: themeVM.paletteLabel, color: chrome.accent)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .accessibilityLabel("Palette \(themeVM.paletteLabel)")
+        .accessibilityHint("Opens the palette menu")
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
     }
 
     private var scrimPill: some View {

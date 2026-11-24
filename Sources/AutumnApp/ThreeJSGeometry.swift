@@ -80,13 +80,27 @@ enum ThreeJSGeometry {
             usesFloatComponents: true, componentsPerVector: 3,
             bytesPerComponent: 4, dataOffset: 0, dataStride: 12
         )
+        // Radial normals (every vertex sits on the sphere) — lets the luminous
+        // Fresnel rim shader in BRPNEffects read a real _surface.normal.
+        var normals: [Float] = []
+        normals.reserveCapacity(buf.count * 3)
+        for v in buf {
+            let len = max(0.000001, (v.x * v.x + v.y * v.y + v.z * v.z).squareRoot())
+            normals += [v.x / len, v.y / len, v.z / len]
+        }
+        let nData = normals.withUnsafeBufferPointer { Data(buffer: $0) }
+        let nSrc = SCNGeometrySource(
+            data: nData, semantic: .normal, vectorCount: buf.count,
+            usesFloatComponents: true, componentsPerVector: 3,
+            bytesPerComponent: 4, dataOffset: 0, dataStride: 12
+        )
         var idx = (0..<Int32(buf.count)).map { $0 }
         let idxData = idx.withUnsafeMutableBufferPointer { Data(buffer: $0) }
         let elem = SCNGeometryElement(
             data: idxData, primitiveType: .triangles,
             primitiveCount: buf.count / 3, bytesPerIndex: 4
         )
-        return SCNGeometry(sources: [src], elements: [elem])
+        return SCNGeometry(sources: [src, nSrc], elements: [elem])
     }
 
     /// JS: `new THREE.IcosahedronGeometry(radius, detail)`

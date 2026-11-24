@@ -299,6 +299,7 @@ public final class ChatViewModel: ObservableObject {
     private var recognizer: SFSpeechRecognizer?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var audioEngine = AVAudioEngine()
+    private var backgroundStopObserver: NSObjectProtocol?
 
     private func startListening() {
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
@@ -308,13 +309,19 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func beginRecognition() {
-        do {
-            try AVAudioSession.sharedInstance().setCategory(
-                .playAndRecord, mode: .default,
-                options: [.mixWithOthers, .allowBluetooth, .defaultToSpeaker]
-            )
-            try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
-        } catch { print("[Autumn] Audio session error: \(error)") }
+        guard !isListening else { return }
+        // Mic session only for the duration of dictation (.playAndRecord + .mixWithOthers, no duck).
+        guard AutumnAudioSession.begin(.dictation) else { return }
+        if backgroundStopObserver == nil {
+            backgroundStopObserver = NotificationCenter.default.addObserver(
+                forName: .autumnAudioShouldStop, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.isListening else { return }
+                    self.stopListening()
+                }
+            }
+        }
 
         recognizer = SFSpeechRecognizer(locale: .current)
         let request = SFSpeechAudioBufferRecognitionRequest()
@@ -323,7 +330,13 @@ public final class ChatViewModel: ObservableObject {
         node.installTap(onBus: 0, bufferSize: 1024, format: node.outputFormat(forBus: 0)) { buf, _ in
             request.append(buf)
         }
-        try? audioEngine.start()
+        do {
+            try audioEngine.start()
+        } catch {
+            node.removeTap(onBus: 0)
+            AutumnAudioSession.end(.dictation)
+            return
+        }
         isListening = true
         recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, _ in
             if let text = result?.bestTranscription.formattedString {
@@ -336,8 +349,10 @@ public final class ChatViewModel: ObservableObject {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionTask?.cancel()
+        recognitionTask = nil
         isListening = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Deactivate with notifyOthersOnDeactivation and reset to .ambient + .mixWithOthers.
+        AutumnAudioSession.end(.dictation)
     }
 }
 
