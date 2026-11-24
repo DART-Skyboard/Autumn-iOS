@@ -109,6 +109,13 @@ struct PaletteEditorOverlay: View {
                                 Button { choosePreset(t) } label: { swatch(AutumnPalette.from(t), label: t.rawValue, selected: themeVM.current == t) }
                                     .buttonStyle(.plain)
                             }
+                            // Built-in palettes (with UI shading), e.g. NEON DUSK.
+                            ForEach(AutumnPalette.builtIns) { p in
+                                Button { chooseCustom(p) } label: {
+                                    swatch(p, label: p.name, selected: themeVM.current == .custom && themeVM.activeCustomID == p.id)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                     if !themeVM.customPalettes.isEmpty {
@@ -387,7 +394,7 @@ struct PaletteEditorOverlay: View {
             ui = AutumnPaletteUI.defaults(bg1: bg1, bg2: bg2, accent: accent)
             ui.on = !editing
         }
-        editingID = editing ? p.id : nil
+        editingID = (editing && !p.isBuiltIn) ? p.id : nil   // a built-in can't be overwritten; SAVE makes a copy
         dirty = false
     }
 

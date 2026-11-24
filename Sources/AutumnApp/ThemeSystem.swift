@@ -316,6 +316,14 @@ public struct AutumnPalette: Codable, Identifiable, Equatable {
     }
     /// UI shading in effect (nil = theme default look).
     public var activeUI: AutumnPaletteUI? { (ui?.on ?? false) ? ui : nil }
+
+    /// Built-in palettes shown with the presets (same values as web BUILTINS in js/autumn-theme-art.js).
+    public static let neonDusk = AutumnPalette(
+        id: "builtin-neon-dusk", name: "NEON DUSK", bg1: "#05070d", bg2: "#14203a", accent: "#00e5ff",
+        ui: AutumnPaletteUI(on: true, surface: "#0a1a3a", surface2: "#3a0f4a", button: "#0074ff", button2: "#7a1fd0",
+                            glow: "#00e5ff", border: "#7ecfff", opacity: 58, blur: 20, style: .gradient, angle: 135))
+    public static let builtIns: [AutumnPalette] = [neonDusk]
+    public var isBuiltIn: Bool { id.hasPrefix("builtin-") }
     public var c1: Color { Color(hex: bg1) }
     public var c2: Color { Color(hex: bg2) }
     public var ca: Color { Color(hex: accent) }
@@ -446,7 +454,9 @@ public final class ThemeViewModel: ObservableObject {
     }
 
     // MARK: palettes
-    public var activePalette: AutumnPalette? { customPalettes.first { $0.id == activeCustomID } }
+    public var activePalette: AutumnPalette? {
+        customPalettes.first { $0.id == activeCustomID } ?? AutumnPalette.builtIns.first { $0.id == activeCustomID }
+    }
 
     /// Name shown on the PALETTE button.
     public var paletteLabel: String {
@@ -480,7 +490,7 @@ public final class ThemeViewModel: ObservableObject {
     /// PALETTE button: presets first, then the user's saved palettes, then around again.
     public func cyclePalette() {
         enum E { case preset(AutumnTheme), custom(AutumnPalette) }
-        let entries: [E] = AutumnTheme.presets.map { E.preset($0) } + customPalettes.map { E.custom($0) }
+        let entries: [E] = AutumnTheme.presets.map { E.preset($0) } + AutumnPalette.builtIns.map { E.custom($0) } + customPalettes.map { E.custom($0) }
         var idx = -1
         for (i, e) in entries.enumerated() {
             switch e {
