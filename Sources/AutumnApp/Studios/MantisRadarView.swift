@@ -61,6 +61,9 @@ struct MantisRadarView: View {
             ZStack(alignment: .topLeading) {
                 if aerial {
                     RadarMapView(feed: feed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName)
+                    // mr.html #map-hud — RANGE / CONTACTS / NEXT SCAN
+                    MantisAerialHUD(feed: feed)
+                        .padding(.top, 14).padding(.leading, 14)
                 } else if maritime {
                     RadarGlobeView(feed: feed, maritimeFeed: maritimeFeed, avatarURL: authVM.githubAvatarURL, avatarLetter: authVM.username, displayName: displayName, showVessels: true)
                     VStack(alignment: .leading, spacing: 4) {
@@ -89,6 +92,17 @@ struct MantisRadarView: View {
                         Text("\(feed.satellites.count) SAT / DEBRIS")
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundColor(cyan)
+                        // mr.html #globe-sat-count — live counts per orbit regime
+                        let counts = orbitCounts
+                        Text("\(counts.leo) LEO")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(cyan)
+                        Text("\(counts.meo) MEO")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#ffd700"))
+                        Text("\(counts.geo) GEO")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(Color(hex: "#ff8800"))
                     }
                     .padding(10)
                     .background(Color.black.opacity(0.55))
@@ -96,6 +110,18 @@ struct MantisRadarView: View {
                 }
 
             }
+            .overlay(alignment: .topTrailing) {
+                if aerial {
+                    // mr.html drawRadar() mini sweep with fading contact blips
+                    MantisRadarSweep(blips: MantisRadarSweep.blips(
+                        for: feed.aircraft, userLat: feed.userLat, userLon: feed.userLon, radiusKm: feed.rangeKm))
+                        .padding(.top, 14).padding(.trailing, 14)
+                } else {
+                    MantisGlobeTimeHUD()
+                        .padding(.top, 14).padding(.trailing, 14)
+                }
+            }
+            .overlay { MantisCornerBrackets() }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 8) {
                     if feed.selectedUser {
@@ -133,8 +159,20 @@ struct MantisRadarView: View {
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Color.black.opacity(0.55))
         }
-        .background(Color(red: 0.01, green: 0.04, blue: 0.05).ignoresSafeArea())
+        .background(Color(uiColor: MantisGlobeArt.spaceColor).ignoresSafeArea())
         .onAppear { feed.start() }
+    }
+
+    private var orbitCounts: (leo: Int, meo: Int, geo: Int) {
+        var leo = 0, meo = 0, geo = 0
+        for s in feed.satellites {
+            switch s.orbitClass {
+            case "LEO": leo += 1
+            case "MEO": meo += 1
+            default: geo += 1
+            }
+        }
+        return (leo, meo, geo)
     }
 
     private func satInfoCard(_ sat: RadarSat, cyan: Color) -> some View {
@@ -415,6 +453,10 @@ struct RadarMapView: UIViewRepresentable {
             m.setRegion(MKCoordinateRegion(center: m.centerCoordinate, span: span), animated: true)
         }
         context.coordinator.sync(aircraft: feed.aircraft, on: m)
+        if ready {
+            context.coordinator.syncCircles(on: m, lat: feed.userLat, lon: feed.userLon,
+                                            accuracyM: feed.userAccuracyM, rangeKm: feed.rangeKm)
+        }
         if feed.selectedAircraft == nil && !feed.selectedUser {
             for ann in m.selectedAnnotations {
                 m.deselectAnnotation(ann, animated: true)
@@ -441,6 +483,27 @@ struct RadarMapView: UIViewRepresentable {
         private var loadedURL: URL?
         private var avatarTask: URLSessionDataTask?
         private var byId: [String: RadarACAnnotation] = [:]
+        private var scanCircle: MKCircle?
+        private var accCircle: MKCircle?
+        private var circleKey = ""
+
+        /// mr.html scanCircle (dashed, scan radius) + userAccCircle (GPS accuracy).
+        func syncCircles(on map: MKMapView, lat: Double, lon: Double, accuracyM: Double, rangeKm: Double) {
+            let key = String(format: "%.5f|%.5f|%.0f|%.2f", lat, lon, accuracyM, rangeKm)
+            if key == circleKey { return }
+            circleKey = key
+            if let c = scanCircle { map.removeOverlay(c) }
+            if let c = accCircle { map.removeOverlay(c) }
+            let center = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            let scan = MKCircle(center: center, radius: rangeKm * 1000)
+            scan.title = "scan"
+            let acc = MKCircle(center: center, radius: max(accuracyM, 10))
+            acc.title = "acc"
+            map.addOverlay(scan, level: .aboveLabels)
+            map.addOverlay(acc, level: .aboveLabels)
+            scanCircle = scan
+            accCircle = acc
+        }
 
         func loadAvatar(_ url: URL?) {
             if url == loadedURL { return }
@@ -502,6 +565,20 @@ struct RadarMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let t = overlay as? MKTileOverlay {
                 return MKTileOverlayRenderer(tileOverlay: t)
+            }
+            if let c = overlay as? MKCircle {
+                let r = MKCircleRenderer(circle: c)
+                let cyan = RadarAvatarArt.cyan
+                r.lineWidth = 1
+                if c.title == "scan" {
+                    r.strokeColor = cyan.withAlphaComponent(0.28)
+                    r.fillColor = cyan.withAlphaComponent(0.02)
+                    r.lineDashPattern = [5, 7]
+                } else {
+                    r.strokeColor = cyan.withAlphaComponent(0.5)
+                    r.fillColor = cyan.withAlphaComponent(0.05)
+                }
+                return r
             }
             return MKOverlayRenderer(overlay: overlay)
         }
@@ -599,8 +676,16 @@ final class RadarACPinView: MKAnnotationView {
     }
 }
 
+/// mr.html user marker: pulsing double ring + glowing core + crosshair ticks
+/// (replaces the old GitHub-avatar pin on the aerial map; the avatar still
+/// shows in the "YOU" info card when the marker is tapped).
 final class RadarUserPinView: MKAnnotationView {
     static let reuse = "radar-user"
+    private let ringA = CAShapeLayer()
+    private let ringB = CAShapeLayer()
+    private let core = CAShapeLayer()
+    private let ticks = CAShapeLayer()
+    private static let side: CGFloat = 44
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -609,14 +694,85 @@ final class RadarUserPinView: MKAnnotationView {
         centerOffset = .zero
         collisionMode = .circle
         clusteringIdentifier = nil
+        backgroundColor = .clear
+        frame = CGRect(x: 0, y: 0, width: Self.side, height: Self.side)
+        let cyan = RadarAvatarArt.cyan
+        let mid = CGPoint(x: Self.side / 2, y: Self.side / 2)
+
+        for (ring, fill, stroke) in [(ringA, 0.08, 0.5), (ringB, 0.04, 0.3)] {
+            ring.bounds = CGRect(x: 0, y: 0, width: 36, height: 36)
+            ring.position = mid
+            ring.path = UIBezierPath(ovalIn: ring.bounds.insetBy(dx: 0.5, dy: 0.5)).cgPath
+            ring.fillColor = cyan.withAlphaComponent(fill).cgColor
+            ring.strokeColor = cyan.withAlphaComponent(stroke).cgColor
+            ring.lineWidth = 1
+            ring.opacity = 0
+            layer.addSublayer(ring)
+        }
+
+        let t = UIBezierPath()
+        let arm: CGFloat = 9, gap: CGFloat = 12
+        t.move(to: CGPoint(x: mid.x - gap - arm, y: mid.y)); t.addLine(to: CGPoint(x: mid.x - gap, y: mid.y))
+        t.move(to: CGPoint(x: mid.x + gap, y: mid.y)); t.addLine(to: CGPoint(x: mid.x + gap + arm, y: mid.y))
+        t.move(to: CGPoint(x: mid.x, y: mid.y - gap - arm)); t.addLine(to: CGPoint(x: mid.x, y: mid.y - gap))
+        t.move(to: CGPoint(x: mid.x, y: mid.y + gap)); t.addLine(to: CGPoint(x: mid.x, y: mid.y + gap + arm))
+        ticks.path = t.cgPath
+        ticks.strokeColor = cyan.withAlphaComponent(0.7).cgColor
+        ticks.lineWidth = 1
+        ticks.frame = bounds
+        layer.addSublayer(ticks)
+
+        core.frame = bounds
+        core.path = UIBezierPath(ovalIn: CGRect(x: mid.x - 5, y: mid.y - 5, width: 10, height: 10)).cgPath
+        core.fillColor = cyan.cgColor
+        core.strokeColor = cyan.withAlphaComponent(0.4).cgColor
+        core.lineWidth = 2
+        core.shadowColor = cyan.cgColor
+        core.shadowOpacity = 1
+        core.shadowRadius = 6
+        core.shadowOffset = .zero
+        layer.addSublayer(core)
+        startPulse()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { startPulse() }
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        startPulse()
+    }
+
+    /// CSS @keyframes upr: scale .5→2.6, opacity .9→0, 2 s ease-out; second ring +0.7 s.
+    private func startPulse() {
+        for (i, ring) in [ringA, ringB].enumerated() {
+            ring.removeAnimation(forKey: "pulse")
+            let scale = CABasicAnimation(keyPath: "transform.scale")
+            scale.fromValue = 0.5
+            scale.toValue = 2.6
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.9
+            fade.toValue = 0.0
+            let g = CAAnimationGroup()
+            g.animations = [scale, fade]
+            g.duration = 2
+            g.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            g.repeatCount = .infinity
+            g.isRemovedOnCompletion = false
+            g.beginTime = CACurrentMediaTime() + (i == 0 ? 0 : 0.7)
+            g.fillMode = .backwards
+            ring.add(g, forKey: "pulse")
+        }
+    }
+
+    /// Kept for call-site compatibility; the marker no longer draws the avatar.
     func apply(image: UIImage?, letter: String) {
-        let img = RadarAvatarArt.image(photo: image, letter: letter, size: 36)
-        self.image = img
-        bounds = CGRect(x: 0, y: 0, width: 36, height: 36)
+        self.image = nil
+        bounds = CGRect(x: 0, y: 0, width: Self.side, height: Self.side)
     }
 }
 
@@ -656,7 +812,7 @@ struct RadarGlobeView: UIViewRepresentable {
     func makeUIView(context: Context) -> SCNView {
         let v = SCNView()
         v.scene = context.coordinator.buildScene()
-        v.backgroundColor = UIColor(red: 0.01, green: 0.04, blue: 0.06, alpha: 1)
+        v.backgroundColor = MantisGlobeArt.spaceColor
         v.allowsCameraControl = true
         v.antialiasingMode = .multisampling4X
         v.autoenablesDefaultLighting = false
@@ -698,6 +854,10 @@ struct RadarGlobeView: UIViewRepresentable {
 
     func makeCoordinator() -> Globe { Globe() }
 
+    static func dismantleUIView(_ uiView: SCNView, coordinator: Globe) {
+        coordinator.stopSunUpdates()
+    }
+
     final class Globe: NSObject, UIGestureRecognizerDelegate {
         let root = SCNNode()
         let satRoot = SCNNode()
@@ -717,62 +877,83 @@ struct RadarGlobeView: UIViewRepresentable {
         private var satNodes: [String: SCNNode] = [:]
         private var acNodes: [String: SCNNode] = [:]
         private var vesselNodes: [String: SCNNode] = [:]
+        private var vesselTargets: [String: SCNVector3] = [:]
         private var lastSats: [RadarSat] = []
         private var lastVessels: [RadarVessel] = []
         private var orbitNode: SCNNode?
         private var tickNode: SCNNode?
         private var orbitSatId: String?
         private var lastAvatarKey = ""
+        private var earthMaterial: SCNMaterial?
+        private var sunTimer: Timer?
+        private let sunNode = SCNNode()
+
+        deinit { sunTimer?.invalidate() }
 
         func buildScene() -> SCNScene {
             let scene = SCNScene()
             let earth = SCNSphere(radius: CGFloat(earthR))
-            earth.segmentCount = 64
-            let mat = SCNMaterial()
-            mat.diffuse.contents = UIColor(red: 0.02, green: 0.08, blue: 0.16, alpha: 1)
-            mat.emission.contents = UIColor(red: 0, green: 0.12, blue: 0.18, alpha: 1)
-            mat.lightingModel = .phong
-            mat.locksAmbientWithDiffuse = true
-            mat.specular.contents = UIColor(white: 0.18, alpha: 1)
+            earth.segmentCount = 96
+            // mr.html Earth ShaderMaterial: live day/night from the real sun.
+            let mat = MantisGlobeArt.earthMaterial(sunDir: MantisGlobeArt.sunDirection())
             earth.firstMaterial = mat
+            earthMaterial = mat
             let earthNode = SCNNode(geometry: earth)
             earthNode.name = "earth"
             root.addChildNode(earthNode)
+            root.addChildNode(MantisGlobeArt.atmosphereNode(radius: CGFloat(earthR) * 1.035))
             addGeoJSONLines(resource: "ne_110m_coastline", color: UIColor(red: 0, green: 0.96, blue: 1, alpha: 1), opacity: 0.85, rScale: 1.0025)
             addGeoJSONLines(resource: "ne_110m_admin_0_boundary_lines_land", color: UIColor(red: 0, green: 0.78, blue: 0.847, alpha: 1), opacity: 0.35, rScale: 1.003)
 
-            let grid = SCNSphere(radius: CGFloat(earthR) * 1.002)
-            grid.segmentCount = 24
-            let gm = SCNMaterial()
-            gm.fillMode = .lines
-            gm.diffuse.contents = UIColor.cyan.withAlphaComponent(0.18)
-            gm.lightingModel = .constant
-            gm.isDoubleSided = true
-            grid.firstMaterial = gm
-            root.addChildNode(SCNNode(geometry: grid))
+            // mr.html buildGridLines(): 30° graticule + tropics + polar circles
+            root.addChildNode(MantisGlobeArt.gridNode(radius: earthR * 1.002))
 
             applyUserAvatar(force: true)
 
             let amb = SCNNode()
             amb.light = { let l = SCNLight(); l.type = .ambient; l.intensity = 400; l.color = UIColor.white; return l }()
-            let dir = SCNNode()
-            dir.light = { let l = SCNLight(); l.type = .directional; l.intensity = 600; l.color = UIColor.white; return l }()
-            dir.eulerAngles = SCNVector3(-0.6, 0.4, 0)
+            // mr.html sunLight (0x5577ff) — follows the live sun direction.
+            sunNode.light = { let l = SCNLight(); l.type = .directional; l.intensity = 600; l.color = UIColor(red: 0.33, green: 0.47, blue: 1, alpha: 1); return l }()
 
             let cam = SCNNode()
             cam.camera = { let c = SCNCamera(); c.fieldOfView = 50; c.zFar = 100; return c }()
             cam.position = SCNVector3(0, 0, 3.2)
 
+            scene.rootNode.addChildNode(MantisGlobeArt.starfieldNode(count: 3500))
             scene.rootNode.addChildNode(root)
             scene.rootNode.addChildNode(userNode)
             scene.rootNode.addChildNode(satRoot)
             scene.rootNode.addChildNode(acRoot)
             scene.rootNode.addChildNode(vesselRoot)
             scene.rootNode.addChildNode(amb)
-            scene.rootNode.addChildNode(dir)
+            scene.rootNode.addChildNode(sunNode)
             scene.rootNode.addChildNode(cam)
             sceneRoot = scene.rootNode
+            updateSun()
+            startSunUpdates()
             return scene
+        }
+
+        /// mr.html renderGlobe(): sun direction refreshed every 1.5 s.
+        func startSunUpdates() {
+            sunTimer?.invalidate()
+            let t = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+                self?.updateSun()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            sunTimer = t
+        }
+
+        func stopSunUpdates() {
+            sunTimer?.invalidate()
+            sunTimer = nil
+        }
+
+        private func updateSun() {
+            let sd = MantisGlobeArt.sunDirection(at: Date())
+            MantisGlobeArt.setSun(sd, on: earthMaterial)
+            sunNode.position = SCNVector3(sd.x * 80, sd.y * 80, sd.z * 80)
+            sunNode.look(at: SCNVector3(0, 0, 0))
         }
 
         func loadAvatar(_ url: URL?) {
@@ -827,28 +1008,20 @@ struct RadarGlobeView: UIViewRepresentable {
                 n.removeFromParentNode()
                 satNodes.removeValue(forKey: id)
             }
+            // mr.html buildSatPoints(): additive glow sprites colored by regime
+            // (LEO cyan · MEO yellow · GEO orange; ISS green, Starlink blue).
             for s in lastSats {
                 let pos = xyz(lat: s.lat, lon: s.lon, altKm: max(200, s.altKm))
                 let selected = s.id == selectedId
-                let r: CGFloat = selected ? 0.026 : 0.018
-                let col = Self.uiColor(s)
+                let c = s.markerColor()
+                let plane = selected
+                    ? MantisGlobeArt.glowPlane(r: 1, g: 1, b: 1, size: 0.075)
+                    : MantisGlobeArt.glowPlane(r: CGFloat(c.r), g: CGFloat(c.g), b: CGFloat(c.b), size: 0.048)
                 if let n = satNodes[s.id] {
                     n.position = pos
-                    if let sph = n.geometry as? SCNSphere, abs(sph.radius - r) > 0.0005 {
-                        sph.radius = r
-                    }
-                    n.geometry?.firstMaterial?.diffuse.contents = col
-                    n.geometry?.firstMaterial?.emission.contents = selected ? UIColor.white : col
+                    if n.geometry !== plane { n.geometry = plane }
                 } else {
-                    let sph = SCNSphere(radius: r)
-                    sph.segmentCount = 12
-                    let m = SCNMaterial()
-                    m.diffuse.contents = col
-                    m.emission.contents = col
-                    m.lightingModel = .constant
-                    sph.firstMaterial = m
-                    let n = SCNNode(geometry: sph)
-                    n.name = "sat:\(s.id)"
+                    let n = MantisGlobeArt.makeSpriteNode(name: "sat:\(s.id)", plane: plane)
                     n.position = pos
                     satRoot.addChildNode(n)
                     satNodes[s.id] = n
@@ -907,26 +1080,35 @@ struct RadarGlobeView: UIViewRepresentable {
             for (id, n) in vesselNodes where !vesselLive.contains(id) {
                 n.removeFromParentNode()
                 vesselNodes.removeValue(forKey: id)
+                vesselTargets.removeValue(forKey: id)
             }
             lastVessels = cappedVessels
+            // mr.html buildVesselPoints(): amber glow sprites just above the
+            // surface. Moves still glide over ~4 s between AIS fixes; picking
+            // keeps using node positions + the "vessel:<mmsi>" name.
+            let vesselPlane = MantisGlobeArt.glowPlane(r: 1, g: 0.72, b: 0.2, size: 0.042, vessel: true)
+            let vesselSelPlane = MantisGlobeArt.glowPlane(r: 1, g: 1, b: 1, size: 0.07, vessel: true)
             for ves in cappedVessels {
                 let pos = xyz(lat: ves.lat, lon: ves.lon, altKm: 3)
                 let selected = ves.id == selectedVesselId
-                let heading = ves.courseDeg.map { Float($0 * .pi / 180) } ?? 0
+                let plane = selected ? vesselSelPlane : vesselPlane
                 if let n = vesselNodes[ves.id] {
-                    n.removeAllActions()
-                    n.runAction(.move(to: pos, duration: 4.0))
-                    n.runAction(.rotateTo(x: 0, y: CGFloat(heading), z: 0, duration: 1.0, usesShortestUnitArc: true))
-                    n.scale = selected ? SCNVector3(0.0026, 0.0026, 0.0026) : SCNVector3(0.0012, 0.0012, 0.0012)
-                    n.geometry?.firstMaterial?.emission.contents = selected ? UIColor.white : UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1)
+                    if n.geometry !== plane { n.geometry = plane }
+                    // Only start a new glide when AIS reports a new fix —
+                    // updateUIView runs every second (sat propagation), and
+                    // restarting the 4 s move each time meant boats never arrived.
+                    let last = vesselTargets[ves.id]
+                    if last == nil || abs(last!.x - pos.x) + abs(last!.y - pos.y) + abs(last!.z - pos.z) > 1e-6 {
+                        vesselTargets[ves.id] = pos
+                        n.removeAction(forKey: "glide")
+                        n.runAction(.move(to: pos, duration: 4.0), forKey: "glide")
+                    }
                 } else {
-                    let n = SCNNode(geometry: Self.boatGeometry())
-                    n.name = "vessel:\(ves.id)"
+                    let n = MantisGlobeArt.makeSpriteNode(name: "vessel:\(ves.id)", plane: plane)
                     n.position = pos
-                    n.eulerAngles = SCNVector3(0, heading, 0)
-                    n.scale = SCNVector3(0.0012, 0.0012, 0.0012)
                     vesselRoot.addChildNode(n)
                     vesselNodes[ves.id] = n
+                    vesselTargets[ves.id] = pos
                 }
             }
 
@@ -1099,29 +1281,6 @@ struct RadarGlobeView: UIViewRepresentable {
         static func uiColor(_ s: RadarSat) -> UIColor {
             let c = s.markerColor()
             return UIColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: 1)
-        }
-
-        /// TF128: a simple boat silhouette — pointed bow, flat stern —
-        /// extruded to a small height via SCNShape. Not an imported 3D
-        /// model (no asset pipeline for that in this environment); a
-        /// primitive hull shape is the honest, achievable version that
-        /// still reads as "a little boat" at the scale it renders on the
-        /// globe, rather than a plain sphere/pin like the satellite markers.
-        static func boatGeometry() -> SCNGeometry {
-            let hull = UIBezierPath()
-            hull.move(to: CGPoint(x: 0, y: 14))       // bow (pointed, faces +Z after rotation)
-            hull.addLine(to: CGPoint(x: 4, y: 4))
-            hull.addLine(to: CGPoint(x: 4, y: -10))     // starboard stern corner
-            hull.addLine(to: CGPoint(x: -4, y: -10))    // port stern corner
-            hull.addLine(to: CGPoint(x: -4, y: 4))
-            hull.close()
-            let shape = SCNShape(path: hull, extrusionDepth: 3)
-            let m = SCNMaterial()
-            m.diffuse.contents = UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1)
-            m.emission.contents = UIColor(red: 1, green: 0.72, blue: 0.2, alpha: 1)
-            m.lightingModel = .constant
-            shape.firstMaterial = m
-            return shape
         }
 
         /// mr.html latLonToV3 — continents, sats, and the user mark must share this.

@@ -40,8 +40,21 @@ HST
     @Published var selectedSat: RadarSat? = nil
     @Published var selectedAircraft: RadarAircraft? = nil
     @Published var selectedUser = false
+    /// Horizontal GPS accuracy (m) — drives the aerial accuracy circle (mr.html userAccCircle).
+    @Published var userAccuracyM: Double = 50
+    /// When the last ADS-B scan started — drives the aerial "NEXT SCAN" countdown.
+    @Published var lastADSBScan = Date()
+
+    /// ADS-B poll cadence (seconds). The aerial HUD counts down to the next scan.
+    static let adsbInterval: TimeInterval = 10
 
     var rangeKm: Double { min(600, max(10, rangeMiles)) * 1.60934 }
+
+    /// Seconds until the next scheduled ADS-B poll (mr.html "NEXT SCAN: Ns").
+    func secondsToNextScan(now: Date = Date()) -> Int {
+        let next = adsbTimer?.fireDate ?? lastADSBScan.addingTimeInterval(Self.adsbInterval)
+        return max(0, Int(ceil(next.timeIntervalSince(now))))
+    }
 
     private let loc = CLLocationManager()
     private var adsbTimer: Timer?
@@ -69,7 +82,7 @@ HST
         if started { return }
         started = true
         Task { await refreshADSB(); await refreshTLE() }
-        adsbTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        adsbTimer = Timer.scheduledTimer(withTimeInterval: Self.adsbInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refreshADSB() }
         }
         tleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -99,7 +112,9 @@ HST
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let c = locations.last?.coordinate else { return }
+        guard let last = locations.last else { return }
+        let c = last.coordinate
+        if last.horizontalAccuracy > 0 { userAccuracyM = last.horizontalAccuracy }
         userLat = c.latitude
         userLon = c.longitude
         if !hasFix {
@@ -133,6 +148,7 @@ HST
 
     func refreshADSB() async {
         let distNm = max(1, Int((rangeKm * 0.539957).rounded()))
+        lastADSBScan = Date()
         let lat = userLat, lon = userLon
         let selId = selectedAircraft?.id
         let sources: [(String, URL)] = [
@@ -642,11 +658,27 @@ enum TLEKepler {
             let x = r * (cos(O) * cos(u) - sin(O) * sin(u) * cos(i))
             let y = r * (sin(O) * cos(u) + cos(O) * sin(u) * cos(i))
             let z = r * (sin(u) * sin(i))
-            let lon = atan2(y, x) * 180 / .pi
+            // x/y/z are inertial (ECI). Rotate by Greenwich sidereal time so
+            // longitude is Earth-fixed, like satellite.js eciToGeodetic in
+            // mr.html — otherwise dots drift against the coastlines and the
+            // live day/night terminator.
+            var lon = (atan2(y, x) - TLEKepler.gmst(date)) * 180 / .pi
+            lon = (lon + 540).truncatingRemainder(dividingBy: 360) - 180
             let hyp = sqrt(x * x + y * y)
             let lat = atan2(z, hyp) * 180 / .pi
             return (lat, lon, r - 6371.0)
         }
+    }
+
+    /// Greenwich mean sidereal time (radians), IAU 1982 — same model as satellite.js gstime.
+    static func gmst(_ date: Date) -> Double {
+        let jd = date.timeIntervalSince1970 / 86400.0 + 2440587.5
+        let d = jd - 2451545.0
+        let t = d / 36525.0
+        var g = 280.46061837 + 360.98564736629 * d + 0.000387933 * t * t - t * t * t / 38710000.0
+        g = g.truncatingRemainder(dividingBy: 360)
+        if g < 0 { g += 360 }
+        return g * .pi / 180
     }
 
     static func parse(_ text: String) -> [Body] {
