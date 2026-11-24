@@ -1,6 +1,9 @@
 import Foundation
 import LEATRCore
 import AutumnServices
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// TF161: the live feed is a genuinely separate concern from the manual
 /// export built earlier — its own master maze, its own chunked directory,
@@ -37,7 +40,29 @@ public final class LiveFeedController: ObservableObject {
     // to make blind), fixing it at the actual source instead: batching
     // writes on a timer instead of firing one per event.
     @Published public private(set) var isEnabled = true
-    @Published public private(set) var masterMaze: LEMACEngineASH.CubicResult?
+    @Published public private(set) var masterMaze: LEMACEngineASH.CubicResult? {
+        didSet {
+            // Master Maze Cube 3D display: the solved walk through whatever
+            // maze is active -- recomputed the moment the structure changes,
+            // whether this device generated it or pulled it from the web.
+            masterMazeSolution = masterMaze.map { LEMACEngineASH.solveCubic($0) } ?? []
+            masterMazeRevision &+= 1
+        }
+    }
+    /// Solved entrance->exit walk through the active master maze (the same
+    /// path latest-export.json nests events along).
+    @Published public private(set) var masterMazeSolution: [MazePt] = []
+    /// Bumps on every structural change so the SceneKit view can rebuild
+    /// exactly once per new maze.
+    @Published public private(set) var masterMazeRevision = 0
+    /// Per-path-node event counts read back from the shared
+    /// <mazeId>/latest-export.json (index-aligned with masterMazeSolution).
+    @Published public private(set) var liveExportEventCounts: [Int] = []
+    @Published public private(set) var liveExportTotalEvents = 0
+    @Published public private(set) var liveExportRecentLabels: [String] = []
+    /// Two-way sync bookkeeping surfaced in the Admin Console HUD.
+    @Published public private(set) var lastSyncAt: Date?
+    @Published public private(set) var syncNote = ""
     @Published public private(set) var masterMazeWidth = 10
     @Published public private(set) var masterMazeHeight = 10
     @Published public private(set) var masterMazeDepth = 10
@@ -68,6 +93,12 @@ public final class LiveFeedController: ObservableObject {
     // bootstrap their own maze.
     private var isBootstrapping = false
     private var eventsAwaitingBootstrap: [(Notification.Name, [AnyHashable: Any]?)] = []
+    // Master Maze Cube two-way sync: a faster poll that only runs while the
+    // Admin Console's analytics panel is on screen (the 30s background poll
+    // above keeps running for every session regardless).
+    private var adminSyncTimer: Timer?
+    private var adminSyncClients = 0
+    private var isSyncing = false
 
     private init() {
         Task { await refreshFromRemote() }
@@ -89,6 +120,79 @@ public final class LiveFeedController: ObservableObject {
             Task { await self?.flushIfNeeded() }
         }
         subscribeToAnalyticsEvents()
+        #if canImport(UIKit)
+        // Coming back to the app is exactly when the web side may have
+        // generated a new master maze in the meantime -- pull immediately
+        // instead of waiting up to 30s for the next background poll.
+        observers.append(NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in await self?.syncNow() }
+        })
+        #endif
+    }
+
+    // MARK: — Master Maze Cube two-way sync (Admin Console)
+
+    /// Pull the canonical shared config (and the live export's per-node
+    /// event counts) right now. Called on Admin Console open, app
+    /// foreground, the admin poll, and the SYNC button.
+    public func syncNow() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+        await refreshFromRemote()
+        await refreshLiveExportStats()
+        lastSyncAt = Date()
+    }
+
+    /// Admin Console appeared: sync immediately, then every 10s while open.
+    public func beginAdminSync() {
+        adminSyncClients += 1
+        Task { await syncNow() }
+        guard adminSyncTimer == nil else { return }
+        adminSyncTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            Task { await self?.syncNow() }
+        }
+    }
+
+    public func endAdminSync() {
+        adminSyncClients = max(0, adminSyncClients - 1)
+        guard adminSyncClients == 0 else { return }
+        adminSyncTimer?.invalidate()
+        adminSyncTimer = nil
+    }
+
+    /// Maze ids are "live-<unix seconds>" on BOTH platforms (iOS here, web
+    /// _admRenderLiveFeed), so the id itself orders mazes by creation time.
+    static func mazeTimestamp(_ id: String) -> Int {
+        guard id.hasPrefix("live-") else { return 0 }
+        return Int(id.dropFirst("live-".count)) ?? 0
+    }
+
+    /// Reads <mazeId>/latest-export.json -- written by whichever side
+    /// (iOS writeLiveExport / web _autumnWriteLiveExport) flushed last --
+    /// and maps its event buckets back onto the solved path for the 3D view.
+    private func refreshLiveExportStats() async {
+        let id = masterMazeId
+        guard !id.isEmpty else { return }
+        guard let raw = await AutumnGASClient.shared.ashread(path: "ashtree/analytics-live/\(id)/latest-export.json") as? [String: Any],
+              id == masterMazeId else { return }
+        let layers = raw["pathIndex"] as? [[String: Any]] ?? []
+        let nodes = (layers.first?["path"] as? [[String: Any]] ?? [])
+            .sorted { (($0["order"] as? Int) ?? 0) < (($1["order"] as? Int) ?? 0) }
+        var byCell: [String: Int] = [:]
+        var labels: [String] = []
+        for n in nodes {
+            let evs = n["events"] as? [[String: Any]] ?? []
+            if let x = n["x"] as? Int, let y = n["y"] as? Int, let z = n["z"] as? Int {
+                byCell["\(x),\(y),\(z)", default: 0] += evs.count
+            }
+            for e in evs { if let l = e["label"] as? String { labels.append(l) } }
+        }
+        liveExportEventCounts = masterMazeSolution.map { byCell["\($0.x),\($0.y),\($0.z)"] ?? 0 }
+        liveExportTotalEvents = (raw["totalEvents"] as? Int) ?? liveExportEventCounts.reduce(0, +)
+        liveExportRecentLabels = Array(labels.suffix(3))
     }
 
     // MARK: — Admin control (the toggle in AnalyticsExportPanel)
@@ -106,6 +210,7 @@ public final class LiveFeedController: ObservableObject {
         }
         isEnabled = on
         await writeConfig()
+        syncNote = on ? "Live feed resumed — published to web" : "Live feed stopped — published to web"
     }
 
     public func regenerateMasterMaze(width: Int, height: Int, depth: Int) async {
@@ -120,7 +225,18 @@ public final class LiveFeedController: ObservableObject {
         // the previous maze and would otherwise be bucketed into the new
         // maze's first export.
         recentLiveEvents = []
-        await writeConfig()
+        liveExportEventCounts = Array(repeating: 0, count: masterMazeSolution.count)
+        liveExportTotalEvents = 0
+        liveExportRecentLabels = []
+        // Push to web: the canonical config.json (mazeId + full grid) is
+        // what leatr.xyz's Admin Console and cube.leatr.xyz both read, and
+        // the seeded zero-event latest-export.json lets the Session Cube
+        // draw the new cube immediately instead of "waiting for the first
+        // events" until somebody's activity flushes.
+        await writeConfig(force: true)
+        await writeLiveExport(seedIfEmpty: true)
+        syncNote = "Generated \(masterMazeId) on iOS — published to web"
+        lastSyncAt = Date()
     }
 
     private func generateMasterMaze(width w: Int, height h: Int, depth d: Int) {
@@ -152,13 +268,18 @@ public final class LiveFeedController: ObservableObject {
         }
         didInitializeRemote = true
         let withinSettleWindow = lastLocalWriteTime.map { Date().timeIntervalSince($0) < writeSettleWindow } ?? false
+        // A remote maze whose id is NEWER than ours can't be a stale echo of
+        // our own write -- the web (or another device) generated it after we
+        // did -- so it's adopted right away even inside the settle window.
+        let remoteIdPeek = (obj["mazeId"] as? String) ?? ""
+        let remoteIsNewer = Self.mazeTimestamp(remoteIdPeek) > Self.mazeTimestamp(masterMazeId)
+        if withinSettleWindow && !remoteIsNewer { return }
         // Within the window a remote read is more likely a stale echo of the
         // config from before our own write than news, so it must not overwrite
         // anything we just set. That has to include WHICH MAZE we are on: only
         // enabled/chunk index were protected before, so pressing Generate could
         // be undone a few seconds later by a stale read, and the next flush
         // then filed the new events under the OLD maze's folder.
-        if withinSettleWindow { return }
         isEnabled = (obj["enabled"] as? Bool) ?? true
         currentChunkIndex = (obj["currentChunkIndex"] as? Int) ?? currentChunkIndex
         let remoteMazeId = (obj["mazeId"] as? String) ?? masterMazeId
@@ -168,6 +289,10 @@ public final class LiveFeedController: ObservableObject {
         masterMazeHeight = (obj["height"] as? Int) ?? masterMazeHeight
         masterMazeDepth = (obj["depth"] as? Int) ?? masterMazeDepth
         if mazeChanged {
+            syncNote = "Pulled \(remoteMazeId) from the shared store (web or another device)"
+            liveExportEventCounts = []
+            liveExportTotalEvents = 0
+            liveExportRecentLabels = []
             // Another session generated a new maze. Take its STRUCTURE, not just
             // its id: keeping the old structure under the new id filed events
             // and exports under a maze they don't belong to, and made the
@@ -219,7 +344,21 @@ public final class LiveFeedController: ObservableObject {
         await regenerateMasterMaze(width: w, height: h, depth: d)
     }
 
-    private func writeConfig() async {
+    /// `force` is for a freshly generated maze, which is meant to replace
+    /// whatever is remote. Every other write (toggle, chunk rollover,
+    /// bootstrap) first checks the shared config so it can never clobber a
+    /// newer master maze the web generated since our last poll -- it adopts
+    /// that maze instead and writes its own change on top of it.
+    private func writeConfig(force: Bool = false) async {
+        if !force, let remote = await AutumnGASClient.shared.ashread(path: configPath) as? [String: Any],
+           let remoteId = remote["mazeId"] as? String,
+           Self.mazeTimestamp(remoteId) > Self.mazeTimestamp(masterMazeId) {
+            let wanted = isEnabled
+            lastLocalWriteTime = nil
+            await refreshFromRemote()
+            isEnabled = wanted
+            if (remote["enabled"] as? Bool) == wanted { return }
+        }
         lastLocalWriteTime = Date()
         var payload: [String: Any] = [
             "enabled": isEnabled,
@@ -398,15 +537,19 @@ public final class LiveFeedController: ObservableObject {
     // js/reflex-map... actually see _autumnWriteLiveExport in index.html)
     // each independently produce a complete, correct preview from whatever
     // has actually been collected, regardless of who wrote which event.
-    private func writeLiveExport() async {
+    /// `seedIfEmpty` publishes the cube with zero events (used right after
+    /// generating a new master maze) so cube.leatr.xyz and the web Admin
+    /// Console can draw it before any activity has been collected.
+    private func writeLiveExport(seedIfEmpty: Bool = false) async {
         guard let cubic = masterMaze else { return }
         guard cubic.grid.count == masterMazeDepth,
               cubic.grid.first?.count == masterMazeHeight,
               cubic.grid.first?.first?.count == masterMazeWidth else { return }
         let solution = LEMACEngineASH.solveCubic(cubic)
         guard !solution.isEmpty else { return }
-        let events = await fetchSharedChunkEvents()
-        guard !events.isEmpty else { return }
+        var events: [[String: Any]] = []
+        if !seedIfEmpty { events = await fetchSharedChunkEvents() }
+        guard !events.isEmpty || seedIfEmpty else { return }
         var buckets: [[[String: Any]]] = Array(repeating: [], count: solution.count)
         for (i, event) in events.enumerated() {
             buckets[min(i * solution.count / max(events.count, 1), solution.count - 1)].append(event)

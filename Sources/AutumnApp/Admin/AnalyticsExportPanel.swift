@@ -110,6 +110,10 @@ public struct AnalyticsExportPanel: View {
         .sheet(isPresented: $showShareSheet) {
             if let exportedFileURL { ShareSheet(items: [exportedFileURL]) }
         }
+        // Two-way Master Maze Cube sync: pull from the shared store the
+        // moment the Admin Console opens, then poll while it stays open.
+        .onAppear { liveFeed.beginAdminSync() }
+        .onDisappear { liveFeed.endAdminSync() }
     }
 
     private func dimField(_ label: String, _ binding: Binding<String>) -> some View {
@@ -179,14 +183,35 @@ public struct AnalyticsExportPanel: View {
                     .font(.system(size: 9, design: .monospaced)).foregroundColor(.white.opacity(0.4))
             }
 
-            Button {
-                withAnimation { showLiveGenerateInline.toggle() }
-                liveGenWidth = "\(liveFeed.masterMazeWidth)"; liveGenHeight = "\(liveFeed.masterMazeHeight)"; liveGenDepth = "\(liveFeed.masterMazeDepth)"
-            } label: {
-                Label(showLiveGenerateInline ? "CANCEL" : "NEW MASTER MAZE", systemImage: "arrow.triangle.2.circlepath")
+            // Master Maze Cube 3D display -- the SAME shared master maze the
+            // web Admin Console and cube.leatr.xyz show. Pulled on open, on
+            // app foreground and every 10s while this panel is visible;
+            // generating below publishes straight back to the web.
+            MasterMazeCubeDisplay(liveFeed: liveFeed, accent: themeVM.chrome.accent)
+                .frame(height: 320)
+                .background(
+                    LinearGradient(colors: [Color(hex: "#071014").opacity(0.85), Color.black.opacity(0.55)],
+                                   startPoint: .top, endPoint: .bottom)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "#3aa8ff").opacity(0.35), lineWidth: 1))
+
+            HStack(spacing: 14) {
+                Button {
+                    withAnimation { showLiveGenerateInline.toggle() }
+                    liveGenWidth = "\(liveFeed.masterMazeWidth)"; liveGenHeight = "\(liveFeed.masterMazeHeight)"; liveGenDepth = "\(liveFeed.masterMazeDepth)"
+                } label: {
+                    Label(showLiveGenerateInline ? "CANCEL" : "NEW MASTER MAZE", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .foregroundColor(Color(hex: "#ff9d6a"))
+                Button {
+                    Task { await liveFeed.syncNow() }
+                } label: {
+                    Label("SYNC WITH WEB", systemImage: "arrow.triangle.2.circlepath.circle")
+                }
+                .foregroundColor(Color(hex: "#3aa8ff"))
             }
             .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .foregroundColor(Color(hex: "#ff9d6a"))
 
             if showLiveGenerateInline {
                 VStack(alignment: .leading, spacing: 8) {
