@@ -114,7 +114,10 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         case .lounge: return Color(hex: "#1a1008").opacity(0.88)
         case .summit: return Color(hex: "#0f1620").opacity(0.88)
         case .auto: return Color(hex: "#0d1f3c").opacity(0.85)
-        case .custom: return AutumnPaletteRuntime.bg2Color.opacity(0.88)
+        case .custom:
+            // UI SHADING (palette.ui) wins when it's on; otherwise the classic bg2 slab.
+            if let u = AutumnPaletteRuntime.ui { return Color(hex: u.surface).opacity(u.alpha) }
+            return AutumnPaletteRuntime.bg2Color.opacity(0.88)
         }
     }
 
@@ -175,16 +178,150 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
     }
 }
 
+/// UI SHADING for a saved palette — same keys as the web app's palette `ui` block (js/autumn-theme-art.js):
+/// panel/surface colour + 2nd gradient stop, button fill + 2nd stop, hover/active glow, border tint,
+/// UI opacity (15–100 %), backdrop blur (0–40), SOLID / GRADIENT style and gradient angle (CSS degrees: 0 = up, 90 = right).
+/// Every field decodes with a default, so partial / older JSON never fails.
+public struct AutumnPaletteUI: Codable, Equatable {
+    public enum Style: String, Codable { case solid, gradient }
+    public var on: Bool
+    public var surface: String
+    public var surface2: String
+    public var button: String
+    public var button2: String
+    public var glow: String
+    public var border: String
+    public var opacity: Double
+    public var blur: Double
+    public var style: Style
+    public var angle: Double
+
+    public init(on: Bool = true, surface: String, surface2: String, button: String, button2: String, glow: String, border: String,
+                opacity: Double = 72, blur: Double = 16, style: Style = .gradient, angle: Double = 135) {
+        self.on = on; self.surface = surface; self.surface2 = surface2; self.button = button; self.button2 = button2
+        self.glow = glow; self.border = border; self.opacity = opacity; self.blur = blur; self.style = style; self.angle = angle
+        clamp()
+    }
+
+    /// Defaults derived from a palette's own colours (matches web uiDefaults()).
+    public static func defaults(bg1: String, bg2: String, accent: String) -> AutumnPaletteUI {
+        AutumnPaletteUI(surface: HexColor.mix(bg1, "#000000", 0.15), surface2: HexColor.normalized(bg2) ?? "#14203a",
+                        button: HexColor.mix(bg2, accent, 0.22), button2: HexColor.mix(bg1, accent, 0.08),
+                        glow: HexColor.normalized(accent) ?? "#7ecfff", border: HexColor.normalized(accent) ?? "#7ecfff")
+    }
+
+    private enum CodingKeys: String, CodingKey { case on, surface, surface2, button, button2, glow, border, opacity, blur, style, angle }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = AutumnPaletteUI.defaults(bg1: "#05070d", bg2: "#14203a", accent: "#7ecfff")
+        func hex(_ k: CodingKeys, _ fallback: String) -> String {
+            HexColor.normalized((try? c.decodeIfPresent(String.self, forKey: k)) ?? nil) ?? fallback
+        }
+        on = ((try? c.decodeIfPresent(Bool.self, forKey: .on)) ?? nil) ?? true
+        surface = hex(.surface, d.surface); surface2 = hex(.surface2, d.surface2)
+        button = hex(.button, d.button); button2 = hex(.button2, d.button2)
+        glow = hex(.glow, d.glow); border = hex(.border, d.border)
+        opacity = ((try? c.decodeIfPresent(Double.self, forKey: .opacity)) ?? nil) ?? d.opacity
+        blur = ((try? c.decodeIfPresent(Double.self, forKey: .blur)) ?? nil) ?? d.blur
+        style = ((try? c.decodeIfPresent(Style.self, forKey: .style)) ?? nil) ?? .gradient
+        angle = ((try? c.decodeIfPresent(Double.self, forKey: .angle)) ?? nil) ?? d.angle
+        clamp()
+    }
+
+    mutating func clamp() {
+        opacity = min(100, max(15, opacity.isFinite ? opacity : 72))
+        blur = min(40, max(0, blur.isFinite ? blur : 16))
+        let a = angle.isFinite ? angle.truncatingRemainder(dividingBy: 360) : 135
+        angle = a < 0 ? a + 360 : a
+    }
+
+    /// 0.15 … 1.0
+    public var alpha: Double { opacity / 100 }
+    /// Buttons sit slightly more solid than panels (web: opacity + 8 %).
+    public var buttonAlpha: Double { min(1, alpha + 0.08) }
+    public var isGradient: Bool { style == .gradient }
+
+    /// CSS-style angle → SwiftUI start/end points.
+    public var startPoint: UnitPoint {
+        let r = angle * .pi / 180
+        return UnitPoint(x: 0.5 - sin(r) / 2, y: 0.5 + cos(r) / 2)
+    }
+    public var endPoint: UnitPoint {
+        let r = angle * .pi / 180
+        return UnitPoint(x: 0.5 + sin(r) / 2, y: 0.5 - cos(r) / 2)
+    }
+
+    public func fill(_ c1: String, _ c2: String, alpha a: Double) -> LinearGradient {
+        let first = Color(hex: c1).opacity(a)
+        let second = isGradient ? Color(hex: c2).opacity(a) : first
+        return LinearGradient(colors: [first, second], startPoint: startPoint, endPoint: endPoint)
+    }
+    public var surfaceFill: LinearGradient { fill(surface, surface2, alpha: alpha) }
+    public var buttonFill: LinearGradient { fill(button, button2, alpha: buttonAlpha) }
+    public var buttonFillActive: LinearGradient {
+        fill(HexColor.mix(button, glow, 0.25), HexColor.mix(button2, glow, 0.15), alpha: min(1, buttonAlpha + 0.1))
+    }
+    public var glowColor: Color { Color(hex: glow) }
+    public var borderColor: Color { Color(hex: border) }
+    /// Dark ink on light button fills, near-white on dark / vivid fills.
+    public var buttonInk: Color {
+        (HexColor.luminance(button) + HexColor.luminance(button2)) / 2 > 0.4 && buttonAlpha >= 0.5 ? Color(hex: "#0b1018") : Color(hex: "#eef8ff")
+    }
+}
+
+/// Hex helpers that don't round-trip through Color (Color → UIColor is unreliable before iOS 17).
+public enum HexColor {
+    public static func rgb(_ hex: String) -> (r: Double, g: Double, b: Double) {
+        let n = normalized(hex) ?? "#000000"
+        var v = UInt64(0)
+        Scanner(string: String(n.dropFirst())).scanHexInt64(&v)
+        return (Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
+    }
+    public static func hex(r: Double, g: Double, b: Double) -> String {
+        func c(_ x: Double) -> Int { Int((min(1, max(0, x.isFinite ? x : 0)) * 255).rounded()) }
+        return String(format: "#%02x%02x%02x", c(r), c(g), c(b))
+    }
+    /// "#abc", "abc", "#AABBCC" → "#aabbcc"; nil when it isn't a hex colour.
+    public static func normalized(_ s: String?) -> String? {
+        guard var t = s?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        if t.hasPrefix("#") { t.removeFirst() }
+        if t.count == 3 { t = t.map { "\($0)\($0)" }.joined() }
+        guard t.count == 6, t.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return "#" + t.lowercased()
+    }
+    public static func mix(_ a: String, _ b: String, _ t: Double) -> String {
+        let x = rgb(a), y = rgb(b)
+        return hex(r: x.r + (y.r - x.r) * t, g: x.g + (y.g - x.g) * t, b: x.b + (y.b - x.b) * t)
+    }
+    public static func luminance(_ h: String) -> Double {
+        let c = rgb(h)
+        func l(_ v: Double) -> Double { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * l(c.r) + 0.7152 * l(c.g) + 0.0722 * l(c.b)
+    }
+}
+
 /// A user colour palette: background gradient (top-left -> bottom-right) plus accent. Saved to the profile.
+/// `ui` (optional, added in build 164) carries the UI SHADING controls; palettes saved before it decode with ui == nil.
 public struct AutumnPalette: Codable, Identifiable, Equatable {
     public var id: String
     public var name: String
     public var bg1: String
     public var bg2: String
     public var accent: String
-    public init(id: String = UUID().uuidString, name: String, bg1: String, bg2: String, accent: String) {
-        self.id = id; self.name = name; self.bg1 = bg1; self.bg2 = bg2; self.accent = accent
+    public var ui: AutumnPaletteUI?
+    public init(id: String = UUID().uuidString, name: String, bg1: String, bg2: String, accent: String, ui: AutumnPaletteUI? = nil) {
+        self.id = id; self.name = name; self.bg1 = bg1; self.bg2 = bg2; self.accent = accent; self.ui = ui
     }
+    /// UI shading in effect (nil = theme default look).
+    public var activeUI: AutumnPaletteUI? { (ui?.on ?? false) ? ui : nil }
+
+    /// Built-in palettes shown with the presets (same values as web BUILTINS in js/autumn-theme-art.js).
+    public static let neonDusk = AutumnPalette(
+        id: "builtin-neon-dusk", name: "NEON DUSK", bg1: "#05070d", bg2: "#14203a", accent: "#00e5ff",
+        ui: AutumnPaletteUI(on: true, surface: "#0a1a3a", surface2: "#3a0f4a", button: "#0074ff", button2: "#7a1fd0",
+                            glow: "#00e5ff", border: "#7ecfff", opacity: 58, blur: 20, style: .gradient, angle: 135))
+    public static let builtIns: [AutumnPalette] = [neonDusk]
+    public var isBuiltIn: Bool { id.hasPrefix("builtin-") }
     public var c1: Color { Color(hex: bg1) }
     public var c2: Color { Color(hex: bg2) }
     public var ca: Color { Color(hex: accent) }
@@ -202,6 +339,8 @@ public enum AutumnPaletteRuntime {
     static var bg1Color: Color { active.c1 }
     static var bg2Color: Color { active.c2 }
     static var accentColor: Color { active.ca }
+    /// UI SHADING of the active custom palette, when it is switched on.
+    static var ui: AutumnPaletteUI? { active.activeUI }
     static var washRGB: (r: Double, g: Double, b: Double) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         UIColor(active.c1).getRed(&r, green: &g, blue: &b, alpha: &a)
@@ -313,7 +452,9 @@ public final class ThemeViewModel: ObservableObject {
     }
 
     // MARK: palettes
-    public var activePalette: AutumnPalette? { customPalettes.first { $0.id == activeCustomID } }
+    public var activePalette: AutumnPalette? {
+        customPalettes.first { $0.id == activeCustomID } ?? AutumnPalette.builtIns.first { $0.id == activeCustomID }
+    }
 
     /// Name shown on the PALETTE button.
     public var paletteLabel: String {
@@ -347,7 +488,7 @@ public final class ThemeViewModel: ObservableObject {
     /// PALETTE button: presets first, then the user's saved palettes, then around again.
     public func cyclePalette() {
         enum E { case preset(AutumnTheme), custom(AutumnPalette) }
-        let entries: [E] = AutumnTheme.presets.map { E.preset($0) } + customPalettes.map { E.custom($0) }
+        let entries: [E] = AutumnTheme.presets.map { E.preset($0) } + AutumnPalette.builtIns.map { E.custom($0) } + customPalettes.map { E.custom($0) }
         var idx = -1
         for (i, e) in entries.enumerated() {
             switch e {
@@ -392,16 +533,24 @@ public final class ThemeViewModel: ObservableObject {
         suppressVaultNote = false
     }
 
+    /// Save without touching UI shading (an existing palette keeps its saved `ui`).
     @discardableResult
     public func saveCustom(name: String, bg1: String, bg2: String, accent: String, id: String?) -> AutumnPalette {
+        let kept = id.flatMap { pid in customPalettes.first(where: { $0.id == pid })?.ui }
+        return saveCustom(name: name, bg1: bg1, bg2: bg2, accent: accent, ui: kept, id: id)
+    }
+
+    @discardableResult
+    public func saveCustom(name: String, bg1: String, bg2: String, accent: String, ui: AutumnPaletteUI?, id: String?) -> AutumnPalette {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = clean.isEmpty ? "Custom \(customPalettes.count + 1)" : clean
         if let id, let i = customPalettes.firstIndex(where: { $0.id == id }) {
             customPalettes[i].name = label; customPalettes[i].bg1 = bg1; customPalettes[i].bg2 = bg2; customPalettes[i].accent = accent
+            customPalettes[i].ui = ui
             applyCustom(customPalettes[i])
             return customPalettes[i]
         }
-        let p = AutumnPalette(name: label, bg1: bg1, bg2: bg2, accent: accent)
+        let p = AutumnPalette(name: label, bg1: bg1, bg2: bg2, accent: accent, ui: ui)
         customPalettes.append(p)
         applyCustom(p)
         return p
@@ -508,21 +657,76 @@ public final class ThemeViewModel: ObservableObject {
 
 public struct GlassCard: ViewModifier {
     let theme: AutumnTheme
+    @ViewBuilder
     public func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial)
-            .background(theme.surface)
-            .cornerRadius(14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(theme.accent.opacity(0.25), lineWidth: 1)
-            )
+        if theme == .custom, let u = AutumnPaletteRuntime.ui {
+            content.modifier(AutumnUIPanel(ui: u, corner: 14))
+        } else {
+            content
+                .background(.ultraThinMaterial)
+                .background(theme.surface)
+                .cornerRadius(14)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(theme.accent.opacity(0.25), lineWidth: 1)
+                )
+        }
     }
 }
 
 public extension View {
     func glassCard(theme: AutumnTheme) -> some View {
         modifier(GlassCard(theme: theme))
+    }
+}
+
+/// UI SHADING panel: surface fill (solid or gradient at the UI opacity), material blur scaled by `blur`, soft border tint.
+public struct AutumnUIPanel: ViewModifier {
+    let ui: AutumnPaletteUI
+    var corner: CGFloat = 14
+    public init(ui: AutumnPaletteUI, corner: CGFloat = 14) { self.ui = ui; self.corner = corner }
+    @ViewBuilder
+    public func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: corner)
+        content
+            .background(ui.surfaceFill)
+            .background(blurMaterial)
+            .clipShape(shape)
+            .overlay(shape.stroke(ui.borderColor.opacity(0.22), lineWidth: 1))
+    }
+    @ViewBuilder private var blurMaterial: some View {
+        if ui.blur < 1 { Color.clear }
+        else if ui.blur < 10 { Rectangle().fill(.ultraThinMaterial) }
+        else if ui.blur < 22 { Rectangle().fill(.thinMaterial) }
+        else { Rectangle().fill(.regularMaterial) }
+    }
+}
+
+/// UI SHADING button look: button fill (solid / gradient), border tint, glow on press or when `active`.
+/// Falls back to the theme accent look when no custom UI shading is on.
+public struct AutumnUIButtonStyle: ButtonStyle {
+    var accent: Color
+    var active: Bool = false
+    var corner: CGFloat = 8
+    public init(accent: Color, active: Bool = false, corner: CGFloat = 8) { self.accent = accent; self.active = active; self.corner = corner }
+    @ViewBuilder
+    public func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: corner)
+        let lit = active || configuration.isPressed
+        if let u = AutumnPaletteRuntime.ui {
+            configuration.label
+                .foregroundColor(u.buttonInk)
+                .background(lit ? u.buttonFillActive : u.buttonFill)
+                .clipShape(shape)
+                .overlay(shape.stroke(lit ? u.glowColor : u.borderColor.opacity(0.55), lineWidth: 1))
+                .shadow(color: lit ? u.glowColor.opacity(0.55) : .clear, radius: lit ? 8 : 0)
+        } else {
+            configuration.label
+                .foregroundColor(accent)
+                .background(accent.opacity(lit ? 0.22 : 0.10))
+                .clipShape(shape)
+                .overlay(shape.stroke(accent.opacity(lit ? 0.9 : 0.5), lineWidth: 1))
+        }
     }
 }
 
