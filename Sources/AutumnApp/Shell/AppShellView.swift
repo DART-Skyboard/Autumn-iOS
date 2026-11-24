@@ -33,8 +33,9 @@ public struct AppShellView: View {
             let landscape = geo.size.width > geo.size.height
             ZStack {
                 // 1. Theme video or solid (web #backdrop-video z-index:-2)
-                // Palette background (gradient) — always there; the user's ART sits on top when set.
-                themeVM.chrome.voidGradient.ignoresSafeArea()
+                // Theme default atmosphere (web css/theme-backdrops.css) — always there;
+                // the user's ART image/video sits on top when set (flow unchanged).
+                ThemeBackdropView(theme: themeVM.chrome).ignoresSafeArea()
                 if themeVM.showsArt, let art = themeVM.art {
                     if art.kind == .video {
                         ThemeVideoBackground(fileURL: themeVM.artURL, videoOn: true)

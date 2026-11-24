@@ -87,16 +87,16 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
     public var base: Color {
         switch resolved {
         case .void: return Color(hex: "#000000")
-        case .day: return Color(hex: "#020814")
-        case .night: return Color(hex: "#05030c")
-        case .stealth: return Color(hex: "#03050a")
-        case .departure: return Color(hex: "#080400")
-        case .ashTree: return Color(hex: "#010604")
-        case .ariel: return Color(hex: "#050c14")
+        case .day: return Color(hex: "#020a14")
+        case .night: return Color(hex: "#06040f")
+        case .stealth: return Color(hex: "#03040a")
+        case .departure: return Color(hex: "#0a0500")
+        case .ashTree: return Color(hex: "#010a04")
+        case .ariel: return Color(hex: "#081420")
         case .skyboard: return Color(hex: "#040c16")
         case .lounge: return Color(hex: "#0a0604")
         case .summit: return Color(hex: "#050a10")
-        case .auto: return Color(hex: "#020814")
+        case .auto: return Color(hex: "#020a14")
         case .custom: return AutumnPaletteRuntime.bg1Color
         }
     }
@@ -148,29 +148,27 @@ public enum AutumnTheme: String, CaseIterable, Identifiable {
         return Color(red: w.r, green: w.g, blue: w.b)
     }
 
-    /// Per-theme VOID overlay gradient (web VOID_GRAD).
+    /// Per-theme base gradient — the linear layer of the web theme atmosphere
+    /// (css/theme-backdrops.css, PR #44). Also used by the VOID scrim overlay.
     public var voidGradient: LinearGradient {
+        func g(_ hexes: [String], _ angle: Double) -> LinearGradient {
+            let rad = angle * .pi / 180
+            let dx = sin(rad), dy = -cos(rad)
+            return LinearGradient(colors: hexes.map { Color(hex: $0) },
+                                  startPoint: UnitPoint(x: 0.5 - dx * 0.5, y: 0.5 - dy * 0.5),
+                                  endPoint: UnitPoint(x: 0.5 + dx * 0.5, y: 0.5 + dy * 0.5))
+        }
         switch resolved {
-        case .ariel:
-            return LinearGradient(colors: [Color(hex: "#050c14"), Color(hex: "#0a1624"), Color(hex: "#0c1210")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .skyboard:
-            return LinearGradient(colors: [Color(hex: "#040c16"), Color(hex: "#0a1a2c"), Color(hex: "#081422")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .lounge:
-            return LinearGradient(colors: [Color(hex: "#0a0604"), Color(hex: "#1a1008"), Color(hex: "#120a06")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .summit:
-            return LinearGradient(colors: [Color(hex: "#050a10"), Color(hex: "#0f1620"), Color(hex: "#0a1218")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .night:
-            return LinearGradient(colors: [Color(hex: "#05030c"), Color(hex: "#0a0618")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .stealth:
-            return LinearGradient(colors: [Color(hex: "#03050a"), Color(hex: "#070b12")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .departure:
-            return LinearGradient(colors: [Color(hex: "#080400"), Color(hex: "#120800")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .ashTree:
-            return LinearGradient(colors: [Color(hex: "#010604"), Color(hex: "#041208")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .day, .auto:
-            return LinearGradient(colors: [Color(hex: "#020814"), Color(hex: "#061018")], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .void:
-            return LinearGradient(colors: [Color(hex: "#000000"), Color(hex: "#0c0c0e")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .day, .auto: return g(["#07182c", "#020a14", "#0a1628", "#041018"], 165)
+        case .night: return g(["#0b0618", "#06040f", "#0d0820"], 168)
+        case .stealth: return g(["#07090f", "#03040a", "#050814"], 180)
+        case .departure: return g(["#1a0a02", "#120800", "#2a1004", "#3a1606"], 180)
+        case .ashTree: return g(["#04150a", "#010a04", "#040f06"], 168)
+        case .ariel: return g(["#0c1a28", "#081420", "#1a1610"], 180)
+        case .skyboard: return g(["#071422", "#040c16", "#0a1a2c"], 165)
+        case .lounge: return g(["#140c08", "#0a0604", "#1a1008"], 180)
+        case .summit: return g(["#0a141c", "#050a10", "#0f1620"], 180)
+        case .void: return g(["#000000", "#000000"], 180) // VOID — solid black
         case .custom:
             return LinearGradient(colors: [AutumnPaletteRuntime.bg1Color, AutumnPaletteRuntime.bg2Color], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
