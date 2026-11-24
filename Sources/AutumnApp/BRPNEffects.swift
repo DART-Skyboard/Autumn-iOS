@@ -113,16 +113,34 @@ struct BRPNCurve {
         var w = p - Float(i)
         if i >= l - 1 { i = l - 2; w = 1 }
         let p1 = pts[i], p2 = pts[i + 1]
-        let p0 = i > 0 ? pts[i - 1] : (p1 * 2 - p2)
-        let p3 = i + 2 < l ? pts[i + 2] : (p2 * 2 - p1)
+        // Explicitly typed sub-expressions: Xcode's type checker times out on long
+        // chained SIMD3<Float> arithmetic with mixed literals.
+        let two: Float = 2, three: Float = 3
+        let p1x2: SIMD3<Float> = p1 * two
+        let p2x2: SIMD3<Float> = p2 * two
+        let p0: SIMD3<Float> = i > 0 ? pts[i - 1] : (p1x2 - p2)
+        let p3: SIMD3<Float> = i + 2 < l ? pts[i + 2] : (p2x2 - p1)
         let tension: Float = 0.5
-        let t0 = (p2 - p0) * tension
-        let t1 = (p3 - p1) * tension
-        let c0 = p1
-        let c1 = t0
-        let c2 = p1 * -3 + p2 * 3 - t0 * 2 - t1
-        let c3 = p1 * 2 - p2 * 2 + t0 + t1
-        return c0 + c1 * w + c2 * (w * w) + c3 * (w * w * w)
+        let t0: SIMD3<Float> = (p2 - p0) * tension
+        let t1: SIMD3<Float> = (p3 - p1) * tension
+        let c0: SIMD3<Float> = p1
+        let c1: SIMD3<Float> = t0
+        let p1x3: SIMD3<Float> = p1 * three
+        let p2x3: SIMD3<Float> = p2 * three
+        let t0x2: SIMD3<Float> = t0 * two
+        var c2: SIMD3<Float> = p2x3 - p1x3
+        c2 -= t0x2
+        c2 -= t1
+        var c3: SIMD3<Float> = p1x2 - p2x2
+        c3 += t0
+        c3 += t1
+        let w2: Float = w * w
+        let w3: Float = w2 * w
+        var r: SIMD3<Float> = c0
+        r += c1 * w
+        r += c2 * w2
+        r += c3 * w3
+        return r
     }
 
     func sample(_ n: Int) -> [SIMD3<Float>] {
