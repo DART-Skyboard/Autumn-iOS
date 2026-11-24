@@ -255,6 +255,9 @@ public final class BRPNSceneViewModel: ObservableObject {
         animator.fx.onShardArrived = { [weak self] receive in
             self?.pulseShells(receive ? 1.5 : 0.6)
         }
+        // Shell 64 x-ray activity node (readnodes.shell64 → Shell64NodeLayer.swift).
+        animator.shell64.install(in: scene.rootNode)
+        animator.shell64.setLiveFeed(liveFeedEnabled)
 
         animator.configure(
             shells: shells,
@@ -514,6 +517,7 @@ public final class BRPNSceneViewModel: ObservableObject {
 
     public func applyLiveFeedVisibility() {
         let hide = !liveFeedEnabled
+        animator.shell64.setLiveFeed(liveFeedEnabled)   // LIVE FEED off → Shell 64 groups gone at once
         for n in sessionGroupNodes.values { n.isHidden = hide }
         splineGroup?.isHidden = hide
         if hide {
@@ -1143,6 +1147,9 @@ public final class BRPNSceneViewModel: ObservableObject {
         applyLiveFeedVisibility()
         if liveFeedEnabled { rebuildSplines() }
         retryPendingMistObs()
+        // Shell 64: same 5 s readnodes poll (MISTModule.refresh above) — no extra request.
+        let shell64Summary = await AutumnGASClient.shared.latestShell64()
+        animator.shell64.feed(shell64Summary, liveFeed: liveFeedEnabled)
         maybeAutumnStar()
         // TF160: the fourth thing asked for alongside the three live feeds
         // — the real state of user-to-user buoyancy interaction in the
@@ -1290,6 +1297,8 @@ final class BRPNAnimator {
     var mindMapGroup: SCNNode?
     /// Plasma splines, session rings, audio arcs, MIST + Ash Shard FX (BRPNEffects.swift).
     let fx = BRPNFXSystem()
+    /// Shell 64 x-ray figures + nested emblem driven by readnodes.shell64 (Shell64NodeLayer.swift).
+    let shell64 = Shell64NodeLayer()
 
     var rotX: Float = 0
     var rotY: Float = 0
@@ -1515,6 +1524,7 @@ final class BRPNAnimator {
         mantisLock.unlock()
 
         fx.tick(frame: orbFrame, thinking: isThinking, activity: min(1, shellPulse / 3))
+        shell64.tick()
 
         shellPulse *= 0.994
 

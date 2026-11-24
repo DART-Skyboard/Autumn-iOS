@@ -115,10 +115,28 @@ public actor AutumnGASClient {
     }
 
     /// Web `?action=readnodes` — live buoyancy-node listing (CacheService, sub-100ms).
+    /// Also captures the optional `shell64` activity summary (FEED_CONTRACT v1) when present.
     public func readNodes() async -> [[String: Any]] {
         guard let url = URL(string: gasURL + "?action=readnodes") else { return [] }
         guard let json = await getJSON(url) else { return [] }
+        // Backward-compatible: an older backend simply omits `shell64` → nil (layer stays hidden).
+        if let raw = json["shell64"] as? [String: Any] {
+            lastShell64 = Shell64Summary(json: raw)
+        } else {
+            lastShell64 = nil
+        }
+        lastShell64At = Date()
         return json["nodes"] as? [[String: Any]] ?? []
+    }
+
+    /// Most recent `readnodes.shell64` summary (nil when the backend doesn't send one).
+    /// No extra request — filled by every `readNodes()` call (5 s scene poll).
+    private var lastShell64: Shell64Summary?
+    private var lastShell64At: Date?
+
+    public func latestShell64() -> Shell64Summary? {
+        guard let at = lastShell64At, Date().timeIntervalSince(at) < 60 else { return nil }
+        return lastShell64
     }
 
     /// Web js/mist-module.js `_poll` — `GET ?action=mistevents` → `{ events: [...] }`.
@@ -271,6 +289,67 @@ public actor AutumnGASClient {
 
     private func hexId() -> String {
         String(Int(Date().timeIntervalSince1970 * 1000), radix: 16) + "-" + String(Int.random(in: 0x1000...0xffff), radix: 16)
+    }
+}
+
+// MARK: — Shell 64 activity feed (readnodes.shell64, contract v1)
+/// `{"v":1,"ts":…,"active":2,"sessions":[{"sid","ts","n","op","mode"}],"calcsPerMin":42,
+///   "lastTs":…,"total":1234,"recent":[{"op","mode","detail","ts","s"}]}`
+/// Every field is optional on the wire; missing values decode to safe defaults.
+public struct Shell64Summary: Sendable, Equatable {
+    public struct Session: Sendable, Equatable {
+        public let sid: String
+        public let ts: Double
+        /// Cumulative calc count — a session is calculating whenever `n` changes.
+        public let n: Int?
+        public let op: String
+        public let mode: String
+    }
+    public struct Recent: Sendable, Equatable {
+        public let op: String
+        public let mode: String
+        public let detail: String
+        public let ts: Double
+    }
+    public let version: Int
+    public let ts: Double
+    public let active: Int
+    public let sessions: [Session]
+    public let calcsPerMin: Double
+    public let lastTs: Double
+    public let total: Int
+    public let recent: [Recent]
+
+    /// `rate = clamp(ln(1+calcsPerMin)/ln(121), 0, 1)`.
+    public var rate: Double { max(0, min(1, log(1 + max(0, calcsPerMin)) / log(121))) }
+
+    static func num(_ v: Any?) -> Double? {
+        if let d = v as? Double { return d }
+        if let i = v as? Int { return Double(i) }
+        if let n = v as? NSNumber { return n.doubleValue }
+        if let s = v as? String { return Double(s) }
+        return nil
+    }
+
+    public init?(json: [String: Any]) {
+        let rows = json["sessions"] as? [[String: Any]] ?? []
+        sessions = rows.compactMap { r in
+            guard let sid = r["sid"] as? String, !sid.isEmpty else { return nil }
+            return Session(sid: sid, ts: Self.num(r["ts"]) ?? 0,
+                           n: Self.num(r["n"]).map { Int($0) },
+                           op: r["op"] as? String ?? "", mode: r["mode"] as? String ?? "")
+        }
+        let rec = json["recent"] as? [[String: Any]] ?? []
+        recent = rec.map { r in
+            Recent(op: r["op"] as? String ?? "", mode: r["mode"] as? String ?? "",
+                   detail: r["detail"] as? String ?? "", ts: Self.num(r["ts"]) ?? 0)
+        }
+        version = Int(Self.num(json["v"]) ?? 1)
+        ts = Self.num(json["ts"]) ?? 0
+        active = Int(Self.num(json["active"]) ?? Double(sessions.count))
+        calcsPerMin = Self.num(json["calcsPerMin"]) ?? 0
+        lastTs = Self.num(json["lastTs"]) ?? 0
+        total = Int(Self.num(json["total"]) ?? 0)
     }
 }
 
